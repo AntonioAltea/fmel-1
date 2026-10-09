@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Dinghy: a small boat on a sine wave (GPL-3.0-only, as the rest of the repo) -->
+  <rect width="128" height="128" rx="26" fill="#121011"/>
+  <path d="M63 22 V78" stroke="#efe8e1" stroke-width="4" stroke-linecap="round"/>
+  <path d="M67 26 L96 72 H67 Z" fill="#efe8e1"/>
+  <path d="M59 34 L38 72 H59 Z" fill="#ffd84a"/>
+  <path d="M30 80 H100 Q96 94 82 96 H46 Q34 94 30 80 Z" fill="#ffd84a"/>
+  <path d="M14 106 q12.5 -10 25 0 t25 0 t25 0 t25 0" fill="none" stroke="#ffd84a" stroke-width="5" stroke-linecap="round" opacity=".9"/>
+</svg>
