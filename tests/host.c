@@ -6,6 +6,8 @@
  *   mkdir -p build/host
  *   cc -O2 -Wall -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/dinghy firmware/src/dinghy.c
  *   build/host/dinghy build/host/dinghy        (-> build/host/dinghy.wav, build/host/dinghy-<ms>.ppm)
+ *   build/host/dinghy OUT script.txt [FPS]    (your own script; with FPS: OUT-NNNNN.ppm, a frame every 1/FPS s:
+ *                                             a film of your firmware, e.g. ffmpeg -r 30 -i OUT-%05d.ppm ...)
  *
  * Change SCRIPT below to try your own app. */
 #include <stdint.h>
@@ -82,8 +84,10 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { printf("%6u ms  M
 static void app_audio(int32_t *out, uint32_t n);
 static void app_main(void);
 
-/* the script: at t ms, keys down (bit k = key k, 0 = F3), a button edge, a MIDI message */
-static const struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; } SCRIPT[] = {
+/* the script: at t ms, keys down (bit k = key k, 0 = F3), a button edge, a MIDI message. A script file (the second
+ * argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID", "T midi ST D1 D2", "T end" */
+typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; } host_ev_t;
+static const host_ev_t SCRIPT0[] = {
     {200, 1u << 7, -1, 0, 0, 0},                                /* C4 */
     {700, 1u << 7 | 1u << 11 | 1u << 14, -1, 0, 0, 0},          /* + E4 G4: a chord */
     {1500, 0, -1, 0, 0, 0},
@@ -93,19 +97,41 @@ static const struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; } SCRIPT[] 
     {2700, 1u << 2 | 1u << 9, -1, 0, 0, 0},                     /* G4 + D5, an octave up */
     {3400, 0, -1, 0, 0, 0},
 };
+static const host_ev_t *script = SCRIPT0;
+static uint32_t script_n = sizeof SCRIPT0 / sizeof SCRIPT0[0], end_ms = 6500, frame_fps;
 static const uint32_t SHOT[] = {1000, 3000};
-#define END_MS 6500u
+
+static void read_script(const char *path)
+{
+    static host_ev_t ev[4096];
+    char line[256], what[16];
+    FILE *f = fopen(path, "r");
+    uint32_t n = 0;
+    if (!f) { perror(path); exit(1); }
+    while (fgets(line, sizeof line, f) && n < 4096u) {
+        host_ev_t e = {0, 0, -1, 0, 0, 0};
+        unsigned a = 0, b = 0, c = 0;
+        if (line[0] == '#' || sscanf(line, "%u %15s", &e.t, what) != 2) continue;
+        if (!strcmp(what, "end")) { end_ms = e.t; continue; }
+        if (!strcmp(what, "keys")) { sscanf(line, "%*u %*s %i", (int *)&e.keys); }
+        else if (!strcmp(what, "btn")) { sscanf(line, "%*u %*s %d", &e.btn); }
+        else if (!strcmp(what, "midi")) { sscanf(line, "%*u %*s %i %u %u", (int *)&a, &b, &c); e.st = (uint8_t)a; e.d1 = (uint8_t)b; e.d2 = (uint8_t)c; }
+        else continue;
+        ev[n++] = e;
+    }
+    fclose(f);
+    script = ev;
+    script_n = n;
+}
 
 static const char *host_out = "build/host/dinghy";
 static int16_t *wav;
 static uint32_t wav_n;
 
-static void write_ppm(uint32_t t)
+static void write_ppm_as(const char *name)
 {
-    char name[512];
     FILE *f;
     uint32_t i;
-    snprintf(name, sizeof name, "%s-%u.ppm", host_out, t);
     if (!(f = fopen(name, "wb"))) { perror(name); exit(1); }
     fprintf(f, "P6 240 240 255\n");
     for (i = 0; i < 240u * 240u; i++) {
@@ -115,6 +141,12 @@ static void write_ppm(uint32_t t)
         fputc((c & 31) * 255 / 31, f);
     }
     fclose(f);
+}
+static void write_ppm(uint32_t t)
+{
+    char name[512];
+    snprintf(name, sizeof name, "%s-%u.ppm", host_out, t);
+    write_ppm_as(name);
     printf("%6u ms  screen -> %s\n", t, name);
 }
 
@@ -135,17 +167,17 @@ static void write_wav(void)
 
 static void platform_poll(void)                 /* one call = one millisecond */
 {
-    static uint32_t step, shot, owed;
+    static uint32_t step, shot, owed, frame;
     static int32_t blk[2u * HALF_FRAMES];
     fm1_ms++;
-    while (step < sizeof SCRIPT / sizeof SCRIPT[0] && SCRIPT[step].t <= fm1_ms) {
-        if (SCRIPT[step].st) {
-            mq[mq_w % 64u][0] = SCRIPT[step].st; mq[mq_w % 64u][1] = SCRIPT[step].d1; mq[mq_w % 64u][2] = SCRIPT[step].d2;
+    while (step < script_n && script[step].t <= fm1_ms) {
+        if (script[step].st) {
+            mq[mq_w % 64u][0] = script[step].st; mq[mq_w % 64u][1] = script[step].d1; mq[mq_w % 64u][2] = script[step].d2;
             mq_w++;
-        } else if (SCRIPT[step].btn >= 0)
-            host_edges |= 1u << SCRIPT[step].btn;
+        } else if (script[step].btn >= 0)
+            host_edges |= 1u << script[step].btn;
         else
-            fm1_in.notes = SCRIPT[step].keys;
+            fm1_in.notes = script[step].keys;
         step++;
     }
     owed += FS;                                 /* the frames this millisecond is worth, in blocks as the ISR renders */
@@ -161,9 +193,15 @@ static void platform_poll(void)                 /* one call = one millisecond */
         }
         wav_n += HALF_FRAMES;
     }
-    if (shot < sizeof SHOT / sizeof SHOT[0] && fm1_ms == SHOT[shot])
+    if (frame_fps) {                            /* a film: a frame every 1/fps s, as the screen is then */
+        if ((uint64_t)frame * 1000u <= (uint64_t)fm1_ms * frame_fps) {
+            char name[512];
+            snprintf(name, sizeof name, "%s-%05u.ppm", host_out, frame++);
+            write_ppm_as(name);
+        }
+    } else if (shot < sizeof SHOT / sizeof SHOT[0] && fm1_ms == SHOT[shot])
         write_ppm(SHOT[shot++]);
-    if (fm1_ms >= END_MS) {
+    if (fm1_ms >= end_ms) {
         write_wav();
         exit(0);
     }
@@ -172,6 +210,8 @@ static void platform_poll(void)                 /* one call = one millisecond */
 int main(int argc, char **argv)
 {
     if (argc > 1) host_out = argv[1];
+    if (argc > 2) read_script(argv[2]);
+    if (argc > 3) frame_fps = (uint32_t)atoi(argv[3]);
     app_main();
     return 0;
 }

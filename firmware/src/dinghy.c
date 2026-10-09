@@ -141,6 +141,7 @@ static void app_main(void)
     struct { int8_t oct; } set = {0};           /* what survives a power-off (add yours, up to 256 bytes) */
     uint32_t prev = 0, k, t_change = 0, dirty = 0, lit_drawn = ~0u, note_drawn = ~0u;
     int32_t oct_drawn = 99;
+    uint8_t held[27] = {0};                     /* the note each key plays */
     settings_load(&set, sizeof set);
     if (set.oct < -2 || set.oct > 2) set.oct = 0;
 
@@ -157,9 +158,9 @@ static void app_main(void)
         down = keys & ~prev;
         up = prev & ~keys;
         prev = keys;
-        for (k = 0; k < 27u; k++) {
-            if (down >> k & 1u) { play(base + k, 100); midi_send(0x90, base + k, 100); }
-            if (up >> k & 1u) { stop(base + k); midi_send(0x80, base + k, 0); }
+        for (k = 0; k < 27u; k++) {                 /* (a key stops the note it started: the octave may change meanwhile) */
+            if (down >> k & 1u) { held[k] = (uint8_t)(base + k); play(held[k], 100); midi_send(0x90, held[k], 100); }
+            if (up >> k & 1u) { stop(held[k]); midi_send(0x80, held[k], 0); }
         }
 
         b = fm1_input_edges(&rel);              /* buttons pressed since the last call (bit = button id) */
