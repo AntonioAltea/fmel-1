@@ -9,7 +9,7 @@ complete source under the same licence too.
 | | |
 | --- | --- |
 | The platform: `firmware/hal/`, `firmware/loader/`, `crt0.S`, `app.ld`, `firmware/src/` (`usb.c`, `ota.c`, `recovery.c`, `lcd.c`, `gfx.c`, `libc.c`, `bootguard.h`, `uac_fir.h`), `tools/` | Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments ([Felucca](https://github.com/hugelton/Felucca)), with the changes of [SLOOP](https://github.com/isod89/sloop-fm1) (isod89) and sloopDX / zp12 (zvenson) |
-| The app `firmware/src/dinghy.c`, the wiring `platform.c`, the host mode `tests/`, the docs, the logo | zvenson |
+| The app `firmware/src/dinghy.c`, the wiring `platform.c`, the host mode `tests/`, the docs | zvenson |
 
 ## Third-party material
 
@@ -17,6 +17,11 @@ complete source under the same licence too.
 | --- | --- | --- |
 | Terminus font 8x16 (ter-u16n), rendered into `firmware/gen/felucca_font.h` | SIL OFL 1.1 | `assets/fonts/Terminus-LICENSE.txt` |
 | JieLi AC79 SDK: `uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin` are read from your SDK checkout at build time and placed in the package; no SDK files are in this tree | Apache-2.0 | <https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK> |
+
+## The logo
+
+`assets/logo.svg` / `logo.png` carry the designburg signet: Copyright (C) designburg, all rights reserved, not under
+the GPL. It marks Dinghy itself; a fork uses its own logo.
 
 ## Trademarks
 
