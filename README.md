@@ -11,12 +11,12 @@ screen and a place to keep settings. It all works, so you start with the part yo
 ```
 firmware/src/dinghy.c     <- your firmware: ~200 lines, a 4-voice sine. Start here.
 firmware/src/platform.c   <- the plumbing (boot, USB, updates, audio ISR, settings). Done; read it, don't fight it.
-firmware/src/*.c, hal/    <- the platform of SLOOP / Felucca, unchanged
+firmware/src/*.c, hal/    <- Felucca's platform, as SLOOP carries it, unchanged
 ```
 
-It is the bottom of a family of boats: [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita
-(Hügelton Instruments), [SLOOP](https://github.com/isod89/sloop-fm1) on it, sloopDX and
-[zp12](https://github.com/zvenson/zp12) on SLOOP. Dinghy keeps their platform and throws away the rest.
+Dinghy is based on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton Instruments), with its
+platform as [SLOOP](https://github.com/isod89/sloop-fm1) (isod89) carries it: it keeps that platform and throws away the
+rest. The smallest boat of the family, after the felucca and the sloop.
 
 <p align="center"><img src="docs/screen.png" width="240" alt="Dinghy's screen: the name, the note played, a keyboard with the keys that sound"></p>
 
@@ -96,5 +96,5 @@ s = ((int32_t)ph < 0 ? 8000 : -8000) * amp >> 15;     /* instead of s = (sine(ph
 GPL-3.0-only, as Felucca and SLOOP: you may change and share it, and whoever gets your firmware gets its source.
 Details, credits and third-party parts in [LICENSING.md](LICENSING.md).
 
-The platform is Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, with SLOOP's and
-sloopDX's changes. Dinghy (the app, the host mode, the docs) by zvenson.
+The platform is Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, with SLOOP's changes (isod89).
+Dinghy (the app, the host mode, the docs) by zvenson.

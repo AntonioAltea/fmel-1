@@ -55,7 +55,7 @@ After that every release you make shows up there by itself.
 
 ## 6. Keep the credits
 
-Your firmware stands on Felucca (Leo Kuroshita, Hügelton Instruments), SLOOP and sloopDX. The GPL asks you to
+Your firmware stands on Felucca (Leo Kuroshita, Hügelton Instruments) and SLOOP (isod89). The GPL asks you to
 keep their copyright lines and to give your users your source; it also is just fair. Keep `LICENSING.md` and
 the headers, and add yourself.
 
