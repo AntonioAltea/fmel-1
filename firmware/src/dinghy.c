@@ -91,7 +91,7 @@ static int quiet(void)                          /* nothing sounds, not even a re
 }
 
 /* ---- the screen: the name, the last note big, the keyboard with what sounds, the octave */
-#define C_ACC RGB(255, 216, 74)                 /* buoy yellow */
+#define C_ACC RGB(180, 140, 255)                /* lilac, as the logo */
 #define C_KEY RGB(210, 210, 210)
 #define C_OFF RGB(90, 90, 90)
 #define KEY0 53u                                /* key 0 = F3 */
