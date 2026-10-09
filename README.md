@@ -18,8 +18,10 @@ It is the bottom of a family of boats: [Felucca](https://github.com/hugelton/Fel
 (Hügelton Instruments), [SLOOP](https://github.com/isod89/sloop-fm1) on it, sloopDX and
 [zp12](https://github.com/zvenson/zp12) on SLOOP. Dinghy keeps their platform and throws away the rest.
 
-> **Status: 0.1.** Builds clean, runs on the host (`tests/host.c`), the platform under it is the one SLOOP, sloopDX
-> and zp12 ship. Tell us how it runs on your FM-1.
+<p align="center"><img src="docs/screen.png" width="240" alt="Dinghy's screen: the name, the note played, a keyboard with the keys that sound"></p>
+
+> **Status: 0.1, runs on the FM-1.** Tested on the device: the install, MIDI in (pitch exact, 4 voices), USB audio
+> at 44.1 / 48 kHz, the keys, the screen, the octave kept in flash, and back to another firmware through the hub.
 
 ## What you get
 
