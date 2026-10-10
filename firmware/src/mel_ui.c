@@ -185,22 +185,31 @@ static void spr_flute(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)
         }
     }
 }
-static void spr_choir(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* the 8 voices: four of them */
+static void spr_pix(const sprite_t *sp, int32_t cx, int32_t cy, int32_t s, uint32_t parts)   /* a drawn sprite
+                                                                    * (mel_sprites.h), its loose parts up to parts */
 {
-    static const int8_t X[4] = {-36, -12, 12, 36}, Y[4] = {-4, 2, -2, 3};
-    static const uint16_t ROBE[4] = {RGB(128, 34, 46), RGB(42, 64, 120), RGB(128, 34, 46), RGB(42, 64, 120)};
-    int32_t k;
-    for (k = 0; k < 4; k++) {
-        int32_t x = cx + S(X[k]), bob = sn(MS_PH(t, 12) + (uint32_t)k * 0x30000000u, S(3)) * lv >> 8;
-        int32_t y = cy + S(Y[k]) + bob, open = 1 + (lv * (4 + (sine(MS_PH(t, 23) + (uint32_t)k * 0x50000000u) >> 13)) >> 9);
-        rrect(x - S(12), y + S(4), S(24), S(36), S(8), ROBE[k]);                    /* robe */
-        cv_rect(x - S(5), y + S(4), S(10) + 1, S(3), RGB(246, 242, 232));            /* collar */
-        disc(x, y - S(8), S(10), RGB(236, 192, 152));                               /* head */
-        ellipse(x, y - S(15), S(10), S(4), k & 1 ? RGB(70, 44, 28) : RGB(150, 100, 50));   /* hair */
-        cv_rect(x - S(5), y - S(9), S(3), 1, C_INK);                                /* eyes, closed */
-        cv_rect(x + S(2), y - S(9), S(3), 1, C_INK);
-        ellipse(x, y - S(3), S(2) + 1, open > S(5) ? S(5) : open, RGB(110, 30, 30));   /* singing */
+    int32_t w = sp->w * s >> 8, h = sp->h * s >> 8, x0 = cx - w / 2, y0 = cy - h / 2, dx, dy;
+    for (dy = 0; dy < h; dy++) {
+        int32_t sy0 = dy * sp->h / h, sy1 = (dy + 1) * sp->h / h;
+        if (sy1 <= sy0) sy1 = sy0 + 1;
+        for (dx = 0; dx < w; dx++) {
+            int32_t sx0 = dx * sp->w / w, sx1 = (dx + 1) * sp->w / w, sx, sy;
+            uint32_t c = 0;
+            if (sx1 <= sx0) sx1 = sx0 + 1;
+            for (sy = sy0; sy < sy1 && c != 1u; sy++)   /* shrunk: the outline (colour 1) wins, it stays whole */
+                for (sx = sx0; sx < sx1 && c != 1u; sx++) {
+                    uint32_t v = sp->px[sy * sp->w + sx];
+                    if ((v & 15u) && (v >> 4) <= parts && (!c || (v & 15u) == 1u)) c = v & 15u;
+                }
+            if (c) cv_pset(x0 + dx, y0 + dy, sp->pal[c]);
+        }
     }
+}
+static void spr_choir(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* a mouse, a magpie and a fox
+                                                                                     * (drawn), their AAAAA coming */
+{
+    uint32_t ph = t % 800u;                     /* three frames, round and round: the dots, the small As, all (held) */
+    spr_pix(&SPR_CHOIR, cx, cy, s, !lv ? 0u : ph < 200u ? 4u : ph < 400u ? 7u : 10u);
 }
 static void spr_vibes(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* bars, tubes, fans, two mallets */
 {
@@ -231,7 +240,7 @@ static void spr_sound(const char *nm, int32_t cx, int32_t sc, uint32_t t, int32_
                                                                                        * name, sc/256 of its size */
 {
     if (nm[0] == 'F') spr_flute(cx, 48, 300 * sc >> 8, t, lv);
-    else if (nm[0] == 'C' && nm[1] == 'H') spr_choir(cx, 40, 250 * sc >> 8, t, lv);
+    else if (nm[0] == 'C' && nm[1] == 'H') spr_choir(cx, 40, sc, t, lv);
     else if (nm[0] == 'V' && nm[2] == 'B') spr_vibes(cx, 40, 230 * sc >> 8, t, lv);
     else if (nm[0] == 'V') spr_violins(cx, 50, 230 * sc >> 8, t, lv);
     else spr_cello(cx, 52, 232 * sc >> 8, t, lv);
@@ -273,8 +282,8 @@ static void draw_header(int sounding)
         lamp(&x, "SEQ", C_GREEN, seq_play);
         lamp(&x, "ARP", C_LAMP, arp_on);
         lamp(&x, "HOLD", C_LAMP, hold);
-        lamp(&x, "FX", C_INK, by_fx);           /* (black: that section is out) */
-        lamp(&x, "LOFI", C_INK, by_lofi);
+        lamp(&x, "FX", C_INK, !by_fx);          /* (the sections that are in) */
+        lamp(&x, "LOFI", C_INK, !by_lofi);
     }
     cv_rect(0, 23, 240, 1, C_BODY2);
     cv_blit(0, 0);
@@ -354,10 +363,14 @@ static void hub(int32_t cx, int32_t cy, int32_t pack, uint32_t a)
     }
     disc(cx, cy, 2, RGB(70, 66, 62));
 }
-static void stage_tape(void)                    /* TAPE: a cassette, its reels turning as the tapes run (and wow) */
+static void stage_tape(void)                    /* TAPE: a cassette, its reels turning as the tapes run (wow), the
+                                                 * tape quivering (flutter) */
 {
     char s[4];
-    int32_t y, pk = 6 + (int32_t)(counter % 1000u) * 7 / 1000;
+    int32_t y, x, pk = 6 + (int32_t)(counter % 1000u) * 7 / 1000;
+    int32_t fl = ui_lv && !by_lofi ? fxv_flut : 0;   /* the flutter: the tape quivers, the reels tug */
+    int32_t bow = fl / 250 > 4 ? 4 : fl / 250 < -4 ? -4 : fl / 250;
+    uint32_t tug = (uint32_t)(fl * 100000);
     rrect(28, 4, 184, 100, 8, RGB(56, 52, 50));
     disc(34, 10, 2, RGB(120, 118, 116));
     disc(205, 10, 2, RGB(120, 118, 116));
@@ -373,9 +386,10 @@ static void stage_tape(void)                    /* TAPE: a cassette, its reels t
     rrect(170, 21, 28, 16, 2, C_INK);
     tx(172, 21, &FONT_S, s, C_LAMP, C_INK);
     rrect(66, 38, 108, 28, 8, RGB(34, 30, 30)); /* the window */
-    hub(92, 52, 13 - pk, reel_a);
-    hub(148, 52, pk, reel_a * 13u / 10u);
-    cv_rect(80, 63, 80, 2, C_OXIDE);
+    hub(92, 52, 13 - pk, reel_a + tug);
+    hub(148, 52, pk, reel_a * 13u / 10u + tug);
+    for (x = 0; x < 80; x++)                    /* the tape between them, bowing like a plucked string */
+        cv_rect(80 + x, 63 + sn((uint32_t)x * 26843545u, bow), 1, 2, C_OXIDE);
     for (y = 76; y < 104; y++) {                /* the bottom, where the heads go in */
         int32_t i = (y - 76) * 12 / 28;
         cv_rect(60 + i, y, 120 - 2 * i, 1, RGB(40, 38, 36));
@@ -595,14 +609,16 @@ static uint16_t dim(uint16_t sw)               /* a stored (byte-swapped) pixel,
     c = (uint16_t)(c - ((c >> 3) & 0x18E3u));
     return swap16(c);
 }
-static void tape_look(uint32_t h)
+static void tape_look(uint32_t h)   /* (the wow sways it slowly, the flutter shakes it) */
 {
     static uint16_t row[240];
     int32_t y, x, amp = ui_lv ? PV(P_WOW) * 3 / 100 : 0, off = ui_lv ? fxv_wow / 160 : 0, drop = fxv_drop;
+    int32_t jit = ui_lv ? (fxv_flut + (fxv_flut < 0 ? -150 : 150)) / 300 : 0;   /* the flutter: a nervous shake */
     uint32_t i;
     if (!PV(P_LOOK)) return;
-    if (by_lofi) amp = off = drop = 0;         /* (LOFI out: no sway, no tears, no grain: a clean tape) */
+    if (by_lofi) amp = off = drop = jit = 0;   /* (LOFI out: no sway, no tears, no grain: a clean tape) */
     off = off > 4 ? 4 : off < -4 ? -4 : off;
+    off += jit > 3 ? 3 : jit < -3 ? -3 : jit;
     for (y = 0; y < (int32_t)h; y++) {
         uint16_t *p = &cv_px[(uint32_t)y * 240u];
         int32_t sh = off + (amp ? sn(fm1_ms * 0x00300000u + (uint32_t)y * 0x03000000u, amp) : 0);

@@ -29,6 +29,7 @@ static volatile int32_t f_rfb, f_rdamp, f_rpre, f_rmix;
 static volatile int32_t f_glo, f_gmid, f_ghi, f_svf, f_by_lofi, f_by_fx;
 static int32_t lofi_bp, fx_bp;                  /* ISR: how bypassed, 0 (all in) .. 32767 (all out), ramped */
 static volatile int32_t fxv_wow, fxv_drop;      /* ISR -> screen: the wow now (1/16 cent), how deep a dropout is (0..32768) */
+static volatile int32_t fxv_flut;               /* ISR -> screen: the flutter now (flut_am: +-1200 at 100) */
 static int32_t flut_am;                         /* ISR: flutter's level shake now, Q15 around 0 */
 static volatile uint32_t fxv_horn, fxv_drum, fxv_vib;   /* the rotors' and the vibrato's phase */
 
@@ -66,6 +67,7 @@ static int32_t fx_pitch16(void)
         wd = f_wow * f_wow * 1280 / 10000;      /* squared: gentle low on the knob, wild at the top */
         fd = fv * (fv + 60) * 405 / 16000;      /* nearly straight: heard from the first quarter */
         flut_am = ((fl >> 6) * fv) >> 6;        /* up to +-6 % of the level at 100 */
+        fxv_flut = flut_am;
     }
     c = ((wow >> 6) * wd) >> 9;
     fxv_wow = c;

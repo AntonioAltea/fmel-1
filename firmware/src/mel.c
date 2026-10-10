@@ -13,8 +13,8 @@
  *                  the band narrows, and the copying deck adds its hiss, flutter, drive), DROPOUT, DRIFT, CRUSH
  *   FX     FX      VIBRATO: RATE DEPTH TONE MIX - LESLIE: SPEED DRIVE SPREAD MIX - ECHO: TIME REPEATS TONE MIX
  *                  - REVERB: SIZE TONE PRE MIX
- *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; blinking: out)
- *   EDIT   EQ      LOW, MID, FREQ (the mid's), HIGH
+ *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; lit: in, dark: out)
+ *   EDIT   EQ      LOW, MID, FREQ (the mid's), HIGH; held 0.6 s: back to flat
  *   GLO    SETUP   TEMPO (ARP, SEQ), TUNE (fine: to play along with others), LENGTH (a note: as long as held / 8 s,
  *                  as on the M400), SCREEN (the old-tape look / clean); the screen says what each one does
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
@@ -39,6 +39,7 @@ typedef struct {
                                                  * sample (Q24) and per 1024 (Q15), from its peak (sample pk) */
 } mel_zone_t;
 #include "mel_tapes.h"
+#include "mel_sprites.h"
 
 /* ---- the sound (the audio ISR: no flash writes, no screen) */
 #define NV 12u                                  /* voices */
@@ -655,7 +656,7 @@ static void app_init(void)
 static void buttons(void)
 {
     uint32_t rel, b = fm1_input_edges(&rel);    /* pressed / released since the last call */
-    static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long;
+    static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long;
     if (b & (1u << BTN_OCT_DOWN) && set_param(P_OCT, PV(P_OCT) - 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE -" : "OCTAVE 0"); }
     if (b & (1u << BTN_OCT_UP) && set_param(P_OCT, PV(P_OCT) + 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE +" : "OCTAVE 0"); }
     if (b & (1u << BTN_HOME)) go_group(G_PLAY);
@@ -678,7 +679,17 @@ static void buttons(void)
         redraw |= 3u;
     }
     if (rel & (1u << BTN_FX) && !fx_long) go_group(G_FX);
-    if (b & (1u << BTN_EDIT)) go_group(G_EQ);
+    if (b & (1u << BTN_EDIT)) { t_edit = fm1_ms; edit_long = 0; }   /* EDIT the same; held, the EQ flat again */
+    if (fm1_in.buttons & (1u << BTN_EDIT) && !edit_long && fm1_ms - t_edit > 600u) {
+        uint32_t k;
+        edit_long = 1;
+        for (k = P_EQLO; k <= P_EQHI; k++)
+            set_param(k, PINFO[k][2]);
+        changed(99);
+        say("EQ RESET");
+        redraw |= 8u;
+    }
+    if (rel & (1u << BTN_EDIT) && !edit_long) go_group(G_EQ);
     if (b & (1u << BTN_GLO)) go_group(G_SETUP);
     if (b & (1u << BTN_SEQ)) go_group(G_SEQ);
     if (b & (1u << BTN_ARP)) {                  /* to the ARP page; there, ARP on / off */
@@ -851,8 +862,8 @@ static void app_loop(void)
     fm1_led_key(BTN_ARP, arp_on);
     fm1_led_key(BTN_ENV, hold);
     fm1_led_key(BTN_HOME, PG_GROUP[page] == G_PLAY);       /* the section you are in */
-    fm1_led_key(BTN_LFO, by_lofi ? (fm1_ms >> 8) & 1u : PG_GROUP[page] == G_LOFI);   /* blinking: bypassed */
-    fm1_led_key(BTN_FX, by_fx ? (fm1_ms >> 8) & 1u : PG_GROUP[page] == G_FX);
+    fm1_led_key(BTN_LFO, PG_GROUP[page] == G_LOFI ? (fm1_ms >> 8) & 1u : !by_lofi);   /* lit: in, dark: out, */
+    fm1_led_key(BTN_FX, PG_GROUP[page] == G_FX ? (fm1_ms >> 8) & 1u : !by_fx);           /* blinking: its section */
     fm1_led_key(BTN_EDIT, PG_GROUP[page] == G_EQ);
     fm1_led_key(BTN_GLO, PG_GROUP[page] == G_SETUP);
     fm1_led_key(BTN_SEQ, PG_GROUP[page] == G_SEQ);
