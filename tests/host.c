@@ -1,12 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* A fake FM-1 on a computer: the app (firmware/src/dinghy.c) runs unchanged on it. platform.c includes
+/* A fake FM-1 on a computer: the app (firmware/src/mel.c) runs unchanged on it. platform.c includes
  * this file instead of the hardware when DINGHY_HOST is set. A script presses keys over time; out come
  * the screen (PPM, at the times SHOT asks) and the sound (WAV, as the FM-1 sends it over USB).
  *
- *   mkdir -p build/host
- *   cc -O2 -Wall -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/dinghy firmware/src/dinghy.c
- *   build/host/dinghy build/host/dinghy        (-> build/host/dinghy.wav, build/host/dinghy-<ms>.ppm)
- *   build/host/dinghy OUT script.txt [FPS]    (your own script; with FPS: OUT-NNNNN.ppm, a frame every 1/FPS s:
+ *   tests/run_host.sh                          (builds it: build/host/mel.wav, build/host/mel-<ms>.png)
+ *   build/host/mel OUT script.txt [FPS]        (your own script; with FPS: OUT-NNNNN.ppm, a frame every 1/FPS s:
  *                                             a film of your firmware, e.g. ffmpeg -r 30 -i OUT-%05d.ppm ...)
  *
  * Change SCRIPT below to try your own app. */
@@ -26,10 +24,17 @@
 
 static volatile uint32_t fm1_ms;
 static struct { uint32_t notes, buttons; } fm1_in;
-static uint32_t host_edges;
-static uint32_t fm1_input_edges(uint32_t *released) { uint32_t b = host_edges; host_edges = 0; *released = 0; return b; }
+static uint32_t host_edges, host_rel, host_until[16];   /* a button pressed: held until host_until[id], then let go */
+static uint32_t fm1_input_edges(uint32_t *released)
+{
+    uint32_t b = host_edges;
+    *released = host_rel;
+    host_edges = host_rel = 0;
+    return b;
+}
 static uint32_t fm1_input_note_edges(void) { return 0; }   /* (the script sets fm1_in.notes) */
-static int32_t fm1_enc_take(uint32_t e) { (void)e; return 0; }
+static int32_t host_enc[7];
+static int32_t fm1_enc_take(uint32_t e) { int32_t d = host_enc[e % 7u]; host_enc[e % 7u] = 0; return d; }
 static void fm1_led_key(uint32_t id, int on) { (void)id; (void)on; }
 
 /* the screen: 240 x 240 RGB565, as the ST7789 gets it (gfx.c sends the bytes swapped) */
@@ -52,7 +57,9 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
                 fb[(y + j) * 240u + x + i] = (uint16_t)(c >> 8 | c << 8);
             }
 }
+#ifndef CV_MAX
 #define CV_MAX (240u * 64u)
+#endif
 #include "gfx.c"
 
 static uint8_t host_store[256 + 4];
@@ -84,22 +91,28 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { printf("%6u ms  M
 static void app_audio(int32_t *out, uint32_t n);
 static void app_main(void);
 
-/* the script: at t ms, keys down (bit k = key k, 0 = F3), a button edge, a MIDI message. A script file (the second
- * argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID", "T midi ST D1 D2", "T end" */
-typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; } host_ev_t;
+/* the script: at t ms, keys down (bit k = key k, 0 = F3), a button edge, an encoder turned, a MIDI message. A script
+ * file (the second argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID" (a tap), "T hold ID MS"
+ * (held MS ms), "T enc ID N", "T midi ST D1 D2", "T end" */
+typedef struct { uint32_t t, keys; int btn, enc, n; uint8_t st, d1, d2; } host_ev_t;   /* (btn: n = how long held, 0: a tap) */
+#define K(k) (1u << (k))                                        /* key k: 7 C4, 11 E4, 14 G4, 16 A4, 19 C5 */
 static const host_ev_t SCRIPT0[] = {
-    {200, 1u << 7, -1, 0, 0, 0},                                /* C4 */
-    {700, 1u << 7 | 1u << 11 | 1u << 14, -1, 0, 0, 0},          /* + E4 G4: a chord */
-    {1500, 0, -1, 0, 0, 0},
-    {1700, 0, -1, 0x90, 81, 120},                               /* MIDI in: A5 */
-    {2300, 0, -1, 0x80, 81, 0},
-    {2500, 0, BTN_OCT_UP, 0, 0, 0},
-    {2700, 1u << 2 | 1u << 9, -1, 0, 0, 0},                     /* G4 + D5, an octave up */
-    {3400, 0, -1, 0, 0, 0},
+    {200, K(7) | K(11) | K(14), -1, -1, 0, 0, 0, 0},            /* A FLUTE: C major */
+    {2000, 0, -1, -1, 0, 0, 0, 0},
+    {2200, K(14), -1, -1, 0, 0, 0, 0},                          /* a tune */
+    {2600, K(16), -1, -1, 0, 0, 0, 0},
+    {3000, K(19), -1, -1, 0, 0, 0, 0},
+    {3800, 0, -1, -1, 0, 0, 0, 0},
+    {4000, 0, -1, ENC_PRESETS, 1, 0, 0, 0},                     /* -> B CHOIR */
+    {4100, K(4) | K(7) | K(11), -1, -1, 0, 0, 0, 0},            /* A minor */
+    {6600, 0, -1, -1, 0, 0, 0, 0},
+    {6800, 0, -1, ENC_PRESETS, 1, 0, 0, 0},                     /* -> C CELLO */
+    {6900, K(0) | K(7), -1, -1, 0, 0, 0, 0},                    /* F3 + C4 */
+    {9200, 0, -1, -1, 0, 0, 0, 0},
 };
 static const host_ev_t *script = SCRIPT0;
-static uint32_t script_n = sizeof SCRIPT0 / sizeof SCRIPT0[0], end_ms = 6500, frame_fps;
-static const uint32_t SHOT[] = {1000, 3000};
+static uint32_t script_n = sizeof SCRIPT0 / sizeof SCRIPT0[0], end_ms = 11000, frame_fps;
+static const uint32_t SHOT[] = {1000, 5000, 8000};
 
 static void read_script(const char *path)
 {
@@ -109,12 +122,14 @@ static void read_script(const char *path)
     uint32_t n = 0;
     if (!f) { perror(path); exit(1); }
     while (fgets(line, sizeof line, f) && n < 4096u) {
-        host_ev_t e = {0, 0, -1, 0, 0, 0};
+        host_ev_t e = {0, 0, -1, -1, 0, 0, 0, 0};
         unsigned a = 0, b = 0, c = 0;
         if (line[0] == '#' || sscanf(line, "%u %15s", &e.t, what) != 2) continue;
         if (!strcmp(what, "end")) { end_ms = e.t; continue; }
         if (!strcmp(what, "keys")) { sscanf(line, "%*u %*s %i", (int *)&e.keys); }
         else if (!strcmp(what, "btn")) { sscanf(line, "%*u %*s %d", &e.btn); }
+        else if (!strcmp(what, "hold")) { sscanf(line, "%*u %*s %d %d", &e.btn, &e.n); }
+        else if (!strcmp(what, "enc")) { sscanf(line, "%*u %*s %d %d", &e.enc, &e.n); }
         else if (!strcmp(what, "midi")) { sscanf(line, "%*u %*s %i %u %u", (int *)&a, &b, &c); e.st = (uint8_t)a; e.d1 = (uint8_t)b; e.d2 = (uint8_t)c; }
         else continue;
         ev[n++] = e;
@@ -124,7 +139,7 @@ static void read_script(const char *path)
     script_n = n;
 }
 
-static const char *host_out = "build/host/dinghy";
+static const char *host_out = "build/host/mel";
 static int16_t *wav;
 static uint32_t wav_n;
 
@@ -174,11 +189,24 @@ static void platform_poll(void)                 /* one call = one millisecond */
         if (script[step].st) {
             mq[mq_w % 64u][0] = script[step].st; mq[mq_w % 64u][1] = script[step].d1; mq[mq_w % 64u][2] = script[step].d2;
             mq_w++;
-        } else if (script[step].btn >= 0)
+        } else if (script[step].btn >= 0) {
             host_edges |= 1u << script[step].btn;
+            fm1_in.buttons |= 1u << script[step].btn;
+            host_until[script[step].btn & 15] = fm1_ms + (script[step].n ? (uint32_t)script[step].n : 30u);
+        }
+        else if (script[step].enc >= 0)
+            host_enc[script[step].enc % 7] += script[step].n;
         else
             fm1_in.notes = script[step].keys;
         step++;
+    }
+    {
+        uint32_t id;
+        for (id = 0; id < 16u; id++)            /* buttons let go */
+            if (fm1_in.buttons >> id & 1u && fm1_ms >= host_until[id]) {
+                fm1_in.buttons &= ~(1u << id);
+                host_rel |= 1u << id;
+            }
     }
     owed += FS;                                 /* the frames this millisecond is worth, in blocks as the ISR renders */
     while (owed >= 1000u * HALF_FRAMES) {

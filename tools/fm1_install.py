@@ -373,7 +373,7 @@ def load_package(path, force):
     except OSError as e:
         raise InstallError("badpkg", f"cannot read {path}: {e.strerror}")
     product = product_of(raw)
-    if not re.fullmatch(r"[^_]+_\d+", product):
+    if not re.fullmatch(r"[^_]+_\w+", product):         # (FM-1_906, FM-1_MEL)
         raise InstallError("badpkg", f"{path}: not an FM-1 package (identity {product!r})")
     if LOADER_MARK not in raw and not force:
         raise InstallError("badpkg", f"{path}: no Felucca update loader in this package; "

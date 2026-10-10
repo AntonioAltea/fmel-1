@@ -25,6 +25,8 @@ enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB
 
 #ifdef DINGHY_HOST
 #include "../../tests/host.c"                  /* on a computer: a fake FM-1 (tests/host.c) */
+#elif defined(DINGHY_WEB)
+#include "../../web/emu/fm1_web.c"             /* in the browser: a fake FM-1 (web/emu/fm1_web.c) */
 #else
 #include <stdint.h>
 #include "fm1_time.h"
@@ -42,7 +44,7 @@ enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB
 #define APP_NAME "DINGHY"
 #endif
 #ifndef FELUCCA_ID
-#define FELUCCA_ID "FM-1_990"                   /* package identity: 99N = Dinghy build N (tools/build.py) */
+#define FELUCCA_ID "FM-1_MEL"                   /* package identity (tools/build.py) */
 #endif
 #ifndef APP_VER
 #define APP_VER "0.0"
@@ -54,7 +56,9 @@ static volatile uint32_t fm1_ms;                /* milliseconds since power-on (
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #include "libc.c"
 #include "lcd.c"
+#ifndef CV_MAX
 #define CV_MAX (240u * 64u)                     /* the biggest text box drawn at once */
+#endif
 #include "gfx.c"
 
 #define FS 44100u                               /* the sample rate */
