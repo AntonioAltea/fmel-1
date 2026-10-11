@@ -32,6 +32,8 @@
 #define LDR_APP_HI 0x93000u
 #define LDR_REC_LO 0x93000u                     /* update records live above the app ... */
 #define LDR_REC_HI 0xFC000u                     /* ... and below Felucca's globals */
+#define LDR_DATA_LO 0x97000u                    /* never in Felucca's store (as Felucca 1.5.1): user data lives there */
+#define LDR_DATA_HI 0xE0000u                    /* (MEL's tapes, Felucca's projects and samples), it may look like one */
 
 static int ldr_fread(uint32_t off, void *p, uint32_t n);
 static int ldr_erase(uint32_t off);
@@ -95,6 +97,8 @@ static void ldr_records_drop(void)
     ldr_record_clear();
     for (s = LDR_REC_HI; s > LDR_REC_LO; s -= 0x1000u) {
         uint8_t r[80];
+        if (s - 0x1000u >= LDR_DATA_LO && s - 0x1000u < LDR_DATA_HI)
+            continue;
         if (ldr_fread(s - 0x100u, r, 80))
             break;
         if (ota_rd16(r + 6) == 0x5441u && ota_rd16(r) && ota_rd16(r) == ota_crc16(r + 2, 78, 0))

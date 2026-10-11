@@ -16,8 +16,9 @@
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #include "fm1_time.h"
 #include "fm1_sys.h"
-/* the loader may write the app area and erase update records; never the head */
-#define FL_RANGE_OK(off, n) (FL_IN(off, n, 0x4000u, 0x93000u) || FL_IN(off, n, 0x93000u, 0xFC000u))
+/* the loader may write the app area and erase update records; never the head, nor the user data in
+ * [0x97000, 0xE0000) (MEL's tapes, Felucca's projects; never a record: ldr_core.c), as Felucca 1.5.1 */
+#define FL_RANGE_OK(off, n) (FL_IN(off, n, 0x4000u, 0x97000u) || FL_IN(off, n, 0xE0000u, 0xFC000u))
 #include "fm1_flash.h"
 #include "../src/libc.c"
 #include "../src/usb.c"
