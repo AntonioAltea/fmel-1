@@ -282,6 +282,7 @@ static void draw_header(int sounding)
         lamp(&x, "SEQ", C_GREEN, seq_play);
         lamp(&x, "ARP", C_LAMP, arp_on);
         lamp(&x, "HOLD", C_LAMP, hold);
+        lamp(&x, "HALF", C_LAMP, set.half);
         lamp(&x, "FX", C_INK, !by_fx);          /* (the sections that are in) */
         lamp(&x, "LOFI", C_INK, !by_lofi);
     }
@@ -660,7 +661,7 @@ static void ui_motion(void)                     /* the cassette's reels and coun
     uint32_t dt = fm1_ms - t_reel;
     t_reel = fm1_ms;
     if (ui_lv) {
-        int32_t sp = 40 + ui_lv / 4 + fxv_wow / 64;
+        int32_t sp = (40 + ui_lv / 4 + fxv_wow / 64) >> set.half;   /* (HALF SPEED: half as fast) */
         reel_a += (uint32_t)(sp > 0 ? sp : 0) * dt * 0x00080000u;
         if (fm1_ms - t_cnt >= 150u) { t_cnt = fm1_ms; counter = (counter + 1u) % 1000u; }
     }
@@ -715,7 +716,7 @@ static void draw_tapes(uint32_t base, int force)
 /* ---- the plate: brushed aluminium; four black knobs, each with its name and its value */
 static void knob_gfx(int32_t cx, int32_t cy, int32_t p256, int lit)   /* p256 0..256 = -135 .. +135 degrees */
 {
-    uint32_t ph = (uint32_t)((int32_t)0xA0000000u + p256 * (int32_t)0x00C00000);
+    uint32_t ph = 0xA0000000u + (uint32_t)p256 * 0x00C00000u;   /* (unsigned: the turn wraps, defined) */
     disc(cx, cy + 1, 13, RGB(120, 122, 126));
     disc(cx, cy, 13, lit ? C_LAMP : C_SKIRT);
     disc(cx, cy, 10, C_KNOB);

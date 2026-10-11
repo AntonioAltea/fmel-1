@@ -8,7 +8,8 @@
  *                        a soft clipper, a bias for even harmonics, a low-pass closing as it drives, the level kept;
  *                        HISS, CRUSH (fewer bits, a lower rate)
  *                        WOW and FLUTTER are the motor: irregular, in the tapes' speed (fx_pitch16), not a vibrato;
- *                        flutter shakes the level a little too (that roughness is what makes it heard)
+ *                        flutter shakes the level a little too (that roughness is what makes it heard); at HALF SPEED
+ *                        they come at half the rate (the capstan and the pinch roller turn half as fast)
  *   EQ                   a low shelf (150 Hz), a bell (200 Hz .. 5 kHz), a high shelf (5 kHz), +-12 dB
  *   VIBRATO      (FX)    a delay swept by a sine: RATE, DEPTH, TONE (its colour), MIX (half way: a chorus)
  *   LESLIE               the drum below 800 Hz, the horn above, Doppler and level, STOP / SLOW / FAST with their
@@ -53,10 +54,11 @@ static int32_t fx_pitch16(void)
     static uint32_t w1, w2, f1, f2;
     static int32_t walk;
     int32_t wow, fl, wd, fd, c;
-    w1 += 1869949u;                             /* 0.60 Hz (per 32 frames: f * 2^32 * 32 / 44100) */
-    w2 += 3521737u;                             /* 1.13 Hz */
-    f1 += 25555964u;                            /* 8.2 Hz */
-    f2 += 40203895u;                            /* 12.9 Hz */
+    uint32_t sp = (uint32_t)(256 + motor16 * 128 / 19200);   /* the motor's speed, Q8: 256 full .. 128 half */
+    w1 += (1869949u >> 8) * sp;                 /* 0.60 Hz (per 32 frames: f * 2^32 * 32 / 44100) */
+    w2 += (3521737u >> 8) * sp;                 /* 1.13 Hz */
+    f1 += (25555964u >> 8) * sp;                /* 8.2 Hz */
+    f2 += (40203895u >> 8) * sp;                /* 12.9 Hz */
     walk += (int32_t)rnd() >> 22;
     walk -= walk >> 7;
     wow = sine(w1) + (sine(w2) >> 1) + (walk > 16000 ? 16000 : walk < -16000 ? -16000 : walk);

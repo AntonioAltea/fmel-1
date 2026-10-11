@@ -7,6 +7,8 @@
  * The panel: a button is a section; pressed again it turns its pages; SELECT turns them too. On every page the
  * four knobs do what the screen's aluminium plate says (on FX pages the last one is always MIX).
  *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK, RELEASE
+ *          held    HOME held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
+ *                  octave down and twice as long, its wow and flutter slower; it slows down and speeds up in ~0.4 s
  *   SEL    LAYER   a second sound on the same tape's other track: SOUND (OFF A B C D), MIX (between the two), OCTAVE,
  *                  DETUNE; on its page SEL again turns the SOUND (lit: a layer sounds)
  *   LFO    LOFI    TAPE: WOW, FLUTTER, DRIVE (into the tape: saturation), HISS  -  WEAR: AGE (a copy of a copy:
@@ -80,6 +82,8 @@ static volatile uint32_t tpos[128];             /* ISR: where each key's tape is
 
 static volatile uint8_t p_sound, p_tape8, p_layer;   /* main -> ISR (one writer each); layer 0 off, else sound + 1 */
 static volatile int32_t p_tune16, p_bend16, p_drift, p_mod, p_atk, p_relk, p_loct, p_ldet16, p_ga, p_gb;
+static volatile uint8_t p_half;                 /* main -> ISR: HALF SPEED */
+static int32_t motor16;                         /* ISR: the motor's speed, 0 (full) .. -19200 (half: an octave, 1/16 cents) */
 
 static int32_t sine(uint32_t ph)                /* a full cycle over 2^32 -> -32767..32767 (Dinghy's parabola) */
 {
@@ -317,7 +321,10 @@ static void app_audio(int32_t *out, uint32_t n)
         mix[i] = 0;
     fx_block();
     for (b = 0; b < n; b += SUB) {              /* the motor (the same for every tape), then every voice */
-        int32_t g16 = p_tune16 + p_bend16 + fx_pitch16();
+        int32_t g16;
+        motor16 += p_half ? (motor16 > -19200 + 35 ? -35 : -19200 - motor16)   /* HALF SPEED: ~0.4 s to get there */
+                          : (motor16 < -35 ? 35 : -motor16);
+        g16 = p_tune16 + p_bend16 + fx_pitch16() + motor16;
         for (v = 0; v < NV; v++)
             voice_sub(v, mix + b, g16, drift, atk, relk);
     }
@@ -420,7 +427,7 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
 
 #define SET_VER 5u
 typedef struct {
-    uint8_t ver, np, rsv[2];
+    uint8_t ver, np, half, rsv;                 /* half: HALF SPEED (a reserved byte before: older settings load, off) */
     int16_t p[NP];
     uint8_t steps[16][4];                       /* the pattern: up to 4 notes a step, 0 = none */
 } mel_set_t;
@@ -441,6 +448,7 @@ static void apply(void)                         /* the parameters -> the sound *
     p_gb = sine((uint32_t)PV(P_BMIX) * (0x40000000u / 100u));
     p_layer = (uint8_t)PV(P_BSND);
     p_tape8 = (uint8_t)PV(P_LEN);
+    p_half = set.half;
     p_tune16 = PV(P_TUNE) * 16;
     p_drift = PV(P_DRIFT);
     p_atk = (int32_t)MEL_ATK[PV(P_ATK)];
@@ -638,6 +646,7 @@ static void app_init(void)
     set.ver = SET_VER;
     set.np = NP;
     if (!settings_load(&s, sizeof s) && s.ver == SET_VER && s.np == NP) {   /* (another version: the defaults) */
+        set.half = s.half == 1u;
         for (k = 0; k < NP; k++)
             if (s.p[k] >= PINFO[k][0] && s.p[k] <= PINFO[k][1])
                 set.p[k] = s.p[k];
@@ -656,10 +665,18 @@ static void app_init(void)
 static void buttons(void)
 {
     uint32_t rel, b = fm1_input_edges(&rel);    /* pressed / released since the last call */
-    static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long;
+    static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_home, home_long;
     if (b & (1u << BTN_OCT_DOWN) && set_param(P_OCT, PV(P_OCT) - 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE -" : "OCTAVE 0"); }
     if (b & (1u << BTN_OCT_UP) && set_param(P_OCT, PV(P_OCT) + 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE +" : "OCTAVE 0"); }
-    if (b & (1u << BTN_HOME)) go_group(G_PLAY);
+    if (b & (1u << BTN_HOME)) { t_home = fm1_ms; home_long = 0; }   /* HOME the same; held, HALF SPEED on / off */
+    if (fm1_in.buttons & (1u << BTN_HOME) && !home_long && fm1_ms - t_home > 600u) {
+        home_long = 1;
+        set.half = !set.half;
+        changed(99);
+        say(set.half ? "HALF SPEED" : "FULL SPEED");
+        redraw |= 3u;
+    }
+    if (rel & (1u << BTN_HOME) && !home_long) go_group(G_PLAY);
     /* LFO and FX: a press turns to the section (or its next page) when let go; held 0.6 s, its bypass instead */
     if (b & (1u << BTN_LFO)) { t_lfo = fm1_ms; lfo_long = 0; }
     if (fm1_in.buttons & (1u << BTN_LFO) && !lfo_long && fm1_ms - t_lfo > 600u) {
