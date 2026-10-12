@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Instalar MEL</title>
+<style>
+:root { --ground: #f4f1f8; --ink: #2c2638; --muted: #6f6680; --rule: #ddd6e8; --card: #fbfaff; --accent: #7a52d6;
+        --ok: #2f7d4f; --bad: #b3261e; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --ground: #16141b; --ink: #ece8f4; --muted: #a59cb6; --rule: #2e2a38; --card: #1f1c26;
+                                    --accent: #b48cff; --ok: #6fcf97; --bad: #ff8a80; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); margin: 0; padding: 24px 16px 48px;
+       font: 400 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 680px; margin: 0 auto; }
+h1 { margin: 0 0 .2rem; font-size: 1.9rem; }
+h2 { font-size: 1.1rem; margin: 0 0 .6rem; }
+p { margin: .4rem 0; }
+.muted { color: var(--muted); }
+section { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; margin: 16px 0; }
+button { font: inherit; padding: .5rem 1rem; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent);
+         color: #fff; cursor: pointer; }
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+label { display: flex; gap: .5rem; align-items: flex-start; margin: .35rem 0; }
+input[type=checkbox] { margin-top: .3rem; }
+.ok { color: var(--ok); }
+.bad { color: var(--bad); }
+progress { width: 100%; height: 14px; }
+code { font-size: .92em; }
+#log { white-space: pre-wrap; font: 12px/1.4 ui-monospace, monospace; color: var(--muted); max-height: 160px; overflow: auto; }
+a { color: var(--accent); }
+a.big { display: block; text-align: center; padding: 1.1rem 1rem; margin: 18px 0 6px; font-size: 1.35rem;
+        text-decoration: none; color: #fff; background: var(--accent); border-radius: 10px; }
+a.big:hover, a.big:focus-visible { filter: brightness(1.08); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Instalar MEL</h1>
+  <p class="muted">En el M-VAVE FM-1, por USB, desde Chrome o Edge (hace falta Web MIDI).</p>
+  <p><a class="big" href="../">Probar MEL en el simulador →</a></p>
+  <p class="muted">Suena y se toca como en el FM-1, en el navegador, sin instalar nada.</p>
+
+  <section>
+    <h2>1. El paquete</h2>
+    <p id="pkg">Comprobando el paquete…</p>
+  </section>
+
+  <section>
+    <h2>2. Antes de empezar</h2>
+    <label><input type="checkbox" class="pre"> La batería del FM-1 está cargada.</label>
+    <label><input type="checkbox" class="pre"> Un cable USB de datos, directo al ordenador (sin hub).</label>
+    <label><input type="checkbox" class="pre"> Ninguna otra app usa el FM-1 (cierra el DAW, otras pestañas, M-UPGRADE).</label>
+    <label><input type="checkbox" class="pre"> No lo desconectaré hasta que esta página diga que ha terminado.</label>
+    <p class="muted">Si el FM-1 lleva otro firmware no oficial (Felucca, SLOOP, Dinghy…), primero vuelve al oficial V15
+      (abajo, en 4). Instalar uno no oficial encima de otro ha dejado FM-1 que ningún ordenador veía.</p>
+  </section>
+
+  <section>
+    <h2>3. Instalar</h2>
+    <p><button id="connect">Buscar el FM-1</button></p>
+    <p id="dev" class="muted">Sin conectar.</p>
+    <p><button id="install" disabled>Instalar MEL</button> <button id="resume" class="secondary" hidden>Terminar la instalación</button></p>
+    <progress id="bar" max="100" value="0" hidden></progress>
+    <p id="status"></p>
+  </section>
+
+  <section>
+    <h2>4. Volver al firmware oficial (V15)</h2>
+    <p class="muted">Descarga <code>FM-1.fwsc</code> (PC Firmware, V15) de <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
+      y elígelo aquí. Solo se acepta el archivo oficial sin modificar.</p>
+    <p><input type="file" id="stockfile" accept=".fwsc"> <button id="stock" class="secondary" disabled>Instalar el V15 oficial</button></p>
+  </section>
+
+  <section>
+    <h2>Si algo sale mal</h2>
+    <p><b>Se corta mientras escribe:</b> no pasa nada grave. Vuelve a conectar y pulsa «Buscar el FM-1»: aparecerá «Terminar la
+      instalación».</p>
+    <p><b>MEL no arranca (pantalla roja o reinicios):</b> tras dos intentos entra solo en el rescate USB; también puedes
+      mantener <b>OCT−</b> al encenderlo. Desde ahí, instala otra vez o vuelve al V15.</p>
+    <p><b>Pantalla negra y el ordenador ve un disco «WL82 UBOOT1.00»:</b>
+      <a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> con el V15.
+      Si no aparece nada por USB: <a href="https://github.com/kurogedelic/FM-1-transporter" rel="noopener">FM-1-transporter</a>.</p>
+  </section>
+
+  <div id="log"></div>
+  <p class="muted">El instalador es el de <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>
+    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), con las comprobaciones de MEL encima.</p>
+</main>
+<script type="module" src="install.js"></script>
+</body>
+</html>
