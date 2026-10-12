@@ -6,9 +6,7 @@
  *
  * The panel: a button is a section; pressed again it turns its pages; SELECT turns them too. On every page the
  * four knobs do what the screen's aluminium plate says (on FX pages the last one is always MIX).
- *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK, RELEASE
- *          held    HOME held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
- *                  octave down and twice as long, its wow and flutter slower; it slows down and speeds up in ~0.4 s
+ *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK, RELEASE; HOME again: the next sound
  *   SEL    LAYER   a second sound on the same tape's other track: SOUND (OFF A B C D), MIX (between the two), OCTAVE,
  *                  DETUNE; on its page SEL again turns the SOUND (lit: a layer sounds)
  *   LFO    LOFI    TAPE: WOW, FLUTTER, DRIVE (into the tape: saturation), HISS  -  WEAR: AGE (a copy of a copy:
@@ -24,6 +22,8 @@
  *                  (step recording: SEL is a rest, SEL held 1 s clears the pattern)
  *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES (a track selector)   ALGORITHM the tempo, anywhere
  *   ENV    HOLD    the notes stay after you let go; the next chord replaces them
+ *          held    ENV held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
+ *                  octave down and twice as long, its wow and flutter slower; it slows down and speeds up in ~0.4 s
  *   OCT- OCT+   SAVE (it also saves itself)
  *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = vibrato, pitch bend = the motor (+-2 semitones)
  *
@@ -663,21 +663,26 @@ static void app_init(void)
     say("v" APP_VER);
 }
 
+static void next_sound(int32_t d)               /* the sound d further on: A B C D, round and round */
+{
+    int32_t n = (int32_t)MEL_NSETS;
+    char s[24] = {0, ' ', ' ', 0};
+    set.p[P_SOUND] = (int16_t)(((PV(P_SOUND) + d) % n + n) % n);
+    changed(99);
+    s[0] = (char)('A' + PV(P_SOUND));
+    put(s + 3, MEL_SET_NAME[PV(P_SOUND)]);
+    say(s);
+}
 static void buttons(void)
 {
     uint32_t rel, b = fm1_input_edges(&rel);    /* pressed / released since the last call */
-    static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_home, home_long;
+    static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_env, env_long;
     if (b & (1u << BTN_OCT_DOWN) && set_param(P_OCT, PV(P_OCT) - 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE -" : "OCTAVE 0"); }
     if (b & (1u << BTN_OCT_UP) && set_param(P_OCT, PV(P_OCT) + 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE +" : "OCTAVE 0"); }
-    if (b & (1u << BTN_HOME)) { t_home = fm1_ms; home_long = 0; }   /* HOME the same; held, HALF SPEED on / off */
-    if (fm1_in.buttons & (1u << BTN_HOME) && !home_long && fm1_ms - t_home > 600u) {
-        home_long = 1;
-        set.half = !set.half;
-        changed(99);
-        say(set.half ? "HALF SPEED" : "FULL SPEED");
-        redraw |= 3u;
+    if (b & (1u << BTN_HOME)) {                 /* HOME: to PLAY; there, the next sound */
+        if (PG_GROUP[page] == G_PLAY) next_sound(1);
+        else go_group(G_PLAY);
     }
-    if (rel & (1u << BTN_HOME) && !home_long) go_group(G_PLAY);
     /* LFO and FX: a press turns to the section (or its next page) when let go; held 0.6 s, its bypass instead */
     if (b & (1u << BTN_LFO)) { t_lfo = fm1_ms; lfo_long = 0; }
     if (fm1_in.buttons & (1u << BTN_LFO) && !lfo_long && fm1_ms - t_lfo > 600u) {
@@ -752,7 +757,15 @@ static void buttons(void)
         say("PATTERN CLEARED");
         redraw |= 8u;
     }
-    if (b & (1u << BTN_ENV)) {                  /* HOLD */
+    if (b & (1u << BTN_ENV)) { t_env = fm1_ms; env_long = 0; }   /* ENV: HOLD when let go; held, HALF SPEED on / off */
+    if (fm1_in.buttons & (1u << BTN_ENV) && !env_long && fm1_ms - t_env > 600u) {
+        env_long = 1;
+        set.half = !set.half;
+        changed(99);
+        say(set.half ? "HALF SPEED" : "FULL SPEED");
+        redraw |= 3u;
+    }
+    if (rel & (1u << BTN_ENV) && !env_long) {
         hold = !hold;
         if (!hold) in_clear(S_LATCH);
         say(hold ? "HOLD ON" : "HOLD OFF");
@@ -767,15 +780,8 @@ static void knobs(void)
 {
     uint32_t k, g = PG_GROUP[page];
     int32_t d;
-    if ((d = turn(ENC_PRESETS)) != 0) {         /* the sound, on every page: A B C, round and round */
-        int32_t n = (int32_t)MEL_NSETS;
-        char s[24] = {0, ' ', ' ', 0};
-        set.p[P_SOUND] = (int16_t)(((PV(P_SOUND) + d) % n + n) % n);
-        changed(99);
-        s[0] = (char)('A' + PV(P_SOUND));
-        put(s + 3, MEL_SET_NAME[PV(P_SOUND)]);
-        say(s);
-    }
+    if ((d = turn(ENC_PRESETS)) != 0)           /* the sound, on every page: A B C, round and round */
+        next_sound(d);
     if ((d = turn(ENC_SELECT)) != 0 && G_COUNT[g] > 1u) {   /* SELECT: the section's pages */
         int32_t n = G_COUNT[g];
         page = G_FIRST[g] + (uint32_t)((((int32_t)(page - G_FIRST[g]) + d) % n + n) % n);
