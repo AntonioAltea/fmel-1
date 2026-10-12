@@ -15,6 +15,14 @@ the FM-1 restarts and the installed identity is checked.
 If the FM-1 is still in update mode (an earlier install was cut off), the
 install finishes the write. Needs mido with python-rtmidi.
 
+It installs only over M-VAVE's own firmware (FM-1_0NN), the USB rescue
+(FM-1_000) or the same firmware (its identity's first two digits). Over
+another custom firmware it stops: go back to the official V15 first with
+M-UPGRADE, as the FM-1 community advises (one custom firmware straight over
+another has left FM-1s that no computer saw). --over-custom skips that.
+(A patch of the official firmware, as FM-1+VA, may report an official
+identity: this check cannot tell.)
+
 Exit codes: 0 done, 1 cancelled or other error, 2 bad arguments or package,
 3 FM-1 not found, 4 connection lost or the device stopped, 5 timeout (no
 loader / no restart), 6 wrong model, another identity after the install, or the
@@ -41,7 +49,7 @@ DELAY = {"open": 0.3, "start": 2.0, "reply": 0.01, "loader": 3.0, "reboot": 3.0,
          "wait_loader": 30.0, "wait_reboot": 40.0}
 
 EXIT = {"usage": 2, "badpkg": 2, "notfound": 3, "model": 6, "lost": 4, "stopped": 4, "badreq": 4,
-        "noloader": 5, "noreturn": 5, "mismatch": 6, "foreign": 6}
+        "noloader": 5, "noreturn": 5, "mismatch": 6, "foreign": 6, "custom": 7}
 
 
 class InstallError(Exception):
@@ -135,6 +143,17 @@ def logical_image(raw):
 
 def model_of(text):
     return text.split("_")[0].removeprefix("ota-")
+
+
+def over_custom(running, product):
+    """the running firmware is another custom one (not M-VAVE's FM-1_0NN, not the rescue, not this family)"""
+    m = re.fullmatch(r"[^_]+_(\d+)", running.text)
+    p = re.fullmatch(r"[^_]+_(\d+)", product)
+    if running.loader or not m:
+        return False
+    if len(m[1]) == 3 and int(m[1]) < 100:      # M-VAVE's own (FM-1_015), the rescue (FM-1_000)
+        return False
+    return not (p and len(m[1]) == 3 and len(p[1]) == 3 and m[1][:2] == p[1][:2])
 
 
 # ------------------------------------------------------------------ MIDI ---
@@ -350,12 +369,17 @@ class Updater:
         step("done", back.id.text)
         return back.id.text
 
-    def install(self, dev, image, product, step=lambda *a: None):
+    def install(self, dev, image, product, step=lambda *a: None, over=False):
         """running firmware -> loader -> new firmware; dev from find(). A device already in
         update mode only needs the write."""
         if model_of(dev.id.text) != model_of(product):
             dev.link.close()
             raise InstallError("model", f"the device is {dev.id.text}, the package is for {product}")
+        if over_custom(dev.id, product) and not over:
+            dev.link.close()
+            raise InstallError("custom", f"the FM-1 runs another custom firmware ({dev.id.text}). Go back to the "
+                                         "official V15 first (M-UPGRADE and FM-1.fwsc from m-vave.com), then install "
+                                         "this; --over-custom installs anyway. Nothing was written")
         if dev.id.loader and not re.fullmatch(r"ota-FM-1_9\d\d", dev.id.text, re.I):
             dev.link.close()           # another firmware's loader: its image layout may differ
             raise InstallError("foreign", f"the FM-1 is in the update mode of another firmware ({dev.id.text}): "
@@ -373,7 +397,7 @@ def load_package(path, force):
     except OSError as e:
         raise InstallError("badpkg", f"cannot read {path}: {e.strerror}")
     product = product_of(raw)
-    if not re.fullmatch(r"[^_]+_\w+", product):         # (FM-1_906, FM-1_MEL)
+    if not re.fullmatch(r"[^_]+_\d+", product):         # (FM-1_906, FM-1_950): numeric, as the device reports it
         raise InstallError("badpkg", f"{path}: not an FM-1 package (identity {product!r})")
     if LOADER_MARK not in raw and not force:
         raise InstallError("badpkg", f"{path}: no Felucca update loader in this package; "
@@ -480,13 +504,18 @@ def run(a, backend, out, ask):
         raise not_found(up)
     print(f"device:  {dev.id.text}  ({dev.name})" + ("  in update mode: the write will be finished" if dev.id.loader else ""),
           file=out)
+    if over_custom(dev.id, product) and not a.over_custom:
+        dev.link.close()
+        raise InstallError("custom", f"the FM-1 runs another custom firmware ({dev.id.text}). Go back to the official "
+                                     "V15 first (M-UPGRADE and FM-1.fwsc from m-vave.com), then install this; "
+                                     "--over-custom installs anyway. Nothing was written")
     if not a.yes and not ask("Install? Do not unplug the FM-1 while writing. [y/N] "):
         dev.link.close()
         print("cancelled", file=out)
         return 1
     prog = Progress(out)
     try:
-        up.install(dev, image, product, prog)
+        up.install(dev, image, product, prog, over=a.over_custom)
     finally:
         prog.end()
     return 0
@@ -506,6 +535,8 @@ def main(argv=None, backend=None, out=sys.stdout, ask=ask_tty):
     ap.add_argument("--port", metavar="NAME", help="MIDI port to use (part of its name)")
     ap.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     ap.add_argument("--force", action="store_true", help="install a package without the Felucca loader marker")
+    ap.add_argument("--over-custom", action="store_true",
+                    help="install over another custom firmware (the advice: go back to the official V15 first)")
     a = ap.parse_args(argv)
     if bool(a.info) == bool(a.package):
         ap.error("give a PACKAGE.fwsc or --info")

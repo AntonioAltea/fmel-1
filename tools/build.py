@@ -39,6 +39,7 @@ LOADER_LOAD = 0x01C0A800
 LOADER_NAME = b"usb_hid_ota.bin"    # the file name the SPL looks for
 DOCKER_IMAGE = os.environ.get("JIELI_DOCKER_IMAGE", "debian:bookworm-slim")
 CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]
+NOT_ROM = {-4000000 & 0xFFFFFFFF}   # numbers that look like ROM addresses: mel_fx.c's DRIVE clamps at +-4000000
 LINE = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*\t(.*)$")
 
 # SDK files of AC79NN_SDK_V1.2.1_2023-12-13 (the tested version)
@@ -48,7 +49,8 @@ SDK_SHA256 = {
     "cfg/eq_cfg_hw.bin": "41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d",
 }
 
-PRODUCT = "FM-1_MEL"                # MEL (Dinghy is FM-1_99N; the web installers resume only FM-1_9NN loaders)
+PRODUCT = "FM-1_950"                # MEL is FM-1_95N (N: the minor version; free in the hub's catalogue: Dinghy is
+                                    # 99N); numeric, as installers parse it and resume only FM-1_9NN loaders
 VERSION = None                      # APP_VER for release builds
 
 
@@ -212,7 +214,7 @@ def check(img, syms, dis, rt):
             continue
         for v in re.findall(r"= (-?\d+) <|call -?\d+ <[^:>]*: ([0-9a-f]+) >", mm.group(3)):
             val = (int(v[0]) & 0xFFFFFFFF) if v[0] else int(v[1], 16) & 0xFFFFFFFF
-            if 0xFFC00000 <= val < 0xFFD00000:
+            if 0xFFC00000 <= val < 0xFFD00000 and val not in NOT_ROM:
                 errors.append(f"reference to ROM address {val:#010x}")
     if len(img) > APP_SLOT:
         errors.append(f"image {len(img)} B exceeds the app slot")
@@ -275,7 +277,7 @@ def mmio_check():
 def main():
     global PRODUCT, VERSION
     ap = argparse.ArgumentParser()
-    ap.add_argument("--release", metavar="X.Y", help="release build: the version string X.Y (identity FM-1_MEL)")
+    ap.add_argument("--release", metavar="X.Y", help="release build: the version string X.Y (identity FM-1_95Y)")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
     a = ap.parse_args()
     name = "mel.fwsc"
@@ -284,6 +286,7 @@ def main():
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z or X.Y-suffix, one digit each")
         VERSION = m[1] + "." + m[2] + (m[3] or "")
+        PRODUCT = "FM-1_95" + m[2]
         name = f"mel-{a.release}.fwsc"
     fm1pkg_make.SDK = a.sdk
     for rel, sha in SDK_SHA256.items():          # fail early without the SDK
