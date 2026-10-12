@@ -1,0 +1,99 @@
+/* MEL's pages (the simulator and the installer, on GitHub Pages) in the look of www.manturon.es: its colours, light and
+   dark, and its type (IM FELL DW Pica, SIL OFL 1.1: fonts/IM-FELL-OFL.txt) over the pages' own variables (--ground --ink
+   --muted --rule --card --accent). The FM-1 drawn in the simulator keeps its colours. */
+@font-face {
+  font-family: "IM FELL DW Pica";
+  src: url("fonts/im-fell-dw-pica-regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IM FELL DW Pica";
+  src: url("fonts/im-fell-dw-pica-italic.ttf") format("truetype");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ground: #eef0ee;
+  --card: rgba(246, 247, 245, 0.96);
+  --ink: #1a211d;
+  --muted: #53655c;
+  --rule: rgba(63, 97, 81, 0.22);
+  --accent: #2f5f4d;
+  --ok: #2f5f4d;
+  --bad: #9b2c22;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #141414;
+  --card: rgba(28, 28, 28, 0.94);
+  --ink: #ece9e2;
+  --muted: #b2aea7;
+  --rule: rgba(128, 128, 128, 0.22);
+  --accent: #88b5a0;
+  --ok: #88b5a0;
+  --bad: #e8988f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #141414;
+    --card: rgba(28, 28, 28, 0.94);
+    --ink: #ece9e2;
+    --muted: #b2aea7;
+    --rule: rgba(128, 128, 128, 0.22);
+    --accent: #88b5a0;
+    --ok: #88b5a0;
+    --bad: #e8988f;
+  }
+}
+
+body {
+  font-family: "IM FELL DW Pica", serif;
+  line-height: 1.45;
+}
+
+h1 {
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+h2 {
+  font-weight: 400;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.14em;
+}
+
+section button,
+.bar button {
+  font-family: inherit;
+  border-radius: 0;
+}
+
+section button:not(.secondary),
+a.big {
+  color: var(--ground);
+}
+
+a.big {
+  border-radius: 0;
+  font-style: italic;
+}
+
+section {
+  border-radius: 0;
+}

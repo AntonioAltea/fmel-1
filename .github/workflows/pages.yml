@@ -1,0 +1,57 @@
+# MEL's site on GitHub Pages (antonioaltea.github.io/fmel-1, linked from www.manturon.es/fmel-1): the simulator at
+# the root, built from main on every push; the installer at instalar/, always the newest release's package and page
+# (it is what people install on their FM-1 from, so never a change nobody tried). Run it by hand (Actions > Pages >
+# Run workflow) to publish again.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: The simulator (main)
+        run: |
+          pip install ziglang==0.17.0
+          ZIG="python -m ziglang" sh web/emu/build.sh
+      - name: The installer (the newest release) and the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          gh release download "$tag" --pattern 'mel-*.fwsc' --dir release
+          mkdir -p release/install && git archive "$tag" web/install | tar -x -C release/install --strip-components=2
+          python tools/publish_web.py _site --fwsc release/mel-*.fwsc --version "$tag" --install-from release/install
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
