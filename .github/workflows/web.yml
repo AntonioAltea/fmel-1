@@ -1,0 +1,63 @@
+# MEL on the web (www.manturon.es): the simulator follows every push to main; the installer only releases (it is what
+# people install on their FM-1 from, so never a change nobody tried). Both go into the my-web repo (src/hidden/),
+# whose own workflow deploys it to Fly. Run it by hand (Actions > Web > Run workflow) to publish both again.
+# Needs the secret MY_WEB_DEPLOY_KEY: a write deploy key of AntonioAltea/my-web.
+name: Web
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: web
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      PUBLISH: >-
+        my-web/src/hidden/mel-sim my-web/src/hidden/mel-install --sim-url /mel-sim/ --install-url /mel-install/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: AntonioAltea/my-web
+          ssh-key: ${{ secrets.MY_WEB_DEPLOY_KEY }}
+          path: my-web
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: The simulator (every push)
+        if: github.event_name != 'release'
+        run: |
+          pip install ziglang==0.17.0
+          ZIG="python -m ziglang" sh web/emu/build.sh
+          python tools/publish_web.py $PUBLISH --only sim --head "$(cat my-web/scripts/mel-head.html)"
+
+      - name: The installer (a release)
+        if: github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [ -n "$TAG" ] || TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          gh release download "$TAG" --pattern 'mel-*.fwsc' --dir release
+          git checkout -q "$TAG" -- web/install                    # the installer page as released, with its package
+          python tools/publish_web.py $PUBLISH --only install --fwsc release/mel-*.fwsc --version "$TAG" \
+            --head "$(cat my-web/scripts/mel-head.html)"
+
+      - name: Into my-web
+        working-directory: my-web
+        run: |
+          git add src/hidden
+          if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
+          git -c user.name="fmel-1 bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "MEL from fmel-1 ${GITHUB_SHA::7} (${{ github.event_name }})"
+          git push -q
