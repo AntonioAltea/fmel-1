@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Instalar MEL</title>
+<title>Install MEL</title>
+<script>   /* the language before anything is drawn: English, or Spanish if chosen (the button at the top) */
+try { if (localStorage.getItem("mel-lang") === "es") document.documentElement.lang = "es"; } catch (e) {}
+</script>
 <style>
 :root { --ground: #f4f1f8; --ink: #2c2638; --muted: #6f6680; --rule: #ddd6e8; --card: #fbfaff; --accent: #7a52d6;
         --ok: #2f7d4f; --bad: #b3261e; color-scheme: light; }
@@ -35,47 +38,69 @@ a { color: var(--accent); }
 a.big { display: block; text-align: center; padding: 1.1rem 1rem; margin: 18px 0 6px; font-size: 1.35rem;
         text-decoration: none; color: #fff; background: var(--accent); border-radius: 10px; }
 a.big:hover, a.big:focus-visible { filter: brightness(1.08); }
+html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: none !important; }
+.top { display: flex; align-items: baseline; gap: 1rem; }
+button.lang { margin-left: auto; font-size: .85rem; padding: .25em .7em; background: var(--card); color: var(--ink); border-color: var(--rule); }
 </style>
 </head>
 <body>
 <main>
-  <h1>Instalar MEL</h1>
-  <p class="muted">En el M-VAVE FM-1, por USB, desde Chrome o Edge (hace falta Web MIDI).</p>
-  <p><a class="big" href="../">Probar MEL en el simulador →</a></p>
-  <p class="muted">Suena y se toca como en el FM-1, en el navegador, sin instalar nada.</p>
+  <div class="top">
+    <h1><span data-lang="en">Install MEL</span><span data-lang="es">Instalar MEL</span></h1>
+    <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
+  </div>
+  <p class="muted" data-lang="en">On the M-VAVE FM-1, over USB, from Chrome or Edge (it needs Web MIDI).</p>
+  <p class="muted" data-lang="es">En el M-VAVE FM-1, por USB, desde Chrome o Edge (hace falta Web MIDI).</p>
+  <p><a class="big" href="../"><span data-lang="en">Try MEL in the simulator →</span><span data-lang="es">Probar MEL en el simulador →</span></a></p>
+  <p class="muted" data-lang="en">It sounds and plays as on the FM-1, in your browser, with nothing to install.</p>
+  <p class="muted" data-lang="es">Suena y se toca como en el FM-1, en el navegador, sin instalar nada.</p>
 
   <section>
-    <h2>1. El paquete</h2>
-    <p id="pkg">Comprobando el paquete…</p>
+    <h2><span data-lang="en">1. The package</span><span data-lang="es">1. El paquete</span></h2>
+    <p id="pkg"></p>
   </section>
 
   <section>
-    <h2>2. Antes de empezar</h2>
-    <label><input type="checkbox" class="pre"> La batería del FM-1 está cargada.</label>
-    <label><input type="checkbox" class="pre"> Un cable USB de datos, directo al ordenador (sin hub).</label>
-    <label><input type="checkbox" class="pre"> Ninguna otra app usa el FM-1 (cierra el DAW, otras pestañas, M-UPGRADE).</label>
-    <label><input type="checkbox" class="pre"> No lo desconectaré hasta que esta página diga que ha terminado.</label>
-    <p class="muted">Si el FM-1 lleva otro firmware no oficial (Felucca, SLOOP, Dinghy…), primero vuelve al oficial V15
+    <h2><span data-lang="en">2. Before you start</span><span data-lang="es">2. Antes de empezar</span></h2>
+    <label><input type="checkbox" class="pre"> <span data-lang="en">The FM-1's battery is charged.</span><span data-lang="es">La batería del FM-1 está cargada.</span></label>
+    <label><input type="checkbox" class="pre"> <span data-lang="en">A USB data cable, straight into the computer (no hub).</span><span data-lang="es">Un cable USB de datos, directo al ordenador (sin hub).</span></label>
+    <label><input type="checkbox" class="pre"> <span data-lang="en">No other app is using the FM-1 (close the DAW, other tabs, M-UPGRADE).</span><span data-lang="es">Ninguna otra app usa el FM-1 (cierra el DAW, otras pestañas, M-UPGRADE).</span></label>
+    <label><input type="checkbox" class="pre"> <span data-lang="en">I won't unplug it until this page says it is done.</span><span data-lang="es">No lo desconectaré hasta que esta página diga que ha terminado.</span></label>
+    <p class="muted" data-lang="en">If the FM-1 runs another unofficial firmware (Felucca, SLOOP, Dinghy…), go back to the official V15 first
+      (below, in 4). One unofficial firmware straight over another has left FM-1s that no computer saw.</p>
+    <p class="muted" data-lang="es">Si el FM-1 lleva otro firmware no oficial (Felucca, SLOOP, Dinghy…), primero vuelve al oficial V15
       (abajo, en 4). Instalar uno no oficial encima de otro ha dejado FM-1 que ningún ordenador veía.</p>
   </section>
 
   <section>
-    <h2>3. Instalar</h2>
-    <p><button id="connect">Buscar el FM-1</button></p>
-    <p id="dev" class="muted">Sin conectar.</p>
-    <p><button id="install" disabled>Instalar MEL</button> <button id="resume" class="secondary" hidden>Terminar la instalación</button></p>
+    <h2><span data-lang="en">3. Install</span><span data-lang="es">3. Instalar</span></h2>
+    <p><button id="connect"><span data-lang="en">Find the FM-1</span><span data-lang="es">Buscar el FM-1</span></button></p>
+    <p id="dev" class="muted"></p>
+    <p><button id="install" disabled><span data-lang="en">Install MEL</span><span data-lang="es">Instalar MEL</span></button>
+      <button id="resume" class="secondary" hidden><span data-lang="en">Finish the install</span><span data-lang="es">Terminar la instalación</span></button></p>
     <progress id="bar" max="100" value="0" hidden></progress>
     <p id="status"></p>
   </section>
 
   <section>
-    <h2>4. Volver al firmware oficial (V15)</h2>
-    <p class="muted">Descarga <code>FM-1.fwsc</code> (PC Firmware, V15) de <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
+    <h2><span data-lang="en">4. Back to the official firmware (V15)</span><span data-lang="es">4. Volver al firmware oficial (V15)</span></h2>
+    <p class="muted" data-lang="en">Download <code>FM-1.fwsc</code> (PC Firmware, V15) from <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
+      and choose it here. Only the unmodified official file is accepted.</p>
+    <p class="muted" data-lang="es">Descarga <code>FM-1.fwsc</code> (PC Firmware, V15) de <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
       y elígelo aquí. Solo se acepta el archivo oficial sin modificar.</p>
-    <p><input type="file" id="stockfile" accept=".fwsc"> <button id="stock" class="secondary" disabled>Instalar el V15 oficial</button></p>
+    <p><input type="file" id="stockfile" accept=".fwsc"> <button id="stock" class="secondary" disabled><span data-lang="en">Install the official V15</span><span data-lang="es">Instalar el V15 oficial</span></button></p>
   </section>
 
-  <section>
+  <section data-lang="en">
+    <h2>If something goes wrong</h2>
+    <p><b>Cut off while writing:</b> nothing serious. Plug it in again and press «Find the FM-1»: «Finish the install» appears.</p>
+    <p><b>MEL does not start (red screen or restarts):</b> after two tries it goes to the USB rescue by itself; you can also
+      hold <b>OCT−</b> while switching it on. From there, install again or go back to V15.</p>
+    <p><b>Black screen and the computer sees a disk «WL82 UBOOT1.00»:</b>
+      <a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> with V15.
+      If nothing shows up over USB: <a href="https://github.com/kurogedelic/FM-1-transporter" rel="noopener">FM-1-transporter</a>.</p>
+  </section>
+  <section data-lang="es">
     <h2>Si algo sale mal</h2>
     <p><b>Se corta mientras escribe:</b> no pasa nada grave. Vuelve a conectar y pulsa «Buscar el FM-1»: aparecerá «Terminar la
       instalación».</p>
@@ -87,7 +112,9 @@ a.big:hover, a.big:focus-visible { filter: brightness(1.08); }
   </section>
 
   <div id="log"></div>
-  <p class="muted">El instalador es el de <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>
+  <p class="muted" data-lang="en">The installer is <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>'s
+    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), with MEL's checks on top.</p>
+  <p class="muted" data-lang="es">El instalador es el de <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>
     (Leo Kuroshita, Hügelton Instruments, GPL-3.0), con las comprobaciones de MEL encima.</p>
 </main>
 <script type="module" src="install.js"></script>

@@ -1,7 +1,7 @@
-# MEL's site on GitHub Pages (antonioaltea.github.io/fmel-1, linked from www.manturon.es/fmel-1): the simulator at
-# the root, built from main on every push; the installer at instalar/, always the newest release's package and page
-# (it is what people install on their FM-1 from, so never a change nobody tried). Run it by hand (Actions > Pages >
-# Run workflow) to publish again.
+# MEL's site on GitHub Pages (antonioaltea.github.io/fmel-1, linked from www.manturon.es/fmel-1), built from main on
+# every push: the simulator at the root; the installer at install/, which always offers the newest release's package
+# (it is what people install on their FM-1, so never a firmware nobody tried). Run it by hand (Actions > Pages > Run
+# workflow) to publish again.
 name: Pages
 
 on:
@@ -51,8 +51,7 @@ jobs:
         run: |
           tag=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
           gh release download "$tag" --pattern 'mel-*.fwsc' --dir release
-          mkdir -p release/install && git archive "$tag" web/install | tar -x -C release/install --strip-components=2
-          python tools/publish_web.py _site --fwsc release/mel-*.fwsc --version "$tag" --install-from release/install
+          python tools/publish_web.py _site --fwsc release/mel-*.fwsc --version "$tag"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

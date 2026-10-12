@@ -7,7 +7,69 @@ import { Updater } from "./fm1ota.js";
 import { Package, logicalImage, sha256hex, validateStockPackage } from "./fm1pkg.js";
 
 const $ = (id) => document.getElementById(id);
-const say = (el, text, cls = "") => { $(el).textContent = text; $(el).className = cls; };
+let lang = document.documentElement.lang === "es" ? "es" : "en";
+const M = {                                     // what the page says, by language
+  en: {
+    pkgChecking: () => "Checking the package…",
+    pkgOk: (v, p, kb) => `MEL ${v} (${p}), ${kb} KB: checked.`,
+    pkgBad: (why) => `The package cannot be used: ${why}. Nothing will be installed.`,
+    shaBad: () => "the file does not match its fingerprint (SHA-256): reload the page",
+    idBad: (p) => `unexpected identity: ${p}`,
+    devNone: () => "Not connected.",
+    noMidi: () => "this browser has no Web MIDI: use Chrome or Edge",
+    looking: () => "Looking…",
+    notFound: () => "The FM-1 is not found: a data cable? another app using it? Unplug it, plug it in again and try again.",
+    cutOff: (t) => `The FM-1 is in update mode (${t}): an install was cut off. Press «Finish the install».`,
+    otherLoader: (t) => `The FM-1 is in another firmware's update mode (${t}): finish that update with its own updater (M-UPGRADE), then come back.`,
+    isMel: (t) => `The FM-1 runs MEL (${t}): it can be updated.`,
+    rescue: () => "The FM-1 is in the USB rescue: you can install.",
+    official: (t) => `The FM-1 runs the official firmware (${t}): you can install.`,
+    custom: (t) => `The FM-1 runs another unofficial firmware (${t}). Go back to the official V15 first (section 4), then install MEL.`,
+    error: (m) => `Error: ${m}`,
+    start: (t) => `Starting on ${t}…`,
+    verify: (n) => `The FM-1 checks the package (${n})…`,
+    loader: () => "Switching to update mode… don't unplug it.",
+    write: () => "Writing… don't unplug it.",
+    reboot: () => "Restarting…",
+    done: (t) => `Done: the FM-1 runs ${t}. You can unplug it now.`,
+    askMel: () => "Install MEL? Don't unplug the FM-1 until the page says «Done».",
+    askStock: () => "Install the official V15 firmware? Don't unplug the FM-1 until the page says «Done».",
+    notReady: () => "The FM-1 is no longer ready to install: look for it again.",
+    noResume: () => "Could not finish: unplug it, plug it in again and look for the FM-1 again.",
+  },
+  es: {
+    pkgChecking: () => "Comprobando el paquete…",
+    pkgOk: (v, p, kb) => `MEL ${v} (${p}), ${kb} KB: comprobado.`,
+    pkgBad: (why) => `No se puede usar el paquete: ${why}. No se instalará nada.`,
+    shaBad: () => "el archivo no coincide con su huella (SHA-256): recarga la página",
+    idBad: (p) => `identidad inesperada: ${p}`,
+    devNone: () => "Sin conectar.",
+    noMidi: () => "este navegador no tiene Web MIDI: usa Chrome o Edge",
+    looking: () => "Buscando…",
+    notFound: () => "No encuentro el FM-1: ¿cable de datos?, ¿otra app lo usa? Desconecta, vuelve a conectar y prueba otra vez.",
+    cutOff: (t) => `El FM-1 está en modo actualización (${t}): una instalación se cortó. Pulsa «Terminar la instalación».`,
+    otherLoader: (t) => `El FM-1 está en modo actualización de otro firmware (${t}): termina esa actualización con su propio instalador (M-UPGRADE) y vuelve.`,
+    isMel: (t) => `El FM-1 lleva MEL (${t}): se puede actualizar.`,
+    rescue: () => "El FM-1 está en el rescate USB: se puede instalar.",
+    official: (t) => `El FM-1 lleva el firmware oficial (${t}): se puede instalar.`,
+    custom: (t) => `El FM-1 lleva otro firmware no oficial (${t}). Primero vuelve al V15 oficial (apartado 4) y después instala MEL.`,
+    error: (m) => `Error: ${m}`,
+    start: (t) => `Empezando en ${t}…`,
+    verify: (n) => `El FM-1 comprueba el paquete (${n})…`,
+    loader: () => "Pasando a modo actualización… no lo desconectes.",
+    write: () => "Escribiendo… no lo desconectes.",
+    reboot: () => "Reiniciando…",
+    done: (t) => `Hecho: el FM-1 lleva ${t}. Ya puedes desconectarlo.`,
+    askMel: () => "¿Instalar MEL? No desconectes el FM-1 hasta que la página diga «Hecho».",
+    askStock: () => "¿Instalar el firmware oficial V15? No desconectes el FM-1 hasta que la página diga «Hecho».",
+    notReady: () => "El FM-1 ya no está listo para instalar: búscalo otra vez.",
+    noResume: () => "No he podido terminar: desconecta, vuelve a conectar y busca el FM-1 otra vez.",
+  },
+};
+const tr = (key, ...a) => M[lang][key](...a);
+const shown = {};                               // what each message element says now, to say it again in the other language
+const say = (el, key, cls = "", ...a) => { shown[el] = [key, cls, a]; $(el).textContent = tr(key, ...a); $(el).className = cls; };
+class Say extends Error { constructor(key, ...a) { super(tr(key, ...a)); this.key = key; this.args = a; } }
 const log = (t) => { $("log").textContent += t + "\n"; $("log").scrollTop = 1e9; };
 
 let mel = null;            // {product, image, version}
@@ -26,15 +88,15 @@ async function loadPackage() {
   try {
     const meta = await (await fetch("mel.json", { cache: "no-store" })).json();
     const bytes = new Uint8Array(await (await fetch(meta.file, { cache: "no-store" })).arrayBuffer());
-    if (await sha256hex(bytes) !== meta.sha256) throw new Error("el archivo no coincide con su huella (SHA-256): recarga la página");
+    if (await sha256hex(bytes) !== meta.sha256) throw new Say("shaBad");
     const pkg = new Package(bytes);                       // throws on any CRC mismatch
-    if (!/^FM-1_95\d$/.test(pkg.product) || pkg.product !== meta.product) throw new Error(`identidad inesperada: ${pkg.product}`);
+    if (!/^FM-1_95\d$/.test(pkg.product) || pkg.product !== meta.product) throw new Say("idBad", pkg.product);
     mel = { product: pkg.product, image: logicalImage(bytes), version: meta.version };
-    say("pkg", `MEL ${meta.version} (${pkg.product}), ${Math.round(bytes.length / 1024)} KB: comprobado.`, "ok");
+    say("pkg", "pkgOk", "ok", meta.version, pkg.product, Math.round(bytes.length / 1024));
     log(`package ${meta.file} sha256 ${meta.sha256}`);
   } catch (e) {
     mel = null;
-    say("pkg", `No se puede usar el paquete: ${e.message}. No se instalará nada.`, "bad");
+    say("pkg", "pkgBad", "bad", e.message);
   }
   refresh();
 }
@@ -53,40 +115,34 @@ function refresh() {
 // ---- the FM-1: what it runs decides what may happen
 async function connect() {
   try {
-    if (!navigator.requestMIDIAccess) throw new Error("este navegador no tiene Web MIDI: usa Chrome o Edge");
+    if (!navigator.requestMIDIAccess) throw new Say("noMidi");
     access = access || await navigator.requestMIDIAccess({ sysex: true });
-    say("dev", "Buscando…", "muted");
+    say("dev", "looking", "muted");
     const dev = await new Updater(access, log).find();
-    if (!dev) { device = null; say("dev", "No encuentro el FM-1: ¿cable de datos?, ¿otra app lo usa? Desconecta, vuelve a conectar y prueba otra vez.", "bad"); return refresh(); }
+    if (!dev) { device = null; say("dev", "notFound", "bad"); return refresh(); }
     dev.link.close();
     device = dev.id;
     log(`device ${device.text} on ${dev.name}`);
-    if (isLoader(device) && isOurLoader(device))
-      say("dev", `El FM-1 está en modo actualización (${device.text}): una instalación se cortó. Pulsa «Terminar la instalación».`, "bad");
-    else if (isLoader(device))
-      say("dev", `El FM-1 está en modo actualización de otro firmware (${device.text}): termina esa actualización con su propio instalador (M-UPGRADE) y vuelve.`, "bad");
-    else if (isMel(device))
-      say("dev", `El FM-1 lleva MEL (${device.text}): se puede actualizar.`, "ok");
-    else if (device.text === "FM-1_000")
-      say("dev", "El FM-1 está en el rescate USB: se puede instalar.", "ok");
-    else if (isOfficialOrRescue(device))
-      say("dev", `El FM-1 lleva el firmware oficial (${device.text}): se puede instalar.`, "ok");
-    else
-      say("dev", `El FM-1 lleva otro firmware no oficial (${device.text}). Primero vuelve al V15 oficial (apartado 4) y después instala MEL.`, "bad");
+    if (isLoader(device) && isOurLoader(device)) say("dev", "cutOff", "bad", device.text);
+    else if (isLoader(device)) say("dev", "otherLoader", "bad", device.text);
+    else if (isMel(device)) say("dev", "isMel", "ok", device.text);
+    else if (device.text === "FM-1_000") say("dev", "rescue", "ok");
+    else if (isOfficialOrRescue(device)) say("dev", "official", "ok", device.text);
+    else say("dev", "custom", "bad", device.text);
   } catch (e) {
-    say("dev", `Error: ${e.message}`, "bad");
+    say("dev", "error", "bad", e.message);
   }
   refresh();
 }
 
 function progress(total) {
   return (k, n) => {
-    if (k === "start") say("status", `Empezando en ${n}…`);
-    else if (k === "verify") say("status", `El FM-1 comprueba el paquete (${n})…`);
-    else if (k === "loader") say("status", "Pasando a modo actualización… no lo desconectes.");
-    else if (k === "write") { $("bar").hidden = false; $("bar").value = Math.min(99, Math.round(n * 512 * 100 / total)); say("status", "Escribiendo… no lo desconectes."); }
-    else if (k === "reboot") say("status", "Reiniciando…");
-    else if (k === "done") { $("bar").value = 100; say("status", `Hecho: el FM-1 lleva ${n}. Ya puedes desconectarlo.`, "ok"); }
+    if (k === "start") say("status", "start", "", n);
+    else if (k === "verify") say("status", "verify", "", n);
+    else if (k === "loader") say("status", "loader");
+    else if (k === "write") { $("bar").hidden = false; $("bar").value = Math.min(99, Math.round(n * 512 * 100 / total)); say("status", "write"); }
+    else if (k === "reboot") say("status", "reboot");
+    else if (k === "done") { $("bar").value = 100; say("status", "done", "ok", n); }
     log(`${k} ${n ?? ""}`);
   };
 }
@@ -97,7 +153,8 @@ async function guarded(work) {
   window.addEventListener("beforeunload", warn);
   try { await work(); }
   catch (e) {
-    say("status", e.message, "bad");
+    if (e.key) say("status", e.key, "bad", ...e.args);
+    else say("status", "error", "bad", e.message);   // (the protocol's own messages are in English)
     log(`error ${e.code || ""} ${e.message}`);
   } finally {
     window.removeEventListener("beforeunload", warn);
@@ -106,24 +163,34 @@ async function guarded(work) {
 }
 
 $("install").onclick = () => guarded(async () => {
-  if (!confirm("¿Instalar MEL? No desconectes el FM-1 hasta que la página diga «Hecho».")) return;
+  if (!confirm(tr("askMel"))) return;
   await connect();                                           // what it runs now, not when the page looked
-  if (!device || !(isOfficialOrRescue(device) || isMel(device))) throw new Error("El FM-1 ya no está listo para instalar: búscalo otra vez.");
+  if (!device || !(isOfficialOrRescue(device) || isMel(device))) throw new Say("notReady");
   await new Updater(access, log).install(mel.image, mel.product, progress(mel.image.length));
 });
 
 $("resume").onclick = () => guarded(async () => {
   const ok = await new Updater(access, log).resume(mel.image, progress(mel.image.length), mel.product);
-  if (!ok) throw new Error("No he podido terminar: desconecta, vuelve a conectar y busca el FM-1 otra vez.");
+  if (!ok) throw new Say("noResume");
 });
 
 $("stock").onclick = () => guarded(async () => {
   const bytes = new Uint8Array(await $("stockfile").files[0].arrayBuffer());
   const stock = await validateStockPackage(bytes);           // only the unmodified official V15
-  if (!confirm("¿Instalar el firmware oficial V15? No desconectes el FM-1 hasta que la página diga «Hecho».")) return;
+  if (!confirm(tr("askStock"))) return;
   await new Updater(access, log).install(stock.image, stock.product, progress(stock.image.length));
 });
 
+$("lang").onclick = () => {
+  lang = lang === "es" ? "en" : "es";
+  document.documentElement.lang = lang;
+  document.title = lang === "es" ? "Instalar MEL" : "Install MEL";
+  try { localStorage.setItem("mel-lang", lang); } catch (e) {}
+  for (const [el, [key, cls, a]] of Object.entries(shown)) say(el, key, cls, ...a);
+};
+if (lang === "es") document.title = "Instalar MEL";
+say("pkg", "pkgChecking");
+say("dev", "devNone", "muted");
 $("connect").onclick = connect;
 $("stockfile").onchange = refresh;
 document.querySelectorAll(".pre").forEach((c) => (c.onchange = refresh));

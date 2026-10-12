@@ -5,10 +5,11 @@
   tools/publish_web.py SITE [--fwsc PACKAGE] [--version V] [--install-from DIR]
 
 SITE/            the simulator (build/emu: web/emu/build.sh)
-SITE/instalar/   the installer (web/install, or --install-from: the page as a release had it) with the package
+SITE/install/    the installer (web/install, or --install-from) with the package
                  (--fwsc, default build/mel.fwsc: ./build.sh) and mel.json, its SHA-256, identity and version (--version,
                  default git describe), which the page checks before it installs anything
 SITE/style/      web/site/style: the look of www.manturon.es over both pages
+SITE/instalar/   the installer's first address (Spanish): a redirect to install/
 """
 import argparse
 import hashlib
@@ -34,7 +35,7 @@ def main():
     ap.add_argument("--version", help="the package's version, as the installer shows it (default: git describe)")
     ap.add_argument("--install-from", type=Path, default=SRC / "web" / "install", help="the installer's page")
     a = ap.parse_args()
-    site, inst, emu = a.site, a.site / "instalar", SRC / "build" / "emu"
+    site, inst, emu = a.site, a.site / "install", SRC / "build" / "emu"
     for need in (emu / "mel.wasm", a.fwsc):
         if not need.exists():
             raise SystemExit(f"{need} missing: run web/emu/build.sh and ./build.sh first")
@@ -47,7 +48,8 @@ def main():
     for f in ("worklet.js", "mel.wasm"):
         shutil.copy2(emu / f, site / f)
     sim = head((emu / "index.html").read_text(), "style/mel.css")
-    sim = sim.replace("</header>", '  <p><a href="instalar/">Instalarlo en tu FM-1</a></p>\n</header>', 1)
+    sim = sim.replace('<button class="lang"', '<p><a href="install/"><span data-lang="en">Install it on your FM-1</span>'
+                      '<span data-lang="es">Instalarlo en tu FM-1</span></a></p>\n  <button class="lang"', 1)
     (site / "index.html").write_text(sim)
     (inst / "index.html").write_text(head((a.install_from / "index.html").read_text(), "../style/mel.css"))
     for f in ("install.js", "fm1ota.js", "fm1pkg.js"):
@@ -59,6 +61,10 @@ def main():
     meta = {"file": "mel.fwsc", "sha256": hashlib.sha256(raw).hexdigest(), "product": product, "version": ver}
     (inst / "mel.json").write_text(json.dumps(meta, indent=1) + "\n")
     (site / ".nojekyll").write_text("")
+    (site / "instalar").mkdir(exist_ok=True)
+    (site / "instalar" / "index.html").write_text(
+        '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=../install/">'
+        '<link rel="canonical" href="../install/"><a href="../install/">install/</a>\n')
     print(f"site -> {site}/  (installer: {product}, {ver}, sha256 {meta['sha256'][:12]}…)")
 
 
