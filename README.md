@@ -5,6 +5,10 @@ This is a personal project to create a few sounds I'm interested in for the M-VA
 This firmware, based on [zvenson's dinghy](https://github.com/zvenson/dinghy), aims to reproduce Mellotron sounds and
 color them with some basic FX and lo-fi tape effects. It also lets you mix two different Mellotron sounds together.
 
+**[Try it in your browser](https://antonioaltea.github.io/fmel-1/)**: the same code the FM-1 runs, in a simulator.
+To put it on your FM-1, use the [web installer](https://antonioaltea.github.io/fmel-1/instalar/) (Chrome or Edge) or
+download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/latest).
+
 ## The tapes
 
 FMEL-1 plays real Mellotron tapes: the samples Bernie Kornowicz (Taijiguy) recorded from his 1973 Mellotron M400S,
