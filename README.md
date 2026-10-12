@@ -12,9 +12,7 @@ download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/la
 ## The tapes
 
 FMEL-1 plays real Mellotron tapes: the samples Bernie Kornowicz (Taijiguy) recorded from his 1973 Mellotron M400S,
-serial #500, with new tapes and frames, and shared on his site [leisureland.us](http://leisureland.us). They are
-the reason this firmware exists: an M400 sounds like its worn tapes, its motor and its heads, and no synthesis gets
-that; these are the real thing, recorded with care, full length and unlooped, and given away.
+serial #500, with new tapes and frames, and shared on his site [leisureland.us](http://leisureland.us).
 
 They are his work, not mine, and not under this repository's GPL licence. His terms, in his own words
 ([KVR, 4 May 2021](https://www.kvraudio.com/forum/viewtopic.php?t=561309)): "they are free to use, but cannot be used
