@@ -11,8 +11,7 @@
  *                  DETUNE; on its page SEL again turns the SOUND (lit: a layer sounds)
  *   LFO    LOFI    TAPE: WOW, FLUTTER, DRIVE (into the tape: saturation), HISS  -  WEAR: AGE (a copy of a copy:
  *                  the band narrows, and the copying deck adds its hiss, flutter, drive), DROPOUT, DRIFT, CRUSH
- *   FX     FX      VIBRATO: RATE DEPTH TONE MIX - LESLIE: SPEED DRIVE SPREAD MIX - ECHO: TIME REPEATS TONE MIX
- *                  - REVERB: SIZE TONE PRE MIX
+ *   FX     FX      VIBRATO: RATE DEPTH TONE MIX - ECHO: TIME REPEATS TONE MIX - REVERB: SIZE TONE PRE MIX
  *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; lit: in, dark: out)
  *   EDIT   EQ      LOW, MID, FREQ (the mid's), HIGH; held 0.6 s: back to flat
  *   GLO    SETUP   TEMPO (ARP, SEQ), TUNE (fine: to play along with others), LENGTH (a note: as long as held / 8 s,
@@ -27,7 +26,7 @@
  *   OCT- OCT+   SAVE (it also saves itself)
  *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = vibrato, pitch bend = the motor (+-2 semitones)
  *
- * The sound: mel_fx.c (the tape, then EQ, VIBRATO, LESLIE, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
+ * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
  * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones.
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
@@ -401,7 +400,6 @@ enum {
     P_WOW, P_FLUT, P_SAT, P_HISS,               /* LOFI: TAPE */
     P_AGE, P_DROP, P_DRIFT, P_CRUSH,            /*       WEAR */
     P_VRATE, P_VDEPTH, P_VTONE, P_VMIX,         /* FX: VIBRATO */
-    P_LSPEED, P_LDRIVE, P_LSPREAD, P_LMIX,      /*     LESLIE */
     P_ETIME, P_EFB, P_ETONE, P_EMIX,            /*     ECHO */
     P_RSIZE, P_RTONE, P_RPRE, P_RMIX,           /*     REVERB */
     P_EQLO, P_EQMID, P_EQFREQ, P_EQHI,          /* EQ */
@@ -413,11 +411,10 @@ enum {
 static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, MEL_NSETS - 1, 0, 1}, {-2, 2, 0, 1},
     {0, 100, 72, 1}, {-12, 12, 0, 1}, {0, 100, 4, 1}, {0, 100, 18, 1},
-    {0, MEL_NSETS, 0, 1}, {0, 100, 50, 1}, {-1, 1, 0, 1}, {0, 30, 6, 1},
+    {0, MEL_NSETS, 0, 1}, {0, 100, 50, 1}, {-1, 1, 0, 1}, {0, 30, 0, 1},
     {0, 100, 28, 1}, {0, 100, 22, 1}, {0, 100, 22, 1}, {0, 100, 12, 1},
     {0, 100, 18, 1}, {0, 100, 0, 1}, {0, 100, 30, 1}, {0, 100, 0, 1},
     {0, 100, 75, 1}, {0, 100, 35, 1}, {0, 100, 70, 1}, {0, 100, 0, 1},
-    {0, 2, 1, 1}, {0, 100, 15, 1}, {0, 100, 70, 1}, {0, 100, 0, 1},
     {0, 100, 38, 1}, {0, 100, 35, 1}, {0, 100, 45, 1}, {0, 100, 0, 1},
     {0, 100, 55, 1}, {0, 100, 45, 1}, {0, 100, 15, 1}, {0, 100, 18, 1},
     {-12, 12, 0, 1}, {-12, 12, 0, 1}, {0, 15, 8, 1}, {-12, 12, 0, 1},
@@ -426,7 +423,7 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {1, 16, 16, 1}, {10, 100, 80, 5}, {0, 15, 0, 1}, {0, 100, 0, 5},
 };
 
-#define SET_VER 5u
+#define SET_VER 6u
 typedef struct {
     uint8_t ver, np, half, rsv;                 /* half: HALF SPEED (a reserved byte before: older settings load, off) */
     int16_t p[NP];
@@ -466,10 +463,6 @@ static void apply(void)                         /* the parameters -> the sound *
     f_vdep = d * d * 88 / 10000;
     f_vtone = MEL_TONE[PV(P_VTONE)];
     f_vmix = PV(P_VMIX) * 327;
-    f_lspeed = PV(P_LSPEED);
-    f_ldrive = PV(P_LDRIVE);
-    f_lspread = PV(P_LSPREAD);
-    f_lmix = PV(P_LMIX) * 327;
     f_etime = (echo_ms(PV(P_ETIME)) * 441 / 10) << 8;
     f_efb = PV(P_EFB) * 320;
     f_etone = MEL_TONE[PV(P_ETONE)];
@@ -503,21 +496,20 @@ static char *put_int(char *p, int32_t v, int sign)
 }
 
 /* ---- the pages: a button is a section (a group of pages); its knobs, what they show */
-enum { PG_PLAY, PG_LAYER, PG_TAPE, PG_WEAR, PG_VIB, PG_LES, PG_ECHO, PG_VERB, PG_EQ, PG_SETUP, PG_ARP, PG_SEQ, NPG };
+enum { PG_PLAY, PG_LAYER, PG_TAPE, PG_WEAR, PG_VIB, PG_ECHO, PG_VERB, PG_EQ, PG_SETUP, PG_ARP, PG_SEQ, NPG };
 enum { G_PLAY, G_LAYER, G_LOFI, G_FX, G_EQ, G_SETUP, G_ARP, G_SEQ, NG };
-static const uint8_t PG_GROUP[NPG] = {G_PLAY, G_LAYER, G_LOFI, G_LOFI, G_FX, G_FX, G_FX, G_FX, G_EQ, G_SETUP, G_ARP, G_SEQ};
+static const uint8_t PG_GROUP[NPG] = {G_PLAY, G_LAYER, G_LOFI, G_LOFI, G_FX, G_FX, G_FX, G_EQ, G_SETUP, G_ARP, G_SEQ};
 static const uint8_t G_FIRST[NG] = {PG_PLAY, PG_LAYER, PG_TAPE, PG_VIB, PG_EQ, PG_SETUP, PG_ARP, PG_SEQ};
-static const uint8_t G_COUNT[NG] = {1, 1, 2, 4, 1, 1, 1, 1};
+static const uint8_t G_COUNT[NG] = {1, 1, 2, 3, 1, 1, 1, 1};
 static const char *const G_NAME[NG] = {"PLAY", "LAYER", "LOFI", "FX", "EQ", "SETUP", "ARP", "SEQ"};
-static const char *const PG_NAME[NPG] = {"PLAY", "LAYER", "TAPE", "WEAR", "VIBRATO", "LESLIE", "ECHO", "REVERB", "EQ", "SETUP",
-                                         "ARP", "SEQ"};
+static const char *const PG_NAME[NPG] = {"PLAY", "LAYER", "TAPE", "WEAR", "VIBRATO", "ECHO", "REVERB", "EQ", "SETUP", "ARP",
+                                         "SEQ"};
 enum { F_NUM, F_ST, F_DB, F_CT, F_PCT, F_EMS, F_PMS, F_VHZ, F_EQHZ, F_X, F_STEP, F_BPM, F_SND, F_OCT, F_ENUM };
 typedef struct {
     uint8_t pid, fmt;
     const char *name;
     const char *const *names;                   /* F_ENUM */
 } ctl_t;
-static const char *const N_SPEED[3] = {"STOP", "SLOW", "FAST"};
 static const char *const N_LEN[2] = {"HELD", "8 SEC"};
 static const char *const N_LOOK[2] = {"CLEAN", "TAPE"};
 static const char *const ARP_MODE[5] = {"UP", "DOWN", "UP+DN", "RANDOM", "PLAYED"};
@@ -528,8 +520,6 @@ static const ctl_t CTL[NPG][4] = {
     {{P_WOW, F_NUM, "WOW", 0}, {P_FLUT, F_NUM, "FLUTTER", 0}, {P_SAT, F_NUM, "DRIVE", 0}, {P_HISS, F_NUM, "HISS", 0}},
     {{P_AGE, F_NUM, "AGE", 0}, {P_DROP, F_NUM, "DROPOUT", 0}, {P_DRIFT, F_NUM, "DRIFT", 0}, {P_CRUSH, F_NUM, "CRUSH", 0}},
     {{P_VRATE, F_VHZ, "RATE", 0}, {P_VDEPTH, F_NUM, "DEPTH", 0}, {P_VTONE, F_NUM, "TONE", 0}, {P_VMIX, F_PCT, "MIX", 0}},
-    {{P_LSPEED, F_ENUM, "SPEED", N_SPEED}, {P_LDRIVE, F_NUM, "DRIVE", 0}, {P_LSPREAD, F_NUM, "SPREAD", 0},
-     {P_LMIX, F_PCT, "MIX", 0}},
     {{P_ETIME, F_EMS, "TIME", 0}, {P_EFB, F_NUM, "REPEATS", 0}, {P_ETONE, F_NUM, "TONE", 0}, {P_EMIX, F_PCT, "MIX", 0}},
     {{P_RSIZE, F_NUM, "SIZE", 0}, {P_RTONE, F_NUM, "TONE", 0}, {P_RPRE, F_PMS, "PRE", 0}, {P_RMIX, F_PCT, "MIX", 0}},
     {{P_EQLO, F_DB, "LOW", 0}, {P_EQMID, F_DB, "MID", 0}, {P_EQFREQ, F_EQHZ, "FREQ", 0}, {P_EQHI, F_DB, "HIGH", 0}},

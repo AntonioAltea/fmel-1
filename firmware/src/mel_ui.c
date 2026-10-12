@@ -249,6 +249,15 @@ static int32_t spr_lv(void)                     /* for the drawings: ui_lv, or t
 {
     return ui_lv ? ui_lv : arp_on && arp_n ? 1 : 0;
 }
+static uint32_t spr_t(void)                     /* the drawings' clock, ms: it runs with the motor (HALF SPEED: half as
+                                                 * fast, slowing down and speeding up with the tapes) */
+{
+    static uint32_t t_last, acc;                /* acc: ms, Q8 */
+    uint32_t dt = fm1_ms - t_last;
+    t_last = fm1_ms;
+    acc += dt * (uint32_t)(256 + motor16 * 128 / 19200);
+    return acc >> 8;
+}
 static void lamp(int32_t *x, const char *s, uint16_t c, int on)   /* (only the lamps that are on) */
 {
     int32_t w = tw(&F16, s) + 6;
@@ -298,7 +307,7 @@ static uint32_t sel_angle(uint32_t k)          /* the track selector's positions
 }
 static void stage_play(void)                    /* the sound (and the layer), the track selector */
 {
-    uint32_t snd = (uint32_t)PV(P_SOUND), ly = (uint32_t)PV(P_BSND), k, t = spr_lv() ? fm1_ms : 0u;
+    uint32_t snd = (uint32_t)PV(P_SOUND), ly = (uint32_t)PV(P_BSND), k, t = spr_lv() ? spr_t() : 0u;
     if (ly) {                                   /* (two fit beside the selector at their size; one, half as big again) */
         spr_sound(MEL_SET_NAME[snd], 104, 50, 256, t, spr_lv());
         spr_sound(MEL_SET_NAME[ly - 1u], 192, 50, 256, t + 400u, spr_lv());
@@ -326,7 +335,7 @@ static void stage_play(void)                    /* the sound (and the layer), th
 
 static void stage_layer(void)                   /* LAYER: the sound and the layer, the MIX between them */
 {
-    uint32_t snd = (uint32_t)PV(P_SOUND), ly = (uint32_t)PV(P_BSND), t = spr_lv() ? fm1_ms : 0u;
+    uint32_t snd = (uint32_t)PV(P_SOUND), ly = (uint32_t)PV(P_BSND), t = spr_lv() ? spr_t() : 0u;
     int32_t mix = PV(P_BMIX), x;
     spr_sound(MEL_SET_NAME[snd], 62, 38, 320, t, spr_lv());   /* (whole, a quarter bigger: the MIX is the slider) */
     tx_c(62, 86, &F16, MEL_SET_NAME[snd], C_INK);
@@ -439,26 +448,6 @@ static void stage_vib(void)                     /* VIBRATO: its wave; how much o
     tx(208, 88, &F16, "WET", C_INK2);
     rrect(40, 92, 160, 8, 4, C_BODY2);
     if (mix) rrect(40, 92, 8 + mix * 152 / 100, 8, 4, C_OXIDE2);
-}
-
-static void stage_les(void)                     /* LESLIE: the cabinet, the horn and the drum turning, the mics */
-{
-    static const char *const SP[3] = {"STOP", "SLOW", "FAST"};
-    int32_t k, sp = PV(P_LSPREAD), mx = 46 + sp * 20 / 100;
-    uint32_t ph = fxv_horn;
-    rrect(84, 4, 72, 100, 5, RGB(122, 74, 40));
-    for (k = 0; k < 6; k++)
-        cv_rect(90, 10 + k * 6, 60, 2, RGB(86, 50, 26));
-    thick(120 - cs(ph, 24), 30 - sn(ph, 5), 120 + cs(ph, 24), 30 + sn(ph, 5), 3, RGB(30, 28, 26));   /* the horn */
-    disc(120 + cs(ph, 24), 30 + sn(ph, 5), 5, RGB(30, 28, 26));
-    disc(120, 76, 18, RGB(40, 36, 34));         /* the drum */
-    disc(120 + cs(fxv_drum, 11), 76 + sn(fxv_drum, 3), 4, RGB(190, 180, 160));
-    for (k = -1; k <= 1; k += 2) {              /* the microphones, SPREAD apart */
-        disc(120 + k * mx, 40, 4, C_INK);
-        cv_rect(120 + k * mx - 1, 44, 3, 14, C_INK2);
-    }
-    tx_c(30, 82, &F20, SP[PV(P_LSPEED)], PV(P_LMIX) ? C_LAMP : C_INK2);
-    tx_c(210, 82, &F20, PV(P_LMIX) ? "ON" : "OFF", PV(P_LMIX) ? C_INK : C_INK2);
 }
 
 static void stage_echo(void)                    /* ECHO: the tape loop and its heads; the repeats, fading */
@@ -646,7 +635,6 @@ static int stage_moves(void)                    /* does the stage need drawing a
     if (spr_lv() || lv_drawn) return 1;
     switch (page) {
     case PG_VIB: case PG_SETUP: return 1;
-    case PG_LES: return PV(P_LSPEED) != 0;
     case PG_ECHO: return PV(P_EMIX) != 0;
     default: return 0;
     }
@@ -664,8 +652,8 @@ static void ui_motion(void)                     /* the cassette's reels and coun
 }
 static void draw_stage(void)
 {
-    static void (*const STAGE[NPG])(void) = {stage_play, stage_layer, stage_tape, stage_wear, stage_vib, stage_les, stage_echo,
-                                             stage_verb, stage_eq, stage_setup, stage_arp, stage_seq};
+    static void (*const STAGE[NPG])(void) = {stage_play, stage_layer, stage_tape, stage_wear, stage_vib, stage_echo, stage_verb,
+                                             stage_eq, stage_setup, stage_arp, stage_seq};
     cv_begin(240, STAGE_H, C_BODY);
     cv_oy = (STAGE_H - 108) / 2;
     STAGE[page]();

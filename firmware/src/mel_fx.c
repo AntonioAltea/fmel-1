@@ -12,8 +12,6 @@
  *                        they come at half the rate (the capstan and the pinch roller turn half as fast)
  *   EQ                   a low shelf (150 Hz), a bell (200 Hz .. 5 kHz), a high shelf (5 kHz), +-12 dB
  *   VIBRATO      (FX)    a delay swept by a sine: RATE, DEPTH, TONE (its colour), MIX (half way: a chorus)
- *   LESLIE               the drum below 800 Hz, the horn above, Doppler and level, STOP / SLOW / FAST with their
- *                        inertia, DRIVE (its amplifier), SPREAD (the microphones), MIX
  *   ECHO                 a tape echo: TIME 60 ms .. 1 s, REPEATS darker and dirtier each time, TONE, MIX
  *   REVERB               four combs and two allpasses a side: SIZE, TONE, PRE-delay, MIX
  *   and last a soft limiter, so nothing ever clips hard.
@@ -24,7 +22,6 @@
 
 static volatile int32_t f_wow, f_flut, f_sat, f_hiss, f_age, f_drop, f_crush, f_tone;
 static volatile int32_t f_vinc, f_vdep, f_vtone, f_vmix;
-static volatile int32_t f_lspeed, f_ldrive, f_lspread, f_lmix;
 static volatile int32_t f_etime, f_efb, f_etone, f_emix;
 static volatile int32_t f_rfb, f_rdamp, f_rpre, f_rmix;
 static volatile int32_t f_glo, f_gmid, f_ghi, f_svf, f_by_lofi, f_by_fx;
@@ -32,17 +29,15 @@ static int32_t lofi_bp, fx_bp;                  /* ISR: how bypassed, 0 (all in)
 static volatile int32_t fxv_wow, fxv_drop;      /* ISR -> screen: the wow now (1/16 cent), how deep a dropout is (0..32768) */
 static volatile int32_t fxv_flut;               /* ISR -> screen: the flutter now (flut_am: +-1200 at 100) */
 static int32_t flut_am;                         /* ISR: flutter's level shake now, Q15 around 0 */
-static volatile uint32_t fxv_horn, fxv_drum, fxv_vib;   /* the rotors' and the vibrato's phase */
+static volatile uint32_t fxv_vib;               /* the vibrato's phase */
 
 #define K_LS 692                                /* one-poles, Q15: 150 Hz (low shelf) */
 #define K_HS 16674                              /* 5 kHz (high shelf) */
-#define K_LES 3530                              /* 800 Hz (the Leslie's crossover) */
 #define K_RHP 2119                              /* 450 Hz, below which the reverb gets less (no mud) */
 #define VIB_N 512u
 #define ECHO_N 44100u                           /* 1 s */
 #define PRE_N 5376u                             /* 122 ms */
-#define LES_N 64u
-static int32_t vib_buf[VIB_N], les_hb[LES_N], les_db[LES_N];
+static int32_t vib_buf[VIB_N];
 static int16_t echo_buf[ECHO_N] __attribute__((section(".pool")));
 static int16_t pre_buf[PRE_N] __attribute__((section(".pool")));
 
@@ -116,8 +111,8 @@ static int32_t drive_clip(int32_t u)            /* DRIVE's soft clipper, |u| up 
 static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
 {
     static int32_t lg, lg2, hg, hg2, lp1, lp2, hiss, hiss2, drop_g = 32768, held, lc, am, dc_x, dc_y, dlp, d1, d2;
-    static int32_t ls, hs, sv_lp, sv_bp, vt, les_x, e_lp, e_d = 8000 << 8, r_hp;
-    static uint32_t rnd2 = 0x9E3779B9u, vw, li, ew, pw, hinc = 80000u, dinc = 65000u;
+    static int32_t ls, hs, sv_lp, sv_bp, vt, e_lp, e_d = 8000 << 8, r_hp;
+    static uint32_t rnd2 = 0x9E3779B9u, vw, ew, pw;
     int32_t age = f_age, kg = MEL_GENLP[age] >> 1, kh = MEL_GENHP[age] >> 1, kt = f_tone >> 1;
     int32_t sv_ = f_sat + age / 4 > 100 ? 100 : f_sat + age / 4, hv = f_hiss + age * 2 / 5 > 100 ? 100 : f_hiss + age * 2 / 5;
     int32_t dg = MEL_DRV[sv_], dmk = MEL_DRVMK[sv_], dlk = MEL_DRVLP[sv_] >> 1, dbias = sv_ * 49;   /* DRIVE */
@@ -126,19 +121,14 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     int32_t amt = flut_am, agl = 4096 + age * 14;   /* (AGE: the level the narrowing takes, given back) */
     int32_t crush = f_crush, hold_n = 1 + crush * 7 / 100, mask = ~((1 << (crush * 9 / 100)) - 1);
     int32_t glo = f_glo - 4096, gmid = f_gmid - 4096, ghi = f_ghi - 4096, svf = f_svf;
-    int32_t vmix = f_vmix, vdep = f_vdep, vtk = f_vtone >> 1, lmix = f_lmix, ldr = 256 + f_ldrive * 10;
-    int32_t lmk = 32768 - f_ldrive * 150, lsp = f_lspread, emix = f_emix, efb = f_efb, etk = f_etone >> 1;
+    int32_t vmix = f_vmix, vdep = f_vdep, vtk = f_vtone >> 1, emix = f_emix, efb = f_efb, etk = f_etone >> 1;
     int32_t rfb = f_rfb, rdamp = f_rdamp, rmix = f_rmix, rpre = f_rpre, e_tgt = f_etime, k;
-    uint32_t i, vinc = (uint32_t)f_vinc, ht = 0, dt = 0;
+    uint32_t i, vinc = (uint32_t)f_vinc;
     if (p_mod) {                                /* the mod wheel: vibrato, whatever the page says */
         int32_t m = p_mod * 258;
         if (vmix < m) vmix = m;
         if (vdep < p_mod / 3) vdep = p_mod / 3;
     }
-    if (f_lspeed == 1) { ht = 80000u; dt = 65000u; }                       /* SLOW: 0.82 / 0.67 Hz */
-    else if (f_lspeed == 2) { ht = 662000u; dt = 555000u; }                /* FAST: 6.8 / 5.7 Hz */
-    hinc += (uint32_t)((int32_t)(ht - hinc) >> 7);   /* the horn gets there in ~1 s, the drum in ~4 s */
-    dinc += (uint32_t)((int32_t)(dt - dinc) >> 9);
     for (i = 0; i < n; i++) {
         int32_t x = mix[i], y, y0, l, r, in, wl, wr, dry = 0, wetl = 32767 - bl, wetf = 32767 - bf;
         x = x > 65535 ? 65535 : x < -65535 ? -65535 : x;
@@ -198,9 +188,7 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
         y = y > 65535 ? 65535 : y < -65535 ? -65535 : y;
         /* the pedals (FX) */
         y0 = y;
-        if (bf >= 32640 && bft) {               /* out: the rotors turn on (the screen shows them) */
-            fxv_horn += hinc;
-            fxv_drum += dinc;
+        if (bf >= 32640 && bft) {               /* out */
             l = r = y;
             goto trails;
         }
@@ -215,34 +203,7 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
             vt += ((wet - vt) * vtk) >> 14;
             y += ((vt - y) * vmix) >> 15;
         }
-        /* LESLIE */
-        if (lmix) {
-            int32_t lo, hi, dh, dd, sh, sd, ph, pd, ah, ad, yd = (sat((y * ldr) >> 8) * lmk) >> 15;
-            les_x += ((yd - les_x) * (K_LES >> 1)) >> 14;
-            lo = les_x;
-            hi = yd - lo;
-            li = (li + 1u) & (LES_N - 1u);
-            les_hb[li] = hi;
-            les_db[li] = lo;
-            fxv_horn += hinc;
-            fxv_drum += dinc;
-            sh = sine(fxv_horn);
-            sd = sine(fxv_drum);
-            dh = (24 << 8) + ((sh * 14) >> 7);  /* delay, Q8 samples: 24 +- 14 (horn), 24 +- 5 (drum) */
-            dd = (24 << 8) + ((sd * 5) >> 7);
-            TAP(les_hb, LES_N, li, dh, ph);
-            TAP(les_db, LES_N, li, dd, pd);
-            ah = ((sh >> 2) * lsp) / 100;       /* the horn faces one microphone, then the other */
-            ad = ((sd >> 3) * lsp) / 100;
-            l = ((ph * (24576 + ah)) >> 15) + ((pd * (28672 + ad)) >> 15);
-            r = ((ph * (24576 - ah)) >> 15) + ((pd * (28672 - ad)) >> 15);
-            l = y + (((l - y) * lmix) >> 15);
-            r = y + (((r - y) * lmix) >> 15);
-        } else {
-            fxv_horn += hinc;
-            fxv_drum += dinc;
-            l = r = y;
-        }
+        l = r = y;
         if (bf) {                               /* on its way in or out: the dry and the pedals, crossfaded */
             l = y0 + (((l - y0) * (wetf >> 1)) >> 14);
             r = y0 + (((r - y0) * (wetf >> 1)) >> 14);
