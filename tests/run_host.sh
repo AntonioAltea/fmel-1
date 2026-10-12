@@ -4,7 +4,6 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/host
-[ -f build/gen/mel_tapes.h ] || python3 tools/gen_tapes.py build/gen/mel_tapes.h
 cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER="\"${APP_VER:-dev}\"" -Ifirmware/src -Ifirmware/gen -Ibuild/gen -o build/host/mel firmware/src/mel.c
 build/host/mel build/host/mel
 python3 - <<'PY'

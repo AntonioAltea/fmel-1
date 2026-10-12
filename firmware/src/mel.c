@@ -28,7 +28,7 @@
  *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = vibrato, pitch bend = the motor (+-2 semitones)
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, LESLIE, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
- * mel_seq.c. The tapes: tools/gen_tapes.py (build/gen/mel_tapes.h): IMA ADPCM at 11025 Hz, a root every 3-4 semitones.
+ * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones.
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
 #define CV_MAX (240u * 124u)                    /* the stage is the biggest canvas */

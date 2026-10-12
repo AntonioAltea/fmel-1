@@ -19,7 +19,7 @@ complete source under the same licence too.
 | Terminus font 8x16 (ter-u16n), rendered into `firmware/gen/felucca_font.h` | SIL OFL 1.1 | `assets/fonts/Terminus-LICENSE.txt` |
 | Terminus Bold 16, 20 and 24 px (Debian's console fonts), rendered into `firmware/gen/mel_fonts.h` by `tools/gen_mel_fonts.py` | SIL OFL 1.1 | `assets/fonts/Terminus-LICENSE.txt` |
 | JieLi AC79 SDK: `uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin` are read from your SDK checkout at build time and placed in the package; no SDK files are in this tree | Apache-2.0 | <https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK> |
-| MEL's tapes: Taijiguy's (Bernie Kornowicz) Mellotron M400S samples, fetched by `tools/get_tapes.sh` into `tapes/` (ignored by git) and packed into a build by `tools/gen_tapes.py`; no samples are in this tree | his: free to use, not in commercial software | <http://leisureland.us> (via the Wayback Machine) |
+| MEL's tapes: Taijiguy's (Bernie Kornowicz) Mellotron M400S samples, packed by `tools/gen_tapes.py` into `firmware/gen/mel_tapes.h` and so into every build; the originals (`tools/get_tapes.sh`, into the ignored `tapes/`) are not in this tree | his, not GPL: "free to use, but cannot be used in any commercial, for profit software" ([KVR, 2021](https://www.kvraudio.com/forum/viewtopic.php?t=561309)) | <http://leisureland.us> (via the Wayback Machine) |
 
 ## The drawings
 

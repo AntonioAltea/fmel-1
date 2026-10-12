@@ -1,8 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
 # MEL's tapes: Taijiguy's (Bernie Kornowicz) Mellotron M400S samples, one WAV per key (G2..F5), from his old site
-# leisureland.us as the Wayback Machine keeps it. Free to use; not for commercial software: they stay out of the
-# repository (tapes/ is ignored) and out of anything you give away. ~107 MB.
+# leisureland.us as the Wayback Machine keeps it (free to use, not in commercial software: README.md). ~107 MB. Only to
+# make firmware/gen/mel_tapes.h again (tools/gen_tapes.py): the build takes that, in the tree.
 #   tools/get_tapes.sh          ->  tapes/zip/*.zip, tapes/wav/<SET>/*.wav
 set -e
 cd "$(dirname "$0")/.."

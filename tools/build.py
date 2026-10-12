@@ -7,7 +7,7 @@
 
 Outputs in build/: mel.bin (app), loader/ota.bin (update loader),
 mel.fwsc (package). See README.md for the toolchain and the SDK. The tapes
-(build/gen/mel_tapes.h) come from tools/gen_tapes.py and tapes/wav/.
+(firmware/gen/mel_tapes.h, in the tree) come from tools/gen_tapes.py and tapes/wav/ (tools/get_tapes.sh).
 
 The JieLi toolchain is Linux x86-64 only. JIELI_TOOLCHAIN points at it; on
 macOS (or with JIELI_DOCKER=1) each tool runs in a linux/amd64 container.
@@ -154,9 +154,8 @@ def build_loader():
 # ---- app
 
 def build_app():
-    tapes = GEN / "mel_tapes.h"
-    if not tapes.exists():
-        subprocess.run([sys.executable, str(SRC / "tools" / "gen_tapes.py"), str(tapes)], check=True)
+    if not (FW / "gen" / "mel_tapes.h").exists():   # (in the tree: tools/gen_tapes.py makes it again)
+        raise SystemExit("firmware/gen/mel_tapes.h missing: tools/get_tapes.sh, then tools/gen_tapes.py firmware/gen/mel_tapes.h")
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ifirmware/gen", "-Ibuild/gen", f'-DFELUCCA_ID="{PRODUCT}"',
              f'-DAPP_VER="{VERSION or "0.0"}"']
     cmds = [("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
