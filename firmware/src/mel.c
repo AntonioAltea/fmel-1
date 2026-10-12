@@ -31,7 +31,7 @@
  * mel_seq.c. The tapes: tools/gen_tapes.py (build/gen/mel_tapes.h): IMA ADPCM at 11025 Hz, a root every 3-4 semitones.
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
-#define CV_MAX (240u * 108u)                    /* the stage is the biggest canvas */
+#define CV_MAX (240u * 124u)                    /* the stage is the biggest canvas */
 #include "platform.c"
 
 typedef struct {
@@ -42,6 +42,7 @@ typedef struct {
 } mel_zone_t;
 #include "mel_tapes.h"
 #include "mel_sprites.h"
+#include "mel_fonts.h"
 
 /* ---- the sound (the audio ISR: no flash writes, no screen) */
 #define NV 12u                                  /* voices */
