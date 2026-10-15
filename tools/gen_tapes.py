@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Build MEL's tapes (firmware/src/mel.c) from WAV files into a C header.
 
-  tools/gen_tapes.py OUT.h [--src tapes/wav] [--sets MkII_Flute,8_Choir,...] [--budget BYTES] [--step 3] [--rate 11025]
+  tools/gen_tapes.py OUT.h [--src tapes/wav] [--sets MkII_Flute,8_Choir,...] [--budget BYTES] [--step 3] [--rate 22050]
 
 The tapes are the Taijiguy Mellotron M400S samples (one WAV per key, G2..F5, ~7 s, named like
 "A#3.wav"), in tapes/wav/<SET>/: they are not in this tree (free to use, not to redistribute in
@@ -10,7 +10,8 @@ commercial software). tapes/README.md says where they come from.
 
 Per set, one root every STEP semitones (the keys between play the nearest root, at most STEP/2
 semitones off), each:
-  - from 44.1 kHz down to RATE (the tapes hold almost nothing above 5 kHz: 11025 Hz keeps it all);
+  - from 44.1 kHz down to RATE >> SHIFT (the tapes hold almost nothing above 5 kHz: 11025 Hz, half of RATE, keeps
+    it all);
   - from its onset (the head meeting the tape stays in), as long as the budget allows;
   - with a loop over the end, crossfaded in the samples (equal power), so a note can sound for
     ever (MEL's "inf" tape) as well as for the 8 s of a real tape;
@@ -22,9 +23,10 @@ A set that dies away by itself (DECAYS: the vibraphone) has its decay measured p
 flattened out of the samples, so its loop is level; the zone carries the decay and the firmware applies it as the
 tape runs: a held note dies as the real one does, and a note restarted mid-tape starts as quiet as the tape is.
 The piano (tools/get_piano.sh: VCSL, CC0) is not a Mellotron tape and is packed apart from the budget: every file
-is a root (a key every half octave), of a fixed length (SECONDS). A set can also go at a lower rate (SHIFT: half, a
-quarter), for half the bytes; but 4-bit ADPCM at 5512 Hz hisses over a piano's pure tones (~8 dB more noise than at
-11025 Hz), so the piano has the tapes' rate, and the tapes a little less of the flash.
+is a root (a key every half octave), short (SECONDS: under a second, then its loop) at the full RATE, 22050 Hz: 4-bit
+ADPCM hisses over a piano's pure tones, ~8 dB less for every doubling of the rate (and a high key keeps its
+partials). Its strike is tamed (KNOCK: the hammer's thump under the note; SPIKE: a high key's first 20 ms, which a
+level match turned into a slap) and its keys evened out on their tone, all the way.
 """
 import argparse
 import re
@@ -39,12 +41,17 @@ SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's
 DECAYS = {"Vibes": 0.6, "Piano": 1.0}              # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
-SECONDS = {"Piano": (1.6, 1.0)}                    # sets of a fixed length (s, its lowest root .. its highest: a high
+SECONDS = {"Piano": (0.85, 0.5)}                   # sets of a fixed length (s, its lowest root .. its highest: a high
                                                    # string dies sooner), outside the budget, every file a root
-SHIFT = {}                                         # sets at RATE >> SHIFT (the firmware steps them so)
+SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
+SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
                                                    # (a tape's key pressed again goes on where its tape is: the
                                                    # vibraphone as quiet as it has died away to, a piano never)
+SPIKE = {"Piano": (12, 6)}                         # sets whose strike's spike is held down (dB over their tone, at
+                                                   # the lowest root .. the highest)
+KNOCK = {"Piano": (3, 12)}                         # sets whose hammer knock is turned down (dB at the lowest root ..
+                                                   # the highest: on a high key it is all you hear of the strike)
 SOFT = {"Piano"}                                   # sets whose attack peaks over the common loudness: a soft clip
                                                    # (as a tape driven hard) takes them under full scale
 TARGET_RMS = 0.13                                # every set's sustain, full scale 1
@@ -98,13 +105,15 @@ def rms(x):
     return float(np.sqrt(np.mean(x * x)) + 1e-12)
 
 
-def loop(x, rate):
-    """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len)"""
+def loop(x, rate, short=False):
+    """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len). short (a piano key, under
+    a second): a shorter crossfade, its loop after the strike (from 0.12 s) and over the second half"""
     n = len(x)
-    xf = int(0.35 * rate)
-    target = max(xf + CK, int(n * 0.3))
+    xf = int(min(0.35 * rate, 0.25 * n) if short else 0.35 * rate)
+    target = max(xf + CK, int(n * 0.3), xf + int(0.12 * rate) if short else 0)
+    hi = n - xf - CK if short else int(n * 0.6) - xf
     best, ls = -2.0, target - target % CK
-    for cand in range(target - target % CK, int(n * 0.6) - xf, CK):   # ls on the CK grid: its state is a checkpoint
+    for cand in range(target - target % CK, hi, CK):   # ls on the CK grid: its state is a checkpoint
         a, b = x[n - xf:], x[cand - xf:cand]
         c = float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
         if c > best:
@@ -113,6 +122,48 @@ def loop(x, rate):
     y = x.copy()
     y[n - xf:] = x[n - xf:] * np.cos(t) + x[ls - xf:ls] * np.sin(t)    # at the end it has become what precedes ls
     return y, ls
+
+
+def tame_knock(x, rate, db, midi):
+    """the hammer's knock down by db: in the first 40 ms (back to as it was by 120 ms) whatever is not one of the
+    note's partials (each found near k f0, a piano's a little sharp, where it sustains: 0.15-0.45 s in) is turned
+    down; the partials stay as they are"""
+    n, hop = 1024, 128
+    w = np.hanning(n + 1)[:n]
+    late = x[int(0.15 * rate):int(0.45 * rate)]
+    L = np.abs(np.fft.rfft(late[:n * (len(late) // n)].reshape(-1, n) * w, axis=1)).mean(axis=0)
+    f, f0 = np.fft.rfftfreq(n, 1 / rate), 440 * 2 ** ((midi - 69) / 12)
+    keep = np.zeros(len(f), bool)
+    for k in range(1, int(rate / 2 / f0) + 1):
+        near = np.where((f > k * f0 * 0.97) & (f < k * f0 * 1.08))[0]
+        if len(near):
+            j = near[np.argmax(L[near])]
+            keep[max(0, j - 2):j + 3] = True    # the partial and 2 bins either side
+    pad = np.concatenate([np.zeros(n), x, np.zeros(n)])
+    y, norm = np.zeros(len(pad)), np.zeros(len(pad))
+    for i in range(0, len(pad) - n, hop):
+        t = (i + n / 2 - n) / rate              # the frame's middle, s into x
+        a = 1.0 if t > 0.12 else 10 ** (-db / 20) if t < 0.04 else 10 ** (-db * (0.12 - t) / 0.08 / 20)
+        F = np.fft.rfft(pad[i:i + n] * w)
+        F[~keep] *= a
+        y[i:i + n] += np.fft.irfft(F, n) * w
+        norm[i:i + n] += w * w
+    return (y / np.maximum(norm, 1e-9))[n:n + len(x)]
+
+
+def soften_strike(x, rate, cap_db):
+    """the strike's first spike held to cap_db over the tone 0.1-0.2 s in (a high key's is all of its first 20 ms:
+    under a hard level match it came out as a slap); a slow gain (5 ms), gone by 0.15 s"""
+    w = max(1, int(0.004 * rate))
+    env = np.sqrt(np.convolve(x * x, np.ones(w) / w, mode="same")) + 1e-9
+    limit = rms(x[int(0.1 * rate):int(0.2 * rate)]) * 10 ** (cap_db / 20)
+    gain = np.minimum(1.0, limit / env)
+    k = np.hanning(2 * w + 1)
+    gain = np.minimum(gain, np.convolve(gain, k / k.sum(), mode="same"))   # (no faster than the window)
+    gain = np.convolve(gain, k / k.sum(), mode="same")
+    t = np.arange(len(x)) / rate
+    fade = np.clip((0.15 - t) / 0.05, 0, 1)    # full up to 0.1 s, none from 0.15 s
+    return x * (1 - fade + fade * gain)
 
 
 def ima_encode(s):
@@ -176,7 +227,7 @@ def build(src, budget, step, rate, which):
     out = {"sets": [], "zones": [], "data": bytearray(), "ck": []}
     for (d, _), (name, files, roots), share in zip(sets, plan, shares):
         segs, decs = [], []
-        sh = SHIFT.get(d, 0)
+        sh = SHIFT.get(d, SHIFT_ELSE)
         zr = SRC_RATE / (SRC_RATE // rate << sh)    # this set's rate, Hz
         per = int(per0 * share) // CK * CK
         for i, r in enumerate(roots):
@@ -186,6 +237,12 @@ def build(src, budget, step, rate, which):
             x = resample(read_wav(files[r]), rate, sh)
             o = max(0, onset(x) - int(0.004 * zr))
             seg = x[o:o + per]
+            if d in KNOCK:
+                a, b = KNOCK[d]
+                seg = tame_knock(seg, zr, a + (b - a) * i / max(1, len(roots) - 1), r)
+            if d in SPIKE:
+                a, b = SPIKE[d]
+                seg = soften_strike(seg, zr, a + (b - a) * i / max(1, len(roots) - 1))
             if d in DECAYS:                      # take the decay out: a level loop
                 pk, dbs = decay_of(x[o:], zr)
                 t = np.maximum(0, np.arange(len(seg)) - pk) / zr
@@ -195,7 +252,8 @@ def build(src, budget, step, rate, which):
                 decs.append((0, 0.0))
             segs.append((r, seg))
         if d in SECONDS:                         # the piano: its keys as loud as each other where it is heard, the
-            lv = np.array([20 * np.log10(rms(s[:int(0.3 * zr)])) for _, s in segs])   # strike (all the way)
+            lv = np.array([20 * np.log10(rms(s[int(0.03 * zr):int(0.3 * zr)])) for _, s in segs])   # strike, all
+                                                 # the way (after its first 30 ms: the hammer's knock is no measure)
         else:
             lv = np.array([20 * np.log10(rms(s[len(s) // 3:])) for _, s in segs])
         z0 = len(out["zones"])
@@ -210,7 +268,7 @@ def build(src, budget, step, rate, which):
         if peak > 0.95:
             raise SystemExit(f"{name}: peaks at {peak:.2f} at the common loudness; lower TARGET_RMS")
         for i, (r, s) in enumerate(segs):
-            s, ls = loop(s, zr)
+            s, ls = loop(s, zr, d in SECONDS)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
             data, cks = ima_encode(pcm)
             lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
@@ -300,11 +358,11 @@ def write(out, path, rate, per):
     L = ["/* generated by tools/gen_tapes.py: MEL's tapes (Taijiguy's Mellotron M400S samples; the piano, VCSL's (CC0):"
          " README.md, LICENSING.md) */",
          f"#define MEL_RATE {rate}u",
-         f"#define MEL_RATE_Q16 {rate * 65536 // 44100}u          /* MEL_RATE / 44100, Q16 */",
+         f"#define MEL_RATE_Q16 {rate * 65536 // 44100}u          /* MEL_RATE / 44100, Q16 (a zone's: >> its sh) */",
          f"#define MEL_CK {CK}u",
          f"#define MEL_NSETS {len(out['sets'])}u",
          f"#define MEL_NZONES {len(z)}u",
-         f"/* {len(z)} zones, the tapes' of {per} samples ({per / rate:.2f} s), {len(data)} B of ADPCM, "
+         f"/* {len(z)} zones, the tapes' of {per} samples ({per / (rate >> SHIFT_ELSE):.2f} s), {len(data)} B of ADPCM, "
          f"{4 * len(out['ck'])} B of checkpoints */",
          "static const char *const MEL_SET_NAME[MEL_NSETS] = {" + ", ".join(f'"{n}"' for n, _, _, _ in out["sets"]) + "};",
          "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _, _ in out["sets"]) + "};",
@@ -334,12 +392,12 @@ def main():
     ap.add_argument("--sets", default=",".join(SETS), help="the tapes, in order (A, B, C, ...): folders of --src")
     ap.add_argument("--budget", type=int, default=425_000, help="bytes of tape data (ADPCM + checkpoints) in all")
     ap.add_argument("--step", type=int, default=3, help="semitones between roots")
-    ap.add_argument("--rate", type=int, default=11025)
+    ap.add_argument("--rate", type=int, default=22050, help="the firmware's rate (MEL_RATE): a set's is it >> SHIFT")
     a = ap.parse_args()
     out, per = build(Path(a.src), a.budget, a.step, a.rate, a.sets.split(","))
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     write(out, a.out, a.rate, per)
-    print(f"tapes: {', '.join(n for n, *_ in out['sets'])}: {len(out['zones'])} zones of {per / a.rate:.2f} s, "
+    print(f"tapes: {', '.join(n for n, *_ in out['sets'])}: {len(out['zones'])} zones of {per / (a.rate >> SHIFT_ELSE):.2f} s, "
           f"{len(out['data']) + 4 * len(out['ck'])} B -> {a.out}")
 
 
