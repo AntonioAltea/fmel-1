@@ -195,10 +195,17 @@ static void voice_head(uint32_t vi)             /* the heads on the current soun
         head_start(&voice[vi].h2, zone_of((ly - 1u) % MEL_NSETS, layer_note(note, p_loct)), tpos[note], g);
 }
 
+static int struck(void)                        /* the piano is on either track: a key strikes anew */
+{
+    uint32_t ly = p_layer;
+    return MEL_SET_STRUCK[p_sound % MEL_NSETS] || (ly && MEL_SET_STRUCK[(ly - 1u) % MEL_NSETS]);
+}
 static void voice_start(uint32_t vi)
 {
     uint32_t note = voice[vi].note, hsh = note * 2654435761u;
     voice[vi].det = (int32_t)(hsh >> 24) - 128;   /* this key's tape: its own tuning (DRIFT) */
+    if (struck())
+        tpos[note] = 0;                         /* the piano (on either track): a new strike, its tape from the start */
     voice_head(vi);
     voice[vi].amp = 0;
     voice[vi].ended = p_tape8 && tpos[note] >= TAPE_LEN;
@@ -359,7 +366,9 @@ static uint32_t ages;
 static void note_on(uint32_t note)
 {
     uint32_t v, pick = 0, best = 0xFFFFFFFFu;
-    for (v = 0; v < NV; v++)                    /* its own voice still sounding: the tape just goes on */
+    int st = struck();
+    for (v = 0; v < NV && !st; v++)         /* its own voice still sounding: the tape just goes on (the piano: a
+                                                 * new strike in a voice of its own, the last one dying away) */
         if ((voice[v].busy || voice[v].gate) && voice[v].note == note) {
             voice[v].gate = 1;
             voice[v].age = ++ages;
@@ -391,6 +400,8 @@ static void src_set(uint32_t note, uint32_t set_b, uint32_t clr_b)
     src[note] = (uint8_t)now;
     if (!was && now) note_on(note);
     else if (was && !now) note_off(note);
+    else if (now & ~was & ~(uint32_t)(S_LATCH | S_PED) && struck())
+        note_on(note);                          /* the piano: a key played again under the pedal or HOLD strikes it */
 }
 static int quiet(void)
 {

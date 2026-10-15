@@ -8,6 +8,7 @@
 static const char *const MEL_SET_NAME[MEL_NSETS] = {"FLUTE", "CHOIR", "CELLO", "VIBES", "PIANO"};
 static const uint8_t MEL_SET_Z0[MEL_NSETS] = {0, 12, 24, 36, 48};
 static const uint8_t MEL_SET_NZ[MEL_NSETS] = {12, 12, 12, 12, 6};
+static const uint8_t MEL_SET_STRUCK[MEL_NSETS] = {0, 0, 0, 0, 1};
 static const mel_zone_t MEL_ZONE[MEL_NZONES] = {
     {0u, 18944u, 6400u, 0u, 44, 0, 45, 0, 0u, 32767u, 0u},
     {9472u, 18944u, 6400u, 74u, 47, 46, 48, 0, 0u, 32767u, 0u},

@@ -41,6 +41,9 @@ DECAYS = {"Vibes": 0.6, "Piano": 1.0}              # sets that die away by thems
                                                    # measured; the firmware puts it back as the tape runs
 SECONDS = {"Piano": 1.5}                           # sets of a fixed length (s), outside the budget, every file a root
 SHIFT = {}                                         # sets at RATE >> SHIFT (the firmware steps them so)
+STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
+                                                   # (a tape's key pressed again goes on where its tape is: the
+                                                   # vibraphone as quiet as it has died away to, a piano never)
 SOFT = {"Piano"}                                   # sets whose attack peaks over the common loudness: a soft clip
                                                    # (as a tape driven hard) takes them under full scale
 TARGET_RMS = 0.13                                # every set's sustain, full scale 1
@@ -211,7 +214,7 @@ def build(src, budget, step, rate, which):
                                      sh=sh, dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
             out["ck"] += cks
-        out["sets"].append((name, z0, len(roots)))
+        out["sets"].append((name, z0, len(roots), d in STRUCK))
     return out, int(per0) // CK * CK
 
 
@@ -296,9 +299,10 @@ def write(out, path, rate, per):
          f"#define MEL_NZONES {len(z)}u",
          f"/* {len(z)} zones, the tapes' of {per} samples ({per / rate:.2f} s), {len(data)} B of ADPCM, "
          f"{4 * len(out['ck'])} B of checkpoints */",
-         "static const char *const MEL_SET_NAME[MEL_NSETS] = {" + ", ".join(f'"{n}"' for n, _, _ in out["sets"]) + "};",
-         "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _ in out["sets"]) + "};",
-         "static const uint8_t MEL_SET_NZ[MEL_NSETS] = {" + ", ".join(str(b) for _, _, b in out["sets"]) + "};",
+         "static const char *const MEL_SET_NAME[MEL_NSETS] = {" + ", ".join(f'"{n}"' for n, _, _, _ in out["sets"]) + "};",
+         "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _, _ in out["sets"]) + "};",
+         "static const uint8_t MEL_SET_NZ[MEL_NSETS] = {" + ", ".join(str(b) for _, _, b, _ in out["sets"]) + "};",
+         "static const uint8_t MEL_SET_STRUCK[MEL_NSETS] = {" + ", ".join(str(int(k)) for *_, k in out["sets"]) + "};",
          "static const mel_zone_t MEL_ZONE[MEL_NZONES] = {"]
     for q in z:
         L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, "
@@ -328,7 +332,7 @@ def main():
     out, per = build(Path(a.src), a.budget, a.step, a.rate, a.sets.split(","))
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     write(out, a.out, a.rate, per)
-    print(f"tapes: {', '.join(n for n, _, _ in out['sets'])}: {len(out['zones'])} zones of {per / a.rate:.2f} s, "
+    print(f"tapes: {', '.join(n for n, *_ in out['sets'])}: {len(out['zones'])} zones of {per / a.rate:.2f} s, "
           f"{len(out['data']) + 4 * len(out['ck'])} B -> {a.out}")
 
 
