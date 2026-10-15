@@ -28,7 +28,7 @@
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
  * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones
- * (the piano: at 5512 Hz, a root every half octave).
+ * (the piano: a root every half octave).
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
 #define CV_MAX (240u * 124u)                    /* the stage is the biggest canvas */

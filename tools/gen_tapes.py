@@ -22,8 +22,9 @@ A set that dies away by itself (DECAYS: the vibraphone) has its decay measured p
 flattened out of the samples, so its loop is level; the zone carries the decay and the firmware applies it as the
 tape runs: a held note dies as the real one does, and a note restarted mid-tape starts as quiet as the tape is.
 The piano (tools/get_piano.sh: VCSL, CC0) is not a Mellotron tape and is packed apart from the budget: every file
-is a root (a key every half octave), a fixed length (SECONDS) at half the rate (SHIFT: 5512.5 Hz, a lo-fi piano), so
-it costs a few tens of KB and the tapes stay as they are.
+is a root (a key every half octave), of a fixed length (SECONDS). A set can also go at a lower rate (SHIFT: half, a
+quarter), for half the bytes; but 4-bit ADPCM at 5512 Hz hisses over a piano's pure tones (~8 dB more noise than at
+11025 Hz), so the piano has the tapes' rate, and the tapes a little less of the flash.
 """
 import argparse
 import re
@@ -38,8 +39,8 @@ SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's
 DECAYS = {"Vibes": 0.6, "Piano": 1.0}              # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
-SECONDS = {"Piano": 2.0}                           # sets of a fixed length (s), outside the budget, every file a root
-SHIFT = {"Piano": 1}                               # sets at RATE >> SHIFT (the firmware steps them so)
+SECONDS = {"Piano": 1.5}                           # sets of a fixed length (s), outside the budget, every file a root
+SHIFT = {}                                         # sets at RATE >> SHIFT (the firmware steps them so)
 SOFT = {"Piano"}                                   # sets whose attack peaks over the common loudness: a soft clip
                                                    # (as a tape driven hard) takes them under full scale
 TARGET_RMS = 0.13                                # every set's sustain, full scale 1
@@ -320,7 +321,7 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--src", default=str(Path(__file__).resolve().parents[1] / "tapes" / "wav"))
     ap.add_argument("--sets", default=",".join(SETS), help="the tapes, in order (A, B, C, ...): folders of --src")
-    ap.add_argument("--budget", type=int, default=440_000, help="bytes of tape data (ADPCM + checkpoints) in all")
+    ap.add_argument("--budget", type=int, default=425_000, help="bytes of tape data (ADPCM + checkpoints) in all")
     ap.add_argument("--step", type=int, default=3, help="semitones between roots")
     ap.add_argument("--rate", type=int, default=11025)
     a = ap.parse_args()
