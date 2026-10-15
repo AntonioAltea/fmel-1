@@ -39,7 +39,8 @@ SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's
 DECAYS = {"Vibes": 0.6, "Piano": 1.0}              # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
-SECONDS = {"Piano": 1.5}                           # sets of a fixed length (s), outside the budget, every file a root
+SECONDS = {"Piano": (1.6, 1.0)}                    # sets of a fixed length (s, its lowest root .. its highest: a high
+                                                   # string dies sooner), outside the budget, every file a root
 SHIFT = {}                                         # sets at RATE >> SHIFT (the firmware steps them so)
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
                                                    # (a tape's key pressed again goes on where its tape is: the
@@ -177,8 +178,11 @@ def build(src, budget, step, rate, which):
         segs, decs = [], []
         sh = SHIFT.get(d, 0)
         zr = SRC_RATE / (SRC_RATE // rate << sh)    # this set's rate, Hz
-        per = int(SECONDS[d] * zr if d in SECONDS else per0 * share) // CK * CK
-        for r in roots:
+        per = int(per0 * share) // CK * CK
+        for i, r in enumerate(roots):
+            if d in SECONDS:
+                a, b = SECONDS[d]
+                per = int((a + (b - a) * i / max(1, len(roots) - 1)) * zr) // CK * CK
             x = resample(read_wav(files[r]), rate, sh)
             o = max(0, onset(x) - int(0.004 * zr))
             seg = x[o:o + per]
@@ -190,9 +194,12 @@ def build(src, budget, step, rate, which):
             else:
                 decs.append((0, 0.0))
             segs.append((r, seg))
-        lv = np.array([20 * np.log10(rms(s[len(s) // 3:])) for _, s in segs])
+        if d in SECONDS:                         # the piano: its keys as loud as each other where it is heard, the
+            lv = np.array([20 * np.log10(rms(s[:int(0.3 * zr)])) for _, s in segs])   # strike (all the way)
+        else:
+            lv = np.array([20 * np.log10(rms(s[len(s) // 3:])) for _, s in segs])
         z0 = len(out["zones"])
-        gains = 10 ** ((lv.mean() - lv) / 2 / 20)                     # half way to the set's mean level
+        gains = 10 ** ((lv.mean() - lv) / (1 if d in SECONDS else 2) / 20)   # (the tapes: half way to their mean)
         segs = [(r, s * g) for (r, s), g in zip(segs, gains)]
         level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
         segs = [(r, s * TARGET_RMS / level) for r, s in segs]      # every set as loud as the others
