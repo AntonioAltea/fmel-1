@@ -7,7 +7,7 @@
  * The panel: a button is a section; pressed again it turns its pages; SELECT turns them too. On every page the
  * four knobs do what the screen's aluminium plate says (on FX pages the last one is always MIX).
  *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK, RELEASE; HOME again: the next sound
- *   SEL    LAYER   a second sound on the same tape's other track: SOUND (OFF A B C D), MIX (between the two), OCTAVE,
+ *   SEL    LAYER   a second sound on the same tape's other track: SOUND (OFF A B C D E), MIX (between the two), OCTAVE,
  *                  DETUNE; on its page SEL again turns the SOUND (lit: a layer sounds)
  *   LFO    LOFI    TAPE: WOW, FLUTTER, DRIVE (into the tape: saturation), HISS  -  WEAR: AGE (a copy of a copy:
  *                  the band narrows, and the copying deck adds its hiss, flutter, drive), DROPOUT, DRIFT, CRUSH
@@ -19,7 +19,7 @@
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
  *   SEQ    SEQ     16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING; PLAY start / stop, REC record
  *                  (step recording: SEL is a rest, SEL held 1 s clears the pattern)
- *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES (a track selector)   ALGORITHM the tempo, anywhere
+ *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO (a track selector)   ALGORITHM the tempo, anywhere
  *   ENV    HOLD    the notes stay after you let go; the next chord replaces them
  *          held    ENV held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
  *                  octave down and twice as long, its wow and flutter slower; it slows down and speeds up in ~0.4 s
@@ -27,7 +27,8 @@
  *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = vibrato, pitch bend = the motor (+-2 semitones)
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
- * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones.
+ * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones
+ * (the piano: at 5512 Hz, a root every half octave).
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
 #define CV_MAX (240u * 124u)                    /* the stage is the biggest canvas */
@@ -36,6 +37,7 @@
 typedef struct {
     uint32_t off, n, ls, ck;                    /* byte offset in MEL_DATA, samples, loop start, first checkpoint */
     uint8_t root, lo, hi;                       /* MIDI notes */
+    uint8_t sh;                                 /* its rate: MEL_RATE >> sh (tape time stays in MEL_RATE samples) */
     uint16_t dk, d1k, pk;                       /* a sound that dies away (dk 0: it does not): its decay per tape
                                                  * sample (Q24) and per 1024 (Q15), from its peak (sample pk) */
 } mel_zone_t;
@@ -149,10 +151,14 @@ static int32_t adpcm_next(head_t *h)
     return h->pred;
 }
 
-/* put a head on tape t samples in (past the end of the recording: round its loop) */
+/* put a head on tape t samples in (MEL_RATE's; past the end of the recording: round its loop) */
 static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
 {
-    uint32_t p = t < z->n ? t : z->ls + (t - z->ls) % (z->n - z->ls), k = p / MEL_CK, ck = MEL_CKS[z->ck + k];
+    uint32_t p, k, ck;
+    t >>= z->sh;                                /* (in the zone's own samples from here) */
+    p = t < z->n ? t : z->ls + (t - z->ls) % (z->n - z->ls);
+    k = p / MEL_CK;
+    ck = MEL_CKS[z->ck + k];
     h->z = z;
     h->pos = k * MEL_CK;
     h->pred = (int16_t)(ck & 0xFFFFu);
@@ -200,11 +206,13 @@ static void voice_start(uint32_t vi)
 }
 
 /* the head's samples into acc (n frames), 4-point Hermite (smooth: none of linear's fizz), at gm (Q15) of its level
- * (and, a sound that dies away, as far as it has); the tape samples it read */
+ * (and, a sound that dies away, as far as it has); step and t, the tape samples it read: MEL_RATE's */
 static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int32_t gm, uint32_t t)
 {
-    uint32_t i, ran = 0, frac = h->frac;
+    uint32_t i, ran = 0, frac = h->frac, sh = h->z->sh;
     int32_t a = h->s[0], b = h->s[1], c = h->s[2], d = h->s[3], g = (h->gain * gm) >> 15;
+    step >>= sh;                                /* (the zone's own samples from here) */
+    t >>= sh;
     if (h->z->dk)
         g = (g * (h->dg >> 9)) >> 15;
     for (i = 0; i < n; i++) {
@@ -230,9 +238,9 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     h->s[1] = b;
     h->s[2] = c;
     h->s[3] = d;
-    if (h->z->dk && t > h->z->pk)               /* the vibraphone: it dies away as the tape runs */
+    if (h->z->dk && t > h->z->pk)               /* the vibraphone, the piano: they die away as the tape runs */
         h->dg -= ((h->dg >> 12) * (int32_t)(ran * h->z->dk)) >> 12;
-    return ran;
+    return ran << sh;
 }
 
 static void voice_sub(uint32_t vi, int32_t *mix, int32_t g16, int32_t drift, int32_t atk, int32_t relk)
@@ -653,7 +661,7 @@ static void app_init(void)
     say("v" APP_VER);
 }
 
-static void next_sound(int32_t d)               /* the sound d further on: A B C D, round and round */
+static void next_sound(int32_t d)               /* the sound d further on: A B C D E, round and round */
 {
     int32_t n = (int32_t)MEL_NSETS;
     char s[24] = {0, ' ', ' ', 0};
@@ -731,7 +739,7 @@ static void buttons(void)
             chord_open = 0;
             changed(99);
             redraw |= 8u;
-        } else if (page == PG_LAYER) {          /* on LAYER: the next SOUND, OFF A B C D */
+        } else if (page == PG_LAYER) {          /* on LAYER: the next SOUND, OFF A B C D E */
             set.p[P_BSND] = (int16_t)((PV(P_BSND) + 1) % ((int32_t)MEL_NSETS + 1));
             changed(0);
         } else

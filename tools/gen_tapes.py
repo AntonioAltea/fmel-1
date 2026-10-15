@@ -21,6 +21,9 @@ loudness (RMS of its sustain), so a change of tape is not a change of level.
 A set that dies away by itself (DECAYS: the vibraphone) has its decay measured per root (dB/s, after its peak) and
 flattened out of the samples, so its loop is level; the zone carries the decay and the firmware applies it as the
 tape runs: a held note dies as the real one does, and a note restarted mid-tape starts as quiet as the tape is.
+The piano (tools/get_piano.sh: VCSL, CC0) is not a Mellotron tape and is packed apart from the budget: every file
+is a root (a key every half octave), a fixed length (SECONDS) at half the rate (SHIFT: 5512.5 Hz, a lo-fi piano), so
+it costs a few tens of KB and the tapes stay as they are.
 """
 import argparse
 import re
@@ -30,11 +33,15 @@ from pathlib import Path
 import numpy as np
 
 NAMES = {"MkII_Violins": "VIOLINS", "MkII_Flute": "FLUTE", "8_Choir": "CHOIR", "Cello": "CELLO", "Vibes": "VIBES",
-         "Woodwind_2": "WOODWIND"}
-SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes"]  # A B C (the M400's three tracks), D
-DECAYS = {"Vibes": 0.6}                            # sets that die away by themselves, and their share of the flash:
+         "Woodwind_2": "WOODWIND", "Piano": "PIANO"}
+SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's three tracks), D, E
+DECAYS = {"Vibes": 0.6, "Piano": 1.0}              # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
+SECONDS = {"Piano": 2.0}                           # sets of a fixed length (s), outside the budget, every file a root
+SHIFT = {"Piano": 1}                               # sets at RATE >> SHIFT (the firmware steps them so)
+SOFT = {"Piano"}                                   # sets whose attack peaks over the common loudness: a soft clip
+                                                   # (as a tape driven hard) takes them under full scale
 TARGET_RMS = 0.13                                # every set's sustain, full scale 1
 NOTE = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
 CK = 256                                         # samples between decoder states
@@ -69,10 +76,10 @@ def lowpass(fc, taps=255):
     return h / h.sum()
 
 
-def resample(x, rate):
+def resample(x, rate, sh=0):
     if SRC_RATE % rate:
         raise SystemExit(f"--rate must divide {SRC_RATE}")
-    d = SRC_RATE // rate
+    d = SRC_RATE // rate << sh
     return np.convolve(x, lowpass(0.45 / d), mode="same")[::d] if d > 1 else x
 
 
@@ -154,22 +161,26 @@ def build(src, budget, step, rate, which):
         roots = [r for r in range(lo + step // 2, hi + 1, step)]
         if roots[-1] + step // 2 < hi:
             roots.append(hi)
+        if d in SECONDS:
+            roots = sorted(files)
         plan.append((name, files, roots))
-    shares = [DECAYS.get(d, 1.0) for d, _ in sets]
+    shares = [0.0 if d in SECONDS else DECAYS.get(d, 1.0) for d, _ in sets]
     nroots = sum(len(r) * w for (_, _, r), w in zip(plan, shares))
     per0 = budget * 2 / nroots                   # 4 bits a sample (+ the checkpoints, ~1.6 %)
     per0 = per0 / (1 + 8 / CK)
     out = {"sets": [], "zones": [], "data": bytearray(), "ck": []}
     for (d, _), (name, files, roots), share in zip(sets, plan, shares):
         segs, decs = [], []
-        per = int(per0 * share) // CK * CK
+        sh = SHIFT.get(d, 0)
+        zr = SRC_RATE / (SRC_RATE // rate << sh)    # this set's rate, Hz
+        per = int(SECONDS[d] * zr if d in SECONDS else per0 * share) // CK * CK
         for r in roots:
-            x = resample(read_wav(files[r]), rate)
-            o = max(0, onset(x) - int(0.004 * rate))
+            x = resample(read_wav(files[r]), rate, sh)
+            o = max(0, onset(x) - int(0.004 * zr))
             seg = x[o:o + per]
             if d in DECAYS:                      # take the decay out: a level loop
-                pk, dbs = decay_of(x[o:], rate)
-                t = np.maximum(0, np.arange(len(seg)) - pk) / rate
+                pk, dbs = decay_of(x[o:], zr)
+                t = np.maximum(0, np.arange(len(seg)) - pk) / zr
                 seg = seg * 10 ** (dbs * t / 20)
                 decs.append((pk, dbs))
             else:
@@ -181,19 +192,22 @@ def build(src, budget, step, rate, which):
         segs = [(r, s * g) for (r, s), g in zip(segs, gains)]
         level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
         segs = [(r, s * TARGET_RMS / level) for r, s in segs]      # every set as loud as the others
+        if d in SOFT:                            # linear to 0.6, then a tanh to 0.95
+            segs = [(r, np.where(np.abs(s) < 0.6, s, np.sign(s) * (0.6 + 0.35 * np.tanh((np.abs(s) - 0.6) / 0.35))))
+                    for r, s in segs]
         peak = max(np.abs(s).max() for _, s in segs)
         if peak > 0.95:
             raise SystemExit(f"{name}: peaks at {peak:.2f} at the common loudness; lower TARGET_RMS")
         for i, (r, s) in enumerate(segs):
-            s, ls = loop(s, rate)
+            s, ls = loop(s, zr)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
             data, cks = ima_encode(pcm)
             lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
             hi = r + (roots[i + 1] - r) // 2 if i + 1 < len(roots) else 127
             pk, dbs = decs[i]
-            dk = round((1 - 10 ** (-dbs / 20 / rate)) * (1 << 24)) if dbs else 0     # per tape sample, Q24
+            dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r, lo=lo, hi=hi,
-                                     dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / rate / 20)), pk=pk))
+                                     sh=sh, dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
             out["ck"] += cks
         out["sets"].append((name, z0, len(roots)))
@@ -272,19 +286,21 @@ def tables():
 
 def write(out, path, rate, per):
     z, data = out["zones"], out["data"]
-    L = ["/* generated by tools/gen_tapes.py: MEL's tapes (Taijiguy's Mellotron M400S samples: README.md, LICENSING.md) */",
+    L = ["/* generated by tools/gen_tapes.py: MEL's tapes (Taijiguy's Mellotron M400S samples; the piano, VCSL's (CC0):"
+         " README.md, LICENSING.md) */",
          f"#define MEL_RATE {rate}u",
          f"#define MEL_RATE_Q16 {rate * 65536 // 44100}u          /* MEL_RATE / 44100, Q16 */",
          f"#define MEL_CK {CK}u",
          f"#define MEL_NSETS {len(out['sets'])}u",
          f"#define MEL_NZONES {len(z)}u",
-         f"/* {len(z)} zones of {per} samples ({per / rate:.2f} s), {len(data)} B of ADPCM, {4 * len(out['ck'])} B of checkpoints */",
+         f"/* {len(z)} zones, the tapes' of {per} samples ({per / rate:.2f} s), {len(data)} B of ADPCM, "
+         f"{4 * len(out['ck'])} B of checkpoints */",
          "static const char *const MEL_SET_NAME[MEL_NSETS] = {" + ", ".join(f'"{n}"' for n, _, _ in out["sets"]) + "};",
          "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _ in out["sets"]) + "};",
          "static const uint8_t MEL_SET_NZ[MEL_NSETS] = {" + ", ".join(str(b) for _, _, b in out["sets"]) + "};",
          "static const mel_zone_t MEL_ZONE[MEL_NZONES] = {"]
     for q in z:
-        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, "
+        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, "
                  f"{q['dk']}u, {q['d1k']}u, {q['pk']}u}},")
     L.append("};")
     L.append("static const uint32_t MEL_CKS[] = {   /* (uint16_t)predictor | step index << 16 */")

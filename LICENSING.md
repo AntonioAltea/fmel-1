@@ -10,7 +10,7 @@ complete source under the same licence too.
 | --- | --- |
 | The platform: `firmware/hal/`, `firmware/loader/`, `crt0.S`, `app.ld`, `firmware/src/` (`usb.c`, `ota.c`, `recovery.c`, `lcd.c`, `gfx.c`, `libc.c`, `bootguard.h`, `uac_fir.h`), `tools/` | Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments ([Felucca](https://github.com/hugelton/Felucca)), with the changes of [SLOOP](https://github.com/isod89/sloop-fm1) (isod89) |
 | Dinghy: the wiring `platform.c`, the host mode `tests/`, the docs (the app `dinghy.c`, which MEL grew out of) | zvenson |
-| MEL: `firmware/src/mel.c`, `mel_fx.c`, `mel_seq.c`, `mel_ui.c`, `tools/gen_tapes.py`, `tools/get_tapes.sh`, `tools/gen_sprites.py`, `tools/gen_mel_fonts.py`, `web/emu/` (after the browser emulators of X0X, Felucca and FoMni, GPL-3.0) | AntonioAltea |
+| MEL: `firmware/src/mel.c`, `mel_fx.c`, `mel_seq.c`, `mel_ui.c`, `tools/gen_tapes.py`, `tools/get_tapes.sh`, `tools/get_piano.sh`, `tools/gen_sprites.py`, `tools/gen_mel_fonts.py`, `web/emu/` (after the browser emulators of X0X, Felucca and FoMni, GPL-3.0) | AntonioAltea |
 
 ## Third-party material
 
@@ -20,12 +20,14 @@ complete source under the same licence too.
 | Terminus Bold 16, 20 and 24 px (Debian's console fonts), rendered into `firmware/gen/mel_fonts.h` by `tools/gen_mel_fonts.py` | SIL OFL 1.1 | `assets/fonts/Terminus-LICENSE.txt` |
 | JieLi AC79 SDK: `uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin` are read from your SDK checkout at build time and placed in the package; no SDK files are in this tree | Apache-2.0 | <https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK> |
 | MEL's tapes: Taijiguy's (Bernie Kornowicz) Mellotron M400S samples, packed by `tools/gen_tapes.py` into `firmware/gen/mel_tapes.h` and so into every build; the originals (`tools/get_tapes.sh`, into the ignored `tapes/`) are not in this tree | his, not GPL: "free to use, but cannot be used in any commercial, for profit software" ([KVR, 2021](https://www.kvraudio.com/forum/viewtopic.php?t=561309)) | <http://leisureland.us> (via the Wayback Machine) |
+| MEL's piano: a Kawai grand from Versilian Studios' VCSL (Sam Gossner), six keys at a soft touch, packed by `tools/gen_tapes.py` into `firmware/gen/mel_tapes.h`; the originals (`tools/get_piano.sh`, into the ignored `tapes/`) are not in this tree | CC0 1.0 (public domain) | <https://github.com/sgossner/VCSL> |
 
 ## The drawings
 
 The instruments on MEL's screen (`assets/sprites/`, and `firmware/gen/mel_sprites.h`, made from them by
 `tools/gen_sprites.py`) are drawn by Javi and used here with his permission. They are his: not under the GPL unless he
-says so.
+says so. The piano (`piano_*.png`) is not his: a stand-in, drawn by `AntonioAltea` until there is one of his, under
+the GPL as MEL is.
 
 ## The logo
 

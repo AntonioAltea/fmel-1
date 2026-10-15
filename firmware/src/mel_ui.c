@@ -231,6 +231,16 @@ static void spr_vibes(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)
     static const uint8_t F[4] = {2, 1, 3, 1};   /* playing: one mallet, both down, the other, both down (150 ms each) */
     spr_pix(&SPR_VIBES, lv ? F[t / 150u % 4u] : 0u, cx, cy, s, 15);   /* (silent: the mallets up) */
 }
+static void spr_piano(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* an upright piano (a stand-in
+                                                                                     * till it is drawn), notes on its stand */
+{
+    static const int8_t NOTES[2][2][2] = {{{25, 23}, {45, 25}}, {{35, 25}, {55, 23}}};
+    uint32_t ph = t % 600u, k, f = !lv ? 0u : 1u + ph / 300u;   /* (frame 0: silent; 1, 2: other keys down) */
+    spr_pix(&SPR_PIANO, f, cx, cy, s, 15);
+    if (f)
+        for (k = 0; k < 2u; k++)
+            spr_note(&SPR_PIANO, cx, cy, s, NOTES[f - 1u][k][0], NOTES[f - 1u][k][1]);
+}
 #undef S
 static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32_t t, int32_t lv)   /* a sound's
                                                          * drawing, by its name, centred on cx cy, sc/256 of its size */
@@ -239,6 +249,7 @@ static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32
     else if (nm[0] == 'C' && nm[1] == 'H') spr_choir(cx, cy, sc, t, lv);
     else if (nm[0] == 'V' && nm[2] == 'B') spr_vibes(cx, cy, sc, t, lv);
     else if (nm[0] == 'V') spr_violins(cx, cy + 10, 230 * sc >> 8, t, lv);
+    else if (nm[0] == 'P') spr_piano(cx, cy, sc, t, lv);
     else spr_cello(cx, cy, sc, t, lv);
 }
 
@@ -315,7 +326,7 @@ static void stage_play(void)                    /* the sound (and the layer), th
     } else
         spr_sound(MEL_SET_NAME[snd], 150, 54, 384, t, spr_lv());
     tx_c(34, 86, &F16, MEL_SET_NAME[snd], C_INK);   /* the names, small, under the selector */
-    for (k = 0; k < MEL_NSETS && k < 6u; k++) { /* A B C D round the selector: the sound's needle, the layer's amber */
+    for (k = 0; k < MEL_NSETS && k < 6u; k++) { /* A B C D E round the selector: the sound's needle, the layer's amber */
         uint32_t ph = sel_angle(k);
         char l[2] = {(char)('A' + k), 0};
         tx_c(34 + sn(ph, 26), 44 - cs(ph, 26) - 8, &F16, l, k == snd ? C_INK : ly == k + 1u ? C_LAMP : C_INK2);
