@@ -41,6 +41,7 @@ typedef struct {
     uint32_t off, n, ls, ck;                    /* byte offset in MEL_DATA, samples, loop start, first checkpoint */
     uint8_t root, lo, hi;                       /* MIDI notes */
     uint8_t sh;                                 /* its rate: MEL_RATE >> sh (tape time stays in MEL_RATE samples) */
+    uint8_t env;                                /* 1..: its loudness as recorded, MEL_ENV[env - 1] (the piano) */
     uint16_t dk, d1k, pk;                       /* a sound that dies away (dk 0: it does not): its decay per tape
                                                  * sample (Q24) and per 1024 (Q15), from its peak (sample pk) */
 } mel_zone_t;
@@ -70,6 +71,8 @@ typedef struct {                                /* a head on a tape: the ADPCM d
     uint32_t pos, frac;                         /* next sample to decode; where we are between s[1] and s[2], Q16 */
     int32_t pred, idx, gain, s[4];              /* the last four samples (4-point Hermite between the middle two) */
     int32_t dg;                                 /* a sound that dies away: how far it has, 0..ONE */
+    int32_t lp, kf;                             /* (env) its brightness: a low-pass closing as it dies away, Q14,
+                                                 * down to kf (4 x the note's pitch) */
 } head_t;
 
 static struct {
@@ -154,8 +157,26 @@ static int32_t adpcm_next(head_t *h)
     return h->pred;
 }
 
-/* put a head on tape t samples in (MEL_RATE's; past the end of the recording: round its loop) */
-static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
+static int32_t env_at(const mel_zone_t *z, uint32_t t)   /* a zone's loudness t of its samples in, Q15 */
+{
+    const uint16_t *e = MEL_ENV[z->env - 1u];
+    uint32_t i = t / MEL_ENV_STEP, f = (t % MEL_ENV_STEP) * 256u / MEL_ENV_STEP;
+    if (i + 1u >= MEL_ENV_N) return 0;
+    return (int32_t)e[i] + ((((int32_t)e[i + 1u] - (int32_t)e[i]) * (int32_t)f) >> 8);
+}
+static int32_t sqrt_u(uint32_t x)               /* floor(sqrt(x)) */
+{
+    uint32_t r = 0, b = 1u << 30;
+    while (b > x) b >>= 2;
+    for (; b; b >>= 2) {
+        if (x >= r + b) { x -= r + b; r = (r >> 1) + b; }
+        else r >>= 1;
+    }
+    return (int32_t)r;
+}
+
+/* put a head on tape t samples in (MEL_RATE's; past the end of the recording: round its loop), for the note n */
+static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain, uint32_t n)
 {
     uint32_t p, k, ck;
     t >>= z->sh;                                /* (in the zone's own samples from here) */
@@ -176,9 +197,15 @@ static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
             dg = (dg >> 15) * z->d1k;
         h->dg = dg;
     }
+    if (z->env) {                               /* 76 x 2^(n/12): 4 x its pitch, as a one-pole's coefficient, Q14 */
+        int32_t kf = (int32_t)((((MEL_POW2[n % 12u * 100u] >> 14) * 76u) >> 16) << (n / 12u));
+        h->kf = kf > 16384 ? 16384 : kf;
+        h->dg = env_at(z, t) << 9;
+    }
     h->s[1] = h->s[0] = adpcm_next(h);
     h->s[2] = adpcm_next(h);
     h->s[3] = adpcm_next(h);
+    h->lp = h->s[1];
 }
 
 static uint32_t layer_note(uint32_t note, int32_t oct)   /* the layer's note, OCTAVE away */
@@ -193,9 +220,11 @@ static void voice_head(uint32_t vi)             /* the heads on the current soun
     voice[vi].set = (uint8_t)st;
     voice[vi].layer = (uint8_t)ly;
     voice[vi].loct = (int8_t)p_loct;
-    head_start(&voice[vi].h, zone_of(st, note), tpos[note], g);
-    if (ly)                                     /* (the same tape, another track: as the M400's A B C) */
-        head_start(&voice[vi].h2, zone_of((ly - 1u) % MEL_NSETS, layer_note(note, p_loct)), tpos[note], g);
+    head_start(&voice[vi].h, zone_of(st, note), tpos[note], g, note);
+    if (ly) {                                   /* (the same tape, another track: as the M400's A B C) */
+        uint32_t ln = layer_note(note, p_loct);
+        head_start(&voice[vi].h2, zone_of((ly - 1u) % MEL_NSETS, ln), tpos[note], g, ln);
+    }
 }
 
 static int struck(void)                        /* the piano is on either track: a key strikes anew */
@@ -219,11 +248,17 @@ static void voice_start(uint32_t vi)
  * (and, a sound that dies away, as far as it has); step and t, the tape samples it read: MEL_RATE's */
 static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int32_t gm, uint32_t t)
 {
-    uint32_t i, ran = 0, frac = h->frac, sh = h->z->sh;
-    int32_t a = h->s[0], b = h->s[1], c = h->s[2], d = h->s[3], g = (h->gain * gm) >> 15;
+    uint32_t i, ran = 0, frac = h->frac, sh = h->z->sh, env = h->z->env;
+    int32_t a = h->s[0], b = h->s[1], c = h->s[2], d = h->s[3], g = (h->gain * gm) >> 15, k = 16384, lp = h->lp;
     step >>= sh;                                /* (the zone's own samples from here) */
     t >>= sh;
-    if (h->z->dk)
+    if (env) {                                  /* the piano: as loud as its recording was here, and as bright: the
+                                                 * low-pass closes with the square root of it (-20 dB: a third open) */
+        int32_t ge = env_at(h->z, t);
+        h->dg = ge << 9;
+        k = h->kf + (((16384 - h->kf) * sqrt_u((uint32_t)ge << 15)) >> 15);
+    }
+    if (h->z->dk || env)
         g = (g * (h->dg >> 9)) >> 15;
     for (i = 0; i < n; i++) {
         int32_t t, c1, c2, c3, y;
@@ -241,8 +276,13 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
         c2 = a - ((5 * b) >> 1) + 2 * c - (d >> 1);
         c3 = ((d - a) >> 1) + ((3 * (b - c)) >> 1);
         y = ((((((c3 * t) >> 12) + c2) * t >> 12) + c1) * t >> 12) + b;
+        if (env) {
+            lp += ((y - lp) * k) >> 14;
+            y = lp;
+        }
         acc[i] += (y * g) >> 15;
     }
+    h->lp = lp;
     h->frac = frac;
     h->s[0] = a;
     h->s[1] = b;
@@ -268,7 +308,11 @@ static void voice_sub(uint32_t vi, int32_t *mix, int32_t g16, int32_t drift, int
     if (voice[vi].gate && !voice[vi].ended)
         a1 = a0 + atk > ONE ? ONE : a0 + atk;  /* the head meets the tape (ATTACK) */
     else {
-        a1 = a0 - (((a0 >> 8) * (voice[vi].ended ? K_END : relk)) >> 8) - 64;
+        int32_t rk = voice[vi].ended ? K_END : relk;
+        if (MEL_SET_STRUCK[voice[vi].set] && note >= 89u && !voice[vi].ended)
+            rk = MEL_REL[95];                   /* a piano's keys from F6 up have no dampers: they ring on as they
+                                                 * would held (a slow fade, ~4.5 s to -60 dB, frees the voice) */
+        a1 = a0 - (((a0 >> 8) * rk) >> 8) - 64;
         if (a1 < 0) a1 = 0;
     }
     if (!a0 && !a1) {
@@ -447,7 +491,8 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 1, 1, 1},
 };
 
-#define SET_VER 7u
+#define SET_VER 8u                              /* (7: the same, but the piano's PLAY was the tapes': it starts
+                                                 * again from its own) */
 #define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
 typedef struct {
     uint8_t ver, np, half, rsv;                 /* half: HALF SPEED (a reserved byte before: older settings load, off) */
@@ -675,7 +720,7 @@ static void app_init(void)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && s.ver == SET_VER && s.np == NP)   /* (another version: the defaults) */
+    if (!settings_load(&s, sizeof s) && (s.ver == SET_VER || s.ver == 7u) && s.np == NP)   /* (else: the defaults) */
         n = NP;
     else if (!settings_load(o, sizeof *o) && o->ver == 6u && o->np == NP - 1u)
         n = NP - 1u;
@@ -689,9 +734,15 @@ static void app_init(void)
         for (k = 0; k < 64u; k++)
             set.steps[k / 4u][k % 4u] = st[k] < 128u ? st[k] : 0u;
     }
-    for (k = 0; k < MEL_NSETS * NPLAY; k++)     /* every sound's PLAY: its own, or (new) as PLAY was */
-        set.play[k / NPLAY][k % NPLAY] = n == NP ? play_ok(k % NPLAY, s.play[k / NPLAY][k % NPLAY])
-                                                 : set.p[P_TONE + k % NPLAY];
+    for (k = 0; k < MEL_NSETS * NPLAY; k++) {   /* every sound's PLAY: its own, or (new) as PLAY was; the piano's
+                                                 * from its own (before 8 it had the tapes') */
+        uint32_t st = k / NPLAY, i = k % NPLAY;
+        set.play[st][i] = n == NP && (s.ver == SET_VER || !MEL_SET_STRUCK[st]) ? play_ok(i, s.play[st][i])
+                        : n && !MEL_SET_STRUCK[st] ? set.p[P_TONE + i] : (int16_t)MEL_SET_PLAY[st][i];
+    }
+    if (PV(P_PMODE) || !n)                      /* (OWN: the knobs are the sound playing's) */
+        for (k = 0; k < NPLAY; k++)
+            set.p[P_TONE + k] = set.play[PV(P_SOUND)][k];
     set.p[P_STEP] = 0;
     apply();
     for (k = 0; k < 27u; k++)

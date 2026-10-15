@@ -19,14 +19,15 @@ semitones off), each:
     anywhere on its tape (a key pressed again before its tape is back) and the loop jumps exactly.
 The levels of a set are evened out half way (in dB) between its roots; then every set is brought to the same
 loudness (RMS of its sustain), so a change of tape is not a change of level.
-A set that dies away by itself (DECAYS: the vibraphone) has its decay measured per root (dB/s, after its peak) and
+A set that dies away by itself (DECAYS: the vibraphone; ENVS: the piano, its loudness as recorded, a table) has its decay measured per root (dB/s, after its peak) and
 flattened out of the samples, so its loop is level; the zone carries the decay and the firmware applies it as the
 tape runs: a held note dies as the real one does, and a note restarted mid-tape starts as quiet as the tape is.
 The piano (tools/get_piano.sh: VCSL, CC0) is not a Mellotron tape and is packed apart from the budget: every file
 is a root (a key every half octave), short (SECONDS: under a second, then its loop) at the full RATE, 22050 Hz: 4-bit
 ADPCM hisses over a piano's pure tones, ~8 dB less for every doubling of the rate (and a high key keeps its
 partials). Its strike is tamed (KNOCK: the hammer's thump under the note; SPIKE: a high key's first 20 ms, which a
-level match turned into a slap) and its keys evened out on their tone, all the way.
+level match turned into a slap) and its keys evened out on their tone, all the way. It dies away as recorded (ENVS:
+two stages, fast then a long tail, and its beating), its PLAY its own (PLAY: bright, at once, dampers of ~0.2 s).
 """
 import argparse
 import re
@@ -38,7 +39,7 @@ import numpy as np
 NAMES = {"MkII_Violins": "VIOLINS", "MkII_Flute": "FLUTE", "8_Choir": "CHOIR", "Cello": "CELLO", "Vibes": "VIBES",
          "Woodwind_2": "WOODWIND", "Piano": "PIANO"}
 SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's three tracks), D, E
-DECAYS = {"Vibes": 0.6, "Piano": 1.0}              # sets that die away by themselves, and their share of the flash:
+DECAYS = {"Vibes": 0.6}                           # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
 SECONDS = {"Piano": (0.85, 0.5)}                   # sets of a fixed length (s, its lowest root .. its highest: a high
@@ -48,6 +49,13 @@ SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 110
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
                                                    # (a tape's key pressed again goes on where its tape is: the
                                                    # vibraphone as quiet as it has died away to, a piano never)
+ENVS = {"Piano"}                                   # sets that die away as their recording does: its loudness every
+ENV_STEP, ENV_N = 4096, 64                         # ENV_STEP samples (0.19 s at 22050 Hz), ENV_N of them (11.9 s),
+                                                   # taken out of the samples (a level loop) and put back by the
+                                                   # firmware: a piano's two-stage decay (fast, then a long tail) and
+                                                   # its beating, as recorded, after a loop of under a second
+PLAY = {"Piano": (88, 0, 0, 42)}                   # a set's own PLAY to start from (TONE PITCH ATTACK RELEASE; else
+PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano bright, at once, its dampers ~0.2 s
 SPIKE = {"Piano": (12, 6)}                         # sets whose strike's spike is held down (dB over their tone, at
                                                    # the lowest root .. the highest)
 KNOCK = {"Piano": (3, 12)}                         # sets whose hammer knock is turned down (dB at the lowest root ..
@@ -194,6 +202,32 @@ def ima_encode(s):
     return bytes(out), cks
 
 
+def env_of(x, rate):
+    """a sound's loudness every ENV_STEP samples, ENV_N of them, Q15 of its loudest (1 at 0): RMS over ENV_STEP / 2
+    around each point; where the recording has ended or sunk into its own noise, its last 1.5 s's slope goes on;
+    the last point 0"""
+    w = ENV_STEP // 4
+    noise = rms(x[-int(0.25 * rate):])
+    e = []
+    for i in range(ENV_N):
+        a, b = max(0, i * ENV_STEP - w), i * ENV_STEP + w
+        v = rms(x[a:b]) if b <= len(x) else 0.0
+        e.append(v if v > 3 * noise else np.nan)
+    e = np.array(e)
+    good = np.where(~np.isnan(e))[0]
+    last = good[-1] if len(good) else 0
+    e[:last + 1] = np.interp(np.arange(last + 1), good, e[good])   # (a dip into the noise, mid-way: across it)
+    db = 20 * np.log10(e[:last + 1])
+    k = max(1, last - int(1.5 * rate / ENV_STEP))
+    slope = np.polyfit(np.arange(k, last + 1), db[k:], 1)[0] if last - k >= 2 else -6 * ENV_STEP / rate
+    slope = min(slope, -1.0 * ENV_STEP / rate)  # (it dies away: at least 1 dB/s)
+    for i in range(last + 1, ENV_N):
+        e[i] = 10 ** ((db[last] + slope * (i - last)) / 20)
+    g = np.minimum(1.0, e / np.nanmax(e[:3]))
+    g[0], g[-1] = 1.0, 0.0
+    return np.round(g * 32767).astype(int)
+
+
 def decay_of(x, rate):
     """(peak sample, decay in dB/s after it) of a sound that dies away"""
     w = max(1, int(0.05 * rate))
@@ -243,13 +277,18 @@ def build(src, budget, step, rate, which):
             if d in SPIKE:
                 a, b = SPIKE[d]
                 seg = soften_strike(seg, zr, a + (b - a) * i / max(1, len(roots) - 1))
-            if d in DECAYS:                      # take the decay out: a level loop
+            if d in ENVS:                        # take its loudness out: a level loop (the firmware puts it back)
+                env = env_of(x[o:], zr)
+                gi = np.interp(np.arange(len(seg)), np.arange(ENV_N) * ENV_STEP, env / 32767)
+                out.setdefault("envs", []).append(env)
+                decs.append((0, 0.0, len(out["envs"]), gi))   # (taken out once its level is set: as it sounds)
+            elif d in DECAYS:                    # take the decay out: a level loop
                 pk, dbs = decay_of(x[o:], zr)
                 t = np.maximum(0, np.arange(len(seg)) - pk) / zr
                 seg = seg * 10 ** (dbs * t / 20)
-                decs.append((pk, dbs))
+                decs.append((pk, dbs, 0, None))
             else:
-                decs.append((0, 0.0))
+                decs.append((0, 0.0, 0, None))
             segs.append((r, seg))
         if d in SECONDS:                         # the piano: its keys as loud as each other where it is heard, the
             lv = np.array([20 * np.log10(rms(s[int(0.03 * zr):int(0.3 * zr)])) for _, s in segs])   # strike, all
@@ -259,8 +298,12 @@ def build(src, budget, step, rate, which):
         z0 = len(out["zones"])
         gains = 10 ** ((lv.mean() - lv) / (1 if d in SECONDS else 2) / 20)   # (the tapes: half way to their mean)
         segs = [(r, s * g) for (r, s), g in zip(segs, gains)]
-        level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
+        if d in SECONDS:                         # (the piano: its tone, as for its keys, 3.5 dB over the tapes' sustain:
+            level = np.sqrt(np.mean([rms(s[int(0.03 * zr):int(0.3 * zr)]) ** 2 for _, s in segs])) / 1.5   # it dies)
+        else:
+            level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
         segs = [(r, s * TARGET_RMS / level) for r, s in segs]      # every set as loud as the others
+        segs = [(r, s if dc[3] is None else s / np.maximum(dc[3], 1e-3)) for (r, s), dc in zip(segs, decs)]
         if d in SOFT:                            # linear to 0.6, then a tanh to 0.95
             segs = [(r, np.where(np.abs(s) < 0.6, s, np.sign(s) * (0.6 + 0.35 * np.tanh((np.abs(s) - 0.6) / 0.35))))
                     for r, s in segs]
@@ -273,13 +316,14 @@ def build(src, budget, step, rate, which):
             data, cks = ima_encode(pcm)
             lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
             hi = r + (roots[i + 1] - r) // 2 if i + 1 < len(roots) else 127
-            pk, dbs = decs[i]
+            pk, dbs, ev, _ = decs[i]
             dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r, lo=lo, hi=hi,
-                                     sh=sh, dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
+                                     sh=sh, env=ev, dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
             out["ck"] += cks
         out["sets"].append((name, z0, len(roots), d in STRUCK))
+        out.setdefault("play", []).append(PLAY.get(d, PLAY_ELSE))
     return out, int(per0) // CK * CK
 
 
@@ -368,9 +412,17 @@ def write(out, path, rate, per):
          "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _, _ in out["sets"]) + "};",
          "static const uint8_t MEL_SET_NZ[MEL_NSETS] = {" + ", ".join(str(b) for _, _, b, _ in out["sets"]) + "};",
          "static const uint8_t MEL_SET_STRUCK[MEL_NSETS] = {" + ", ".join(str(int(k)) for *_, k in out["sets"]) + "};",
+         "static const int8_t MEL_SET_PLAY[MEL_NSETS][4] = {   /* its own PLAY to start from: TONE PITCH ATTACK RELEASE */",
+         "    " + ", ".join("{" + ", ".join(str(v) for v in q) + "}" for q in out["play"]) + "};",
+         f"#define MEL_ENV_STEP {ENV_STEP}u                 /* a zone's loudness (env 1..): every MEL_ENV_STEP of its samples */",
+         f"#define MEL_ENV_N {ENV_N}u",
+         "static const uint16_t MEL_ENV[][MEL_ENV_N] = {   /* Q15; between two points, a straight line */"]
+    for e in out.get("envs", [[0] * ENV_N]):
+        L.append("    {" + ", ".join(str(v) for v in e) + "},")
+    L += ["};",
          "static const mel_zone_t MEL_ZONE[MEL_NZONES] = {"]
     for q in z:
-        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, "
+        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, {q['env']}, "
                  f"{q['dk']}u, {q['d1k']}u, {q['pk']}u}},")
     L.append("};")
     L.append("static const uint32_t MEL_CKS[] = {   /* (uint16_t)predictor | step index << 16 */")

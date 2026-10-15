@@ -561,7 +561,7 @@ static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, t
     char s[12];
     tx(8, 0, &F16, own ? "Each sound its own PLAY:" : "PLAY is one for all:", C_INK);
     for (i = 0; i < NPLAY; i++)
-        tx_c(108 + (int32_t)i * 38, 16, &F16, HEAD[i], C_INK2);
+        tx_c(100 + (int32_t)i * 41, 16, &F16, HEAD[i], C_INK2);
     for (k = 0; k < MEL_NSETS; k++) {
         int32_t y = 31 + (int32_t)k * 15;
         uint16_t c = k == snd ? C_INK : own ? C_INK2 : C_BODY2;
@@ -571,7 +571,7 @@ static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, t
         for (i = 0; i < NPLAY; i++) {           /* (the one playing: the knobs as they are) */
             int32_t v = k == snd || !own ? PV(P_TONE + i) : set.play[k][i];
             put_int(s, v, i == 1u);
-            tx_c(108 + (int32_t)i * 38, y, &F16, s, c);
+            tx_c(100 + (int32_t)i * 41, y, &F16, s, c);
         }
     }
 }
