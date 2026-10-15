@@ -554,6 +554,28 @@ static void stage_setup(void)                   /* SETUP: the four settings, and
     }
 }
 
+static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, the one playing lit */
+{
+    static const char *const HEAD[NPLAY] = {"TONE", "PITCH", "ATK", "REL"};
+    uint32_t k, i, own = (uint32_t)PV(P_PMODE), snd = (uint32_t)PV(P_SOUND);
+    char s[12];
+    tx(8, 0, &F16, own ? "Each sound its own PLAY:" : "PLAY is one for all:", C_INK);
+    for (i = 0; i < NPLAY; i++)
+        tx_c(108 + (int32_t)i * 38, 16, &F16, HEAD[i], C_INK2);
+    for (k = 0; k < MEL_NSETS; k++) {
+        int32_t y = 31 + (int32_t)k * 15;
+        uint16_t c = k == snd ? C_INK : own ? C_INK2 : C_BODY2;
+        if (k == snd) rrect(2, y + 4, 6, 8, 3, C_LAMP);
+        s[0] = (char)('A' + k); s[1] = ' '; put(s + 2, MEL_SET_NAME[k]);
+        tx(12, y, &F16, s, c);
+        for (i = 0; i < NPLAY; i++) {           /* (the one playing: the knobs as they are) */
+            int32_t v = k == snd || !own ? PV(P_TONE + i) : set.play[k][i];
+            put_int(s, v, i == 1u);
+            tx_c(108 + (int32_t)i * 38, y, &F16, s, c);
+        }
+    }
+}
+
 static void stage_arp(void)                     /* ARP: the mode, the arpeggio (the note sounding lit) */
 {
     uint32_t i, n = arp_n, lo = 127;
@@ -664,7 +686,7 @@ static void ui_motion(void)                     /* the cassette's reels and coun
 static void draw_stage(void)
 {
     static void (*const STAGE[NPG])(void) = {stage_play, stage_layer, stage_tape, stage_wear, stage_vib, stage_echo, stage_verb,
-                                             stage_eq, stage_setup, stage_arp, stage_seq};
+                                             stage_eq, stage_setup, stage_sounds, stage_arp, stage_seq};
     cv_begin(240, STAGE_H, C_BODY);
     cv_oy = (STAGE_H - 108) / 2;
     STAGE[page]();
@@ -763,6 +785,8 @@ static void draw_plate(void)                    /* the aluminium plate: the knob
         char v[16];
         int32_t cx = 30 + (int32_t)k * 60;
         int lit = touched == k;
+        if (k) cv_rect(cx - 30, 23, 1, 32, RGB(90, 84, 76));   /* the dividers */
+        if (!c->name) continue;                 /* (no knob there) */
         fmt_val(c, PV(c->pid), v);
         tx_c(cx, 3, &F16, c->name, C_INK);      /* the name, printed black on the plate */
         if (lit) {                              /* the knob just turned: its quarter amber (round only at the ends) */
@@ -771,7 +795,6 @@ static void draw_plate(void)                    /* the aluminium plate: the knob
             if (k) cv_rect(x0, 20, 4, 38, C_LAMP);
             if (k < 3u) cv_rect(x1 - 4, 20, 4, 38, C_LAMP);
         }
-        if (k) cv_rect(cx - 30, 23, 1, 32, RGB(90, 84, 76));   /* the dividers */
         plate_val(cx, 21, v, lit ? C_INK : C_BODY);
         plate_bar(cx, 51, c->pid, c->pid == P_STEP ? (int32_t)seq_cur * 256 / 15 : pos256(c->pid),
                   lit ? RGB(176, 92, 30) : RGB(84, 78, 72), lit ? C_INK : C_BODY);

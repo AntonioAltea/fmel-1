@@ -235,9 +235,9 @@ def tables():
         x = 2 * i / 256
         y = x if x < 0.6 else 0.6 + 0.4 * np.tanh((x - 0.6) / 0.4)
         sat.append(round(32767 * min(y, 1)))
-    atk = []                                     # ATTACK 0..100: 3 ms .. 1.8 s, the rise per 32 frames, Q24
-    for v in range(101):
-        t = 0.003 * 600 ** (v / 100)
+    atk = []                                     # ATTACK 0..100: 3 ms .. 2 s, the rise per 32 frames, Q24; as v^1.5, so
+    for v in range(101):                         # the knob is felt from ~10 on (10: 66 ms, 20: 0.18 s, 50: 0.71 s; an
+        t = 0.003 + 2.0 * (v / 100) ** 1.5       # exponential spent its first 40 under the tapes' own rise, 40-70 ms)
         atk.append(min(1 << 24, round((1 << 24) * 32 / (t * SRC_RATE))))
     lfo = [round(0.5 * 20 ** (v / 100) * 2 ** 32 / SRC_RATE) for v in range(101)]   # VIBRATO RATE: 0.5 .. 10 Hz
     lfo10 = [round(0.5 * 20 ** (v / 100) * 10) for v in range(101)]

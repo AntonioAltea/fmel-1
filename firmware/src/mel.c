@@ -6,7 +6,8 @@
  *
  * The panel: a button is a section; pressed again it turns its pages; SELECT turns them too. On every page the
  * four knobs do what the screen's aluminium plate says (on FX pages the last one is always MIX).
- *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK, RELEASE; HOME again: the next sound
+ *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK, RELEASE (each sound its own: SETUP's SOUNDS);
+ *                  HOME again: the next sound
  *   SEL    LAYER   a second sound on the same tape's other track: SOUND (OFF A B C D E), MIX (between the two), OCTAVE,
  *                  DETUNE; on its page SEL again turns the SOUND (lit: a layer sounds)
  *   LFO    LOFI    TAPE: WOW, FLUTTER, DRIVE (into the tape: saturation), HISS  -  WEAR: AGE (a copy of a copy:
@@ -15,11 +16,13 @@
  *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; lit: in, dark: out)
  *   EDIT   EQ      LOW, MID, FREQ (the mid's), HIGH; held 0.6 s: back to flat
  *   GLO    SETUP   TEMPO (ARP, SEQ), TUNE (fine: to play along with others), LENGTH (a note: as long as held / 8 s,
- *                  as on the M400), SCREEN (the old-tape look / clean); the screen says what each one does
+ *                  as on the M400), SCREEN (the old-tape look / clean); the screen says what each one does.
+ *          SOUNDS  GLO again: PLAY OWN (each sound its own PLAY) / SHARED (one for all); every sound's PLAY, a table
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
  *   SEQ    SEQ     16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING; PLAY start / stop, REC record
  *                  (step recording: SEL is a rest, SEL held 1 s clears the pattern)
- *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO (a track selector)   ALGORITHM the tempo, anywhere
+ *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO (a track selector: it stops at A and E; HOME goes
+ *          round)   ALGORITHM the tempo, anywhere
  *   ENV    HOLD    the notes stay after you let go; the next chord replaces them
  *          held    ENV held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
  *                  octave down and twice as long, its wow and flutter slower; it slows down and speeds up in ~0.4 s
@@ -425,6 +428,7 @@ enum {
     P_BPM, P_TUNE, P_LEN, P_LOOK,               /* SETUP */
     P_AMODE, P_ARATE, P_AOCT, P_AGATE,          /* ARP */
     P_SLEN, P_SGATE, P_STEP, P_SWING,           /* SEQ */
+    P_PMODE,                                    /* SETUP: SOUNDS (PLAY: each sound its own, or one for all) */
     NP
 };
 static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
@@ -440,14 +444,22 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {40, 240, 90, 1}, {-50, 50, 0, 1}, {0, 1, 0, 1}, {0, 1, 1, 1},
     {0, 4, 0, 1}, {0, 5, 3, 1}, {1, 3, 1, 1}, {10, 100, 60, 5},
     {1, 16, 16, 1}, {10, 100, 80, 5}, {0, 15, 0, 1}, {0, 100, 0, 5},
+    {0, 1, 1, 1},
 };
 
-#define SET_VER 6u
+#define SET_VER 7u
+#define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
 typedef struct {
     uint8_t ver, np, half, rsv;                 /* half: HALF SPEED (a reserved byte before: older settings load, off) */
     int16_t p[NP];
     uint8_t steps[16][4];                       /* the pattern: up to 4 notes a step, 0 = none */
+    int16_t play[MEL_NSETS][NPLAY];             /* every sound's PLAY (the one playing: in p, here when it changes) */
 } mel_set_t;
+typedef struct {                                /* version 6, before SOUNDS: it loads, its PLAY every sound's */
+    uint8_t ver, np, half, rsv;
+    int16_t p[NP - 1u];
+    uint8_t steps[16][4];
+} mel_set6_t;
 static mel_set_t set;
 #define PV(i) ((int32_t)set.p[i])
 
@@ -515,22 +527,24 @@ static char *put_int(char *p, int32_t v, int sign)
 }
 
 /* ---- the pages: a button is a section (a group of pages); its knobs, what they show */
-enum { PG_PLAY, PG_LAYER, PG_TAPE, PG_WEAR, PG_VIB, PG_ECHO, PG_VERB, PG_EQ, PG_SETUP, PG_ARP, PG_SEQ, NPG };
+enum { PG_PLAY, PG_LAYER, PG_TAPE, PG_WEAR, PG_VIB, PG_ECHO, PG_VERB, PG_EQ, PG_SETUP, PG_SOUNDS, PG_ARP, PG_SEQ, NPG };
 enum { G_PLAY, G_LAYER, G_LOFI, G_FX, G_EQ, G_SETUP, G_ARP, G_SEQ, NG };
-static const uint8_t PG_GROUP[NPG] = {G_PLAY, G_LAYER, G_LOFI, G_LOFI, G_FX, G_FX, G_FX, G_EQ, G_SETUP, G_ARP, G_SEQ};
+static const uint8_t PG_GROUP[NPG] = {G_PLAY, G_LAYER, G_LOFI, G_LOFI, G_FX, G_FX, G_FX, G_EQ, G_SETUP, G_SETUP, G_ARP,
+                                      G_SEQ};
 static const uint8_t G_FIRST[NG] = {PG_PLAY, PG_LAYER, PG_TAPE, PG_VIB, PG_EQ, PG_SETUP, PG_ARP, PG_SEQ};
-static const uint8_t G_COUNT[NG] = {1, 1, 2, 3, 1, 1, 1, 1};
+static const uint8_t G_COUNT[NG] = {1, 1, 2, 3, 1, 2, 1, 1};
 static const char *const G_NAME[NG] = {"PLAY", "LAYER", "LOFI", "FX", "EQ", "SETUP", "ARP", "SEQ"};
-static const char *const PG_NAME[NPG] = {"PLAY", "LAYER", "TAPE", "WEAR", "VIBRATO", "ECHO", "REVERB", "EQ", "SETUP", "ARP",
-                                         "SEQ"};
+static const char *const PG_NAME[NPG] = {"PLAY", "LAYER", "TAPE", "WEAR", "VIBRATO", "ECHO", "REVERB", "EQ", "SETUP",
+                                         "SOUNDS", "ARP", "SEQ"};
 enum { F_NUM, F_ST, F_DB, F_CT, F_PCT, F_EMS, F_PMS, F_VHZ, F_EQHZ, F_X, F_STEP, F_BPM, F_SND, F_OCT, F_ENUM };
 typedef struct {
     uint8_t pid, fmt;
-    const char *name;
+    const char *name;                           /* 0: no knob there */
     const char *const *names;                   /* F_ENUM */
 } ctl_t;
 static const char *const N_LEN[2] = {"HELD", "8 SEC"};
 static const char *const N_LOOK[2] = {"CLEAN", "TAPE"};
+static const char *const N_PMODE[2] = {"SHARED", "OWN"};
 static const char *const ARP_MODE[5] = {"UP", "DOWN", "UP+DN", "RANDOM", "PLAYED"};
 static const char *const ARP_RATE[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
 static const ctl_t CTL[NPG][4] = {
@@ -544,6 +558,7 @@ static const ctl_t CTL[NPG][4] = {
     {{P_EQLO, F_DB, "LOW", 0}, {P_EQMID, F_DB, "MID", 0}, {P_EQFREQ, F_EQHZ, "FREQ", 0}, {P_EQHI, F_DB, "HIGH", 0}},
     {{P_BPM, F_BPM, "TEMPO", 0}, {P_TUNE, F_CT, "TUNE", 0}, {P_LEN, F_ENUM, "LENGTH", N_LEN},
      {P_LOOK, F_ENUM, "SCREEN", N_LOOK}},
+    {{P_PMODE, F_ENUM, "PLAY", N_PMODE}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{P_AMODE, F_ENUM, "MODE", ARP_MODE}, {P_ARATE, F_ENUM, "RATE", ARP_RATE}, {P_AOCT, F_X, "OCTAVES", 0},
      {P_AGATE, F_PCT, "GATE", 0}},
     {{P_SLEN, F_NUM, "LENGTH", 0}, {P_SGATE, F_PCT, "GATE", 0}, {P_STEP, F_STEP, "STEP", 0}, {P_SWING, F_PCT, "SWING", 0}},
@@ -647,22 +662,36 @@ static void go_group(uint32_t g)                /* a section's button: its page,
 static uint32_t prev_keys;
 static uint8_t held_note[27], midi_note[128];
 
+static int16_t play_ok(uint32_t k, int32_t v)  /* a stored PLAY value, or its default if out of range */
+{
+    return (int16_t)(v >= PINFO[P_TONE + k][0] && v <= PINFO[P_TONE + k][1] ? v : PINFO[P_TONE + k][2]);
+}
 static void app_init(void)
 {
-    uint32_t k;
-    mel_set_t s;
+    uint32_t k, n = 0;
+    static mel_set_t s;                         /* (a version 6 loads into its start) */
+    mel_set6_t *o = (mel_set6_t *)(void *)&s;
     for (k = 0; k < NP; k++)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && s.ver == SET_VER && s.np == NP) {   /* (another version: the defaults) */
+    if (!settings_load(&s, sizeof s) && s.ver == SET_VER && s.np == NP)   /* (another version: the defaults) */
+        n = NP;
+    else if (!settings_load(o, sizeof *o) && o->ver == 6u && o->np == NP - 1u)
+        n = NP - 1u;
+    if (n) {
+        const int16_t *p = n == NP ? s.p : o->p;
+        const uint8_t *st = n == NP ? &s.steps[0][0] : &o->steps[0][0];
         set.half = s.half == 1u;
-        for (k = 0; k < NP; k++)
-            if (s.p[k] >= PINFO[k][0] && s.p[k] <= PINFO[k][1])
-                set.p[k] = s.p[k];
+        for (k = 0; k < n; k++)
+            if (p[k] >= PINFO[k][0] && p[k] <= PINFO[k][1])
+                set.p[k] = p[k];
         for (k = 0; k < 64u; k++)
-            set.steps[k / 4u][k % 4u] = s.steps[k / 4u][k % 4u] < 128u ? s.steps[k / 4u][k % 4u] : 0u;
+            set.steps[k / 4u][k % 4u] = st[k] < 128u ? st[k] : 0u;
     }
+    for (k = 0; k < MEL_NSETS * NPLAY; k++)     /* every sound's PLAY: its own, or (new) as PLAY was */
+        set.play[k / NPLAY][k % NPLAY] = n == NP ? play_ok(k % NPLAY, s.play[k / NPLAY][k % NPLAY])
+                                                 : set.p[P_TONE + k % NPLAY];
     set.p[P_STEP] = 0;
     apply();
     for (k = 0; k < 27u; k++)
@@ -672,12 +701,28 @@ static void app_init(void)
     say("v" APP_VER);
 }
 
-static void next_sound(int32_t d)               /* the sound d further on: A B C D E, round and round */
+static void play_keep(void)                     /* OWN: the PLAY knobs to the sound playing's */
 {
-    int32_t n = (int32_t)MEL_NSETS;
+    uint32_t k;
+    if (PV(P_PMODE))
+        for (k = 0; k < NPLAY; k++)
+            set.play[PV(P_SOUND)][k] = set.p[P_TONE + k];
+}
+static void play_take(void)                     /* OWN: the sound playing's to the PLAY knobs */
+{
+    uint32_t k;
+    if (PV(P_PMODE))
+        for (k = 0; k < NPLAY; k++)
+            set.p[P_TONE + k] = set.play[PV(P_SOUND)][k];
+}
+static void to_sound(int32_t v)                 /* the sound v (A = 0), with its PLAY */
+{
     char s[24] = {0, ' ', ' ', 0};
-    set.p[P_SOUND] = (int16_t)(((PV(P_SOUND) + d) % n + n) % n);
+    play_keep();
+    set.p[P_SOUND] = (int16_t)v;
+    play_take();
     changed(99);
+    redraw |= 8u;
     s[0] = (char)('A' + PV(P_SOUND));
     put(s + 3, MEL_SET_NAME[PV(P_SOUND)]);
     say(s);
@@ -689,7 +734,7 @@ static void buttons(void)
     if (b & (1u << BTN_OCT_DOWN) && set_param(P_OCT, PV(P_OCT) - 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE -" : "OCTAVE 0"); }
     if (b & (1u << BTN_OCT_UP) && set_param(P_OCT, PV(P_OCT) + 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE +" : "OCTAVE 0"); }
     if (b & (1u << BTN_HOME)) {                 /* HOME: to PLAY; there, the next sound */
-        if (PG_GROUP[page] == G_PLAY) next_sound(1);
+        if (PG_GROUP[page] == G_PLAY) to_sound((PV(P_SOUND) + 1) % (int32_t)MEL_NSETS);   /* (round and round) */
         else go_group(G_PLAY);
     }
     /* LFO and FX: a press turns to the section (or its next page) when let go; held 0.6 s, its bypass instead */
@@ -789,8 +834,11 @@ static void knobs(void)
 {
     uint32_t k, g = PG_GROUP[page];
     int32_t d;
-    if ((d = turn(ENC_PRESETS)) != 0)           /* the sound, on every page: A B C, round and round */
-        next_sound(d);
+    if ((d = turn(ENC_PRESETS)) != 0) {         /* the sound, on every page: A .. E, and there it stops */
+        int32_t v = PV(P_SOUND) + d, hi = (int32_t)MEL_NSETS - 1;
+        v = v < 0 ? 0 : v > hi ? hi : v;
+        if (v != PV(P_SOUND)) to_sound(v);
+    }
     if ((d = turn(ENC_SELECT)) != 0 && G_COUNT[g] > 1u) {   /* SELECT: the section's pages */
         int32_t n = G_COUNT[g];
         page = G_FIRST[g] + (uint32_t)((((int32_t)(page - G_FIRST[g]) + d) % n + n) % n);
@@ -806,7 +854,15 @@ static void knobs(void)
     set.p[P_STEP] = (int16_t)seq_cur;
     for (k = 0; k < 4u; k++) {                  /* KNOB 1..4: this page's */
         const ctl_t *c = &CTL[page][k];
-        if ((d = turn(ENC_KNOB1 + k)) != 0 && set_param(c->pid, PV(c->pid) + d * PINFO[c->pid][3])) {
+        if ((d = turn(ENC_KNOB1 + k)) != 0 && c->pid == P_PMODE && c->name) {   /* SOUNDS: OWN keeps, then takes */
+            play_keep();
+            if (set_param(P_PMODE, PV(P_PMODE) + d)) {
+                play_take();
+                changed(k);
+            }
+            continue;
+        }
+        if (d && c->name && set_param(c->pid, PV(c->pid) + d * PINFO[c->pid][3])) {
             if (c->pid == P_STEP) { seq_cur = (uint32_t)PV(P_STEP); chord_open = 0; touched = k; redraw |= 10u; continue; }
             if (c->pid == P_SLEN) {
                 if (seq_cur >= (uint32_t)PV(P_SLEN)) seq_cur = 0;
@@ -931,6 +987,7 @@ static void app_loop(void)
     redraw = 0;
 
     if (((dirty && fm1_ms - t_change > 2000u) || save_req) && quiet()) {
+        play_keep();
         settings_save(&set, sizeof set);        /* only when silent: an erase stalls the sound */
         if (save_req) say("SAVED");
         dirty = 0;
