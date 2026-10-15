@@ -162,7 +162,7 @@ def tame_knock(x, rate, db, midi):
 
 
 def steady_tail(x, rate, midi, real_end, xf=0.12):
-    """x (level: its decay taken out) as recorded up to real_end s, then crossfaded (equal power, xf s) into a strictly
+    """x (level: its decay taken out) as recorded up to real_end s, then crossfaded (xf s) into a strictly
     periodic tone of its own partials (their levels and phases measured around the crossfade), on whose last block of
     whole periods (0.05-0.12 s) it loops -> (samples, ls). A piano's unison strings beat: a loop of its recording
     brought that beat round at every turn, a few times a second, a vibrato; a ROMpler loops a steady cycle instead"""
@@ -189,15 +189,20 @@ def steady_tail(x, rate, midi, real_end, xf=0.12):
         near = np.where((f > k * f0 * 0.98) & (f < k * f0 * 1.06))[0]
         if not len(near): break
         j = near[np.argmax(np.abs(S[near]))]
+        floor = np.median(np.abs(S[(f > (k - 0.5) * f0) & (f < (k + 0.5) * f0)]))
+        if np.abs(S[j]) < 4 * floor:             # (a peak of noise, not a partial: 12 dB over its floor or nothing)
+            continue
         amp = 2 * np.abs(S[j]) / w.sum()
         ph = np.angle(S[j]) + 2 * np.pi * f[j] * h / rate   # (its phase at the window's middle, c)
         syn += amp * np.cos(2 * np.pi * k * fp * t + ph)
+    ref = rms(x[a - int(0.25 * rate):a])        # as loud as the recording before it, over its beating (its unison
+    syn *= ref / rms(syn[ls:ls + L])            # strings, adding up in the window, measured louder than they sound)
     y = syn.copy()
     n = min(len(x), ls + L)
     y[:a] = x[:a]
     fade = np.clip((np.arange(a, ls + L) - a) / (b - a), 0, 1)
     xs = np.concatenate([x[a:n], np.zeros(ls + L - n)])
-    y[a:] = xs * np.cos(fade * np.pi / 2) + syn[a:] * np.sin(fade * np.pi / 2)
+    y[a:] = xs * (1 - fade) + syn[a:] * fade    # (straight: the two are in phase, equal power added 3 dB mid-way)
     return y, ls
 
 
@@ -244,11 +249,24 @@ def ima_encode(s):
     return bytes(out), cks
 
 
+def falling(v):
+    """the closest never-rising curve to v (least squares: pool-adjacent-violators)"""
+    blocks = []                                 # [sum, count]
+    for x in v:
+        blocks.append([x, 1])
+        while len(blocks) > 1 and blocks[-2][0] / blocks[-2][1] < blocks[-1][0] / blocks[-1][1]:
+            s_, c = blocks.pop()
+            blocks[-1][0] += s_
+            blocks[-1][1] += c
+    return np.concatenate([np.full(c, s_ / c) for s_, c in blocks])
+
+
 def env_of(x, rate):
-    """a sound's loudness every ENV_STEP samples, ENV_N of them, Q15 of its loudest (1 at 0): RMS over ENV_STEP / 2
-    around each point; where the recording has ended or sunk into its own noise, its last 1.5 s's slope goes on;
-    the last point 0"""
-    w = ENV_STEP // 4
+    """a sound's loudness every ENV_STEP samples, ENV_N of them, Q15 of its loudest (1 at 0): RMS over 2 ENV_STEP
+    around each point, never rising again (its beating left to its samples: in the table SUSTAIN, which runs it
+    faster or slower, put the beat's dips where the samples had none, a bump of up to 9 dB); where the recording has
+    ended or sunk into its own noise, its last 1.5 s's slope goes on; the last point 0"""
+    w = ENV_STEP
     noise = rms(x[-int(0.25 * rate):])
     e = []
     for i in range(ENV_N):
@@ -266,7 +284,8 @@ def env_of(x, rate):
     for i in range(last + 1, ENV_N):
         e[i] = 10 ** ((db[last] + slope * (i - last)) / 20)
     g = np.minimum(1.0, e / np.nanmax(e[:3]))
-    g[0], g[-1] = 1.0, 0.0
+    g = np.minimum(1.0, 10 ** (falling(20 * np.log10(np.maximum(g, 1e-6))) / 20))   # (in dB: a beat's dip and
+    g[0], g[-1] = 1.0, 0.0                      # what follows it averaged, not its dip held)
     return np.round(g * 32767).astype(int)
 
 
@@ -322,12 +341,6 @@ def build(src, budget, step, rate, which):
             if d in ENVS:                        # take its loudness out: a level loop (the firmware puts it back)
                 env = env_of(x[o:], zr)
                 gi = np.interp(np.arange(len(seg)), np.arange(ENV_N) * ENV_STEP, env / 32767)
-                w = int(0.04 * zr)               # after the strike, level to the ms (its beating out too: looped, it
-                fine = np.sqrt(np.convolve(seg * seg, np.hanning(w) / np.hanning(w).sum(), mode="same")) + 1e-9
-                t0, t1 = int(0.10 * zr), int(0.15 * zr)   # came round at every turn, a tremolo); the table's
-                k = fine[(t0 + t1) // 2] / gi[(t0 + t1) // 2]   # coarser curve does the dying, as recorded
-                bl = np.clip((np.arange(len(seg)) - t0) / (t1 - t0), 0, 1)
-                gi = np.exp((1 - bl) * np.log(np.maximum(gi, 1e-6)) + bl * np.log(fine / k))
                 out.setdefault("envs", []).append(env)
                 decs.append((0, 0.0, len(out["envs"]), gi))   # (taken out once its level is set: as it sounds)
             elif d in DECAYS:                    # take the decay out: a level loop
