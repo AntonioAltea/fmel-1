@@ -172,14 +172,14 @@ const BTN = { "OCT-": 0, "OCT+": 1, FX: 2, SEL: 3, ENV: 4, LFO: 5, EDIT: 6, GLO:
 const ENC = { SELECT: 0, ALGORITHM: 1, KNOB1: 2, KNOB2: 3, KNOB3: 4, KNOB4: 5, PRESETS: 6 };
 let lang = document.documentElement.lang === "es" ? "es" : "en";
 const TEXT = {                                  // [what it is, what holding it does] above the buttons; under the knobs
-  en: { SELECT: ["PAGE"], ALGORITHM: ["TEMPO"], PRESETS: ["SOUND A–D"], MASTER: ["VOLUME"], KNOB: ["see screen"],
+  en: { SELECT: ["PAGE"], ALGORITHM: ["TEMPO"], PRESETS: ["SOUND A–E"], MASTER: ["VOLUME"], KNOB: ["see screen"],
         HOME: ["PLAY", "again: sound"], LFO: ["LOFI", "hold: out"], FX: ["", "hold: out"], EDIT: ["EQ", "hold: flat"],
         GLO: ["SETUP"], ENV: ["HOLD", "hold: half"], SEL: ["LAYER"], PLAY: ["SEQ ▶"], REC: [""],
         off: "Off. The sound starts when you switch it on.", loading: "Loading the tapes…",
         on: "On. Play with the mouse, the keyboard or a MIDI keyboard.", fail: "Could not start: ", error: "Error: ",
         midi: "Connect MIDI", midiOn: "MIDI connected", noMidi: "This browser has no Web MIDI (try Chrome or Edge).",
         midiNone: "MIDI connected, but there is no MIDI keyboard.", midiNo: "MIDI not allowed: ", key: "key" },
-  es: { SELECT: ["PÁGINA"], ALGORITHM: ["TEMPO"], PRESETS: ["SONIDO A–D"], MASTER: ["VOLUMEN"], KNOB: ["ver pantalla"],
+  es: { SELECT: ["PÁGINA"], ALGORITHM: ["TEMPO"], PRESETS: ["SONIDO A–E"], MASTER: ["VOLUMEN"], KNOB: ["ver pantalla"],
         HOME: ["PLAY", "otra: sonido"], LFO: ["LOFI", "mant: fuera"], FX: ["", "mant: fuera"], EDIT: ["EQ", "mant: plano"],
         GLO: ["SETUP"], ENV: ["HOLD", "mant: half"], SEL: ["LAYER"], PLAY: ["SEQ ▶"], REC: ["GRABAR"],
         off: "Apagado. El sonido empieza al encender.", loading: "Cargando las cintas…",
@@ -448,7 +448,7 @@ async function start() {
   try {
     ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
     await ctx.audioWorklet.addModule("worklet.js");
-    const wasm = await (await fetch("mel.wasm")).arrayBuffer();
+    const wasm = await (await fetch("mel.wasm", { cache: "no-cache" })).arrayBuffer();   // (asked again: a new build is never an old copy)
     node = new AudioWorkletNode(ctx, "mel", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
     node.connect(ctx.destination);
     try { const m = +localStorage.getItem("mel-emu-master"); if (m > 0) master = m; } catch (e) {}
