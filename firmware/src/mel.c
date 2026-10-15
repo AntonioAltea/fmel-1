@@ -6,7 +6,8 @@
  *
  * The panel: a button is a section; pressed again it turns its pages; SELECT turns them too. On every page the
  * four knobs do what the screen's aluminium plate says (on FX pages the last one is always MIX).
- *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK, RELEASE (each sound its own: SETUP's SOUNDS);
+ *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK (the piano: SUSTAIN), RELEASE (each sound its own:
+ *                  SETUP's SOUNDS);
  *                  HOME again: the next sound
  *   SEL    LAYER   a second sound on the same tape's other track: SOUND (OFF A B C D E), MIX (between the two), OCTAVE,
  *                  DETUNE; on its page SEL again turns the SOUND (lit: a layer sounds)
@@ -42,6 +43,7 @@ typedef struct {
     uint8_t root, lo, hi;                       /* MIDI notes */
     uint8_t sh;                                 /* its rate: MEL_RATE >> sh (tape time stays in MEL_RATE samples) */
     uint8_t env;                                /* 1..: its loudness as recorded, MEL_ENV[env - 1] (the piano) */
+    uint8_t boost;                              /* (env) its level, Q5: its samples are kept under 0.6 of full */
     uint16_t dk, d1k, pk;                       /* a sound that dies away (dk 0: it does not): its decay per tape
                                                  * sample (Q24) and per 1024 (Q15), from its peak (sample pk) */
 } mel_zone_t;
@@ -90,6 +92,8 @@ static volatile uint32_t tpos[128];             /* ISR: where each key's tape is
 
 static volatile uint8_t p_sound, p_tape8, p_layer;   /* main -> ISR (one writer each); layer 0 off, else sound + 1 */
 static volatile int32_t p_tune16, p_bend16, p_drift, p_mod, p_atk, p_relk, p_loct, p_ldet16, p_ga, p_gb;
+static volatile int32_t p_susk = 256;           /* main -> ISR: the piano's SUSTAIN, its time through its loudness, Q8
+                                                 * (256: as recorded; 1024: it dies 4 x as fast) */
 static volatile uint8_t p_half;                 /* main -> ISR: HALF SPEED */
 static int32_t motor16;                         /* ISR: the motor's speed, 0 (full) .. -19200 (half: an octave, 1/16 cents) */
 
@@ -200,7 +204,7 @@ static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain,
     if (z->env) {                               /* 76 x 2^(n/12): 4 x its pitch, as a one-pole's coefficient, Q14 */
         int32_t kf = (int32_t)((((MEL_POW2[n % 12u * 100u] >> 14) * 76u) >> 16) << (n / 12u));
         h->kf = kf > 16384 ? 16384 : kf;
-        h->dg = env_at(z, t) << 9;
+        h->dg = env_at(z, (t * (uint32_t)p_susk) >> 8) << 9;
     }
     h->s[1] = h->s[0] = adpcm_next(h);
     h->s[2] = adpcm_next(h);
@@ -248,13 +252,13 @@ static void voice_start(uint32_t vi)
  * (and, a sound that dies away, as far as it has); step and t, the tape samples it read: MEL_RATE's */
 static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int32_t gm, uint32_t t)
 {
-    uint32_t i, ran = 0, frac = h->frac, sh = h->z->sh, env = h->z->env;
+    uint32_t i, ran = 0, frac = h->frac, sh = h->z->sh, env = h->z->env, boost = h->z->boost;
     int32_t a = h->s[0], b = h->s[1], c = h->s[2], d = h->s[3], g = (h->gain * gm) >> 15, k = 16384, lp = h->lp;
     step >>= sh;                                /* (the zone's own samples from here) */
     t >>= sh;
     if (env) {                                  /* the piano: as loud as its recording was here, and as bright: the
                                                  * low-pass closes with the square root of it (-20 dB: a third open) */
-        int32_t ge = env_at(h->z, t);
+        int32_t ge = env_at(h->z, (t * (uint32_t)p_susk) >> 8);   /* (SUSTAIN: its time faster or slower) */
         h->dg = ge << 9;
         k = h->kf + (((16384 - h->kf) * sqrt_u((uint32_t)ge << 15)) >> 15);
     }
@@ -278,9 +282,9 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
         y = ((((((c3 * t) >> 12) + c2) * t >> 12) + c1) * t >> 12) + b;
         if (env) {
             lp += ((y - lp) * k) >> 14;
-            y = lp;
-        }
-        acc[i] += (y * g) >> 15;
+            acc[i] += (((lp * g) >> 15) * (int32_t)boost) >> 5;
+        } else
+            acc[i] += (y * g) >> 15;
     }
     h->lp = lp;
     h->frac = frac;
@@ -491,8 +495,8 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 1, 1, 1},
 };
 
-#define SET_VER 8u                              /* (7: the same, but the piano's PLAY was the tapes': it starts
-                                                 * again from its own) */
+#define SET_VER 9u                              /* (7, 8: the same, but the piano's PLAY (7: the tapes', 8: with
+                                                 * ATTACK where its SUSTAIN is) starts again from its own) */
 #define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
 typedef struct {
     uint8_t ver, np, half, rsv;                 /* half: HALF SPEED (a reserved byte before: older settings load, off) */
@@ -525,7 +529,15 @@ static void apply(void)                         /* the parameters -> the sound *
     p_half = set.half;
     p_tune16 = PV(P_TUNE) * 16;
     p_drift = PV(P_DRIFT);
-    p_atk = (int32_t)MEL_ATK[PV(P_ATK)];
+    if (MEL_SET_STRUCK[PV(P_SOUND)]) {          /* the piano: a hammer, at once; its third knob is SUSTAIN, 0..100,
+                                                 * 50 as recorded, each 25 twice (or half) as long */
+        int32_t c = (50 - PV(P_ATK)) * 48, o = c < 0 ? -1 - (-c - 1) / 1200 : c / 1200, r = c - o * 1200;
+        p_atk = (int32_t)MEL_ATK[0];
+        p_susk = (int32_t)(o >= 0 ? (MEL_POW2[r] >> 22) << o : (MEL_POW2[r] >> 22) >> -o);
+    } else {
+        p_atk = (int32_t)MEL_ATK[PV(P_ATK)];
+        p_susk = 256;
+    }
     p_relk = MEL_REL[PV(P_REL)];
     f_tone = MEL_TONE[PV(P_TONE)];
     f_wow = PV(P_WOW);
@@ -550,6 +562,8 @@ static void apply(void)                         /* the parameters -> the sound *
     f_glo = EQ_G[PV(P_EQLO) + 12];
     f_gmid = EQ_G[PV(P_EQMID) + 12];
     f_ghi = EQ_G[PV(P_EQHI) + 12];
+    f_kls = MEL_EQ_KLS[PV(P_EQLO) + 12];
+    f_khs = MEL_EQ_KHS[PV(P_EQHI) + 12];
     f_svf = MEL_SVF[PV(P_EQFREQ)];
     f_by_lofi = by_lofi;
     f_by_fx = by_fx;
@@ -720,7 +734,7 @@ static void app_init(void)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && (s.ver == SET_VER || s.ver == 7u) && s.np == NP)   /* (else: the defaults) */
+    if (!settings_load(&s, sizeof s) && s.ver >= 7u && s.ver <= SET_VER && s.np == NP)   /* (else: the defaults) */
         n = NP;
     else if (!settings_load(o, sizeof *o) && o->ver == 6u && o->np == NP - 1u)
         n = NP - 1u;

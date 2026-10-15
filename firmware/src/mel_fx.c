@@ -10,7 +10,9 @@
  *                        WOW and FLUTTER are the motor: irregular, in the tapes' speed (fx_pitch16), not a vibrato;
  *                        flutter shakes the level a little too (that roughness is what makes it heard); at HALF SPEED
  *                        they come at half the rate (the capstan and the pinch roller turn half as fast)
- *   EQ                   a low shelf (150 Hz), a bell (200 Hz .. 5 kHz), a high shelf (5 kHz), +-12 dB
+ *   EQ                   a low shelf (150 Hz), a bell (200 Hz .. 5 kHz), a high shelf (2.5 kHz), +-12 dB; a shelf
+ *                        is half way (in dB) at its frequency whatever its gain (MEL_EQ_KLS / KHS: at a fixed 5 kHz
+ *                        HIGH was over all there is of the tapes, and -12 dB of it took 1 dB off them)
  *   VIBRATO      (FX)    a delay swept by a sine: RATE, DEPTH, TONE (its colour), MIX (half way: a chorus)
  *   ECHO                 a tape echo: TIME 60 ms .. 1 s, REPEATS darker and dirtier each time, TONE, MIX
  *   REVERB               four combs and two allpasses a side: SIZE, TONE, PRE-delay, MIX
@@ -24,15 +26,13 @@ static volatile int32_t f_wow, f_flut, f_sat, f_hiss, f_age, f_drop, f_crush, f_
 static volatile int32_t f_vinc, f_vdep, f_vtone, f_vmix;
 static volatile int32_t f_etime, f_efb, f_etone, f_emix;
 static volatile int32_t f_rfb, f_rdamp, f_rpre, f_rmix;
-static volatile int32_t f_glo, f_gmid, f_ghi, f_svf, f_by_lofi, f_by_fx;
+static volatile int32_t f_glo, f_gmid, f_ghi, f_svf, f_by_lofi, f_by_fx, f_kls, f_khs;
 static int32_t lofi_bp, fx_bp;                  /* ISR: how bypassed, 0 (all in) .. 32767 (all out), ramped */
 static volatile int32_t fxv_wow, fxv_drop;      /* ISR -> screen: the wow now (1/16 cent), how deep a dropout is (0..32768) */
 static volatile int32_t fxv_flut;               /* ISR -> screen: the flutter now (flut_am: +-1200 at 100) */
 static int32_t flut_am;                         /* ISR: flutter's level shake now, Q15 around 0 */
 static volatile uint32_t fxv_vib;               /* the vibrato's phase */
 
-#define K_LS 692                                /* one-poles, Q15: 150 Hz (low shelf) */
-#define K_HS 16674                              /* 5 kHz (high shelf) */
 #define K_RHP 2119                              /* 450 Hz, below which the reverb gets less (no mud) */
 #define VIB_N 512u
 #define ECHO_N 44100u                           /* 1 s */
@@ -120,7 +120,7 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     int32_t blt = f_by_lofi ? 32767 : 0, bl = lofi_bp, bft = f_by_fx ? 32767 : 0, bf = fx_bp;
     int32_t amt = flut_am, agl = 4096 + age * 14;   /* (AGE: the level the narrowing takes, given back) */
     int32_t crush = f_crush, hold_n = 1 + crush * 7 / 100, mask = ~((1 << (crush * 9 / 100)) - 1);
-    int32_t glo = f_glo - 4096, gmid = f_gmid - 4096, ghi = f_ghi - 4096, svf = f_svf;
+    int32_t glo = f_glo - 4096, gmid = f_gmid - 4096, ghi = f_ghi - 4096, svf = f_svf, kls = f_kls, khs = f_khs;
     int32_t vmix = f_vmix, vdep = f_vdep, vtk = f_vtone >> 1, emix = f_emix, efb = f_efb, etk = f_etone >> 1;
     int32_t rfb = f_rfb, rdamp = f_rdamp, rmix = f_rmix, rpre = f_rpre, e_tgt = f_etime, k;
     uint32_t i, vinc = (uint32_t)f_vinc;
@@ -177,8 +177,8 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
                 y = dry + (((y - dry) * (wetl >> 1)) >> 14);
         }
         /* EQ (always) */
-        if (glo) { ls += ((y - ls) * (K_LS >> 1)) >> 14; y += (ls * glo) >> 12; }
-        if (ghi) { hs += ((y - hs) * (K_HS >> 1)) >> 14; y += ((y - hs) * ghi) >> 12; }
+        if (glo) { ls += ((y - ls) * (kls >> 1)) >> 14; y += (ls * glo) >> 12; }
+        if (ghi) { hs += ((y - hs) * (khs >> 1)) >> 14; y += ((y - hs) * ghi) >> 12; }
         if (gmid) {                             /* the bell: a state-variable band-pass (Q 1), added or taken away */
             int32_t sv = y >> 1, hp = sv - sv_lp - sv_bp;
             sv_bp += (hp * svf) >> 14;

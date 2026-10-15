@@ -24,8 +24,8 @@ So: share FMEL-1 freely, but don't sell it, nor anything with these tapes in it.
 
 The fifth sound, PIANO, is not a Mellotron tape: a Kawai grand from Versilian Studios' [VCSL](https://github.com/sgossner/VCSL)
 (public domain, CC0), a key every half octave from F#3 to F#6, at twice the tapes' rate (less hiss) and under a
-second of each, then its loop, dying away as the recording does (fast, then a long tail) and darker as it dies,
-with its own dampers (the top keys have none, as on a grand); a lo-fi piano in about 50 KB.
+second of each, then a steady tone of its own partials, dying away as the recording does (fast, then a long tail)
+and darker as it dies, with its own dampers (the top keys have none, as on a grand); a lo-fi piano in about 45 KB.
 
 To pack the tapes again (another selection, other lengths), fetch his originals (from his old site, via the Wayback
 Machine) and run the packer:

@@ -27,7 +27,9 @@ is a root (a key every half octave), short (SECONDS: under a second, then its lo
 ADPCM hisses over a piano's pure tones, ~8 dB less for every doubling of the rate (and a high key keeps its
 partials). Its strike is tamed (KNOCK: the hammer's thump under the note; SPIKE: a high key's first 20 ms, which a
 level match turned into a slap) and its keys evened out on their tone, all the way. It dies away as recorded (ENVS:
-two stages, fast then a long tail, and its beating), its PLAY its own (PLAY: bright, at once, dampers of ~0.2 s).
+two stages, fast then a long tail, and its beating), its PLAY its own (PLAY: bright, SUSTAIN, dampers of ~0.2 s).
+It is not a loop of its recording (its unison strings beat: looped, that came round a few times a second, a
+vibrato): as recorded for its strike, then a steady tail of its own partials (steady_tail), as a ROMpler does.
 """
 import argparse
 import re
@@ -42,8 +44,9 @@ SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's
 DECAYS = {"Vibes": 0.6}                           # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
-SECONDS = {"Piano": (0.85, 0.5)}                   # sets of a fixed length (s, its lowest root .. its highest: a high
-                                                   # string dies sooner), outside the budget, every file a root
+SECONDS = {"Piano": (0.7, 0.45)}                   # sets of a fixed length (s, its lowest root .. its highest: a high
+                                                   # string dies sooner), outside the budget, every file a root (ENVS:
+                                                   # as recorded to 0.2 s before it, then its steady tail)
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
 SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
@@ -54,13 +57,14 @@ ENV_STEP, ENV_N = 4096, 64                         # ENV_STEP samples (0.19 s at
                                                    # taken out of the samples (a level loop) and put back by the
                                                    # firmware: a piano's two-stage decay (fast, then a long tail) and
                                                    # its beating, as recorded, after a loop of under a second
-PLAY = {"Piano": (88, 0, 0, 42)}                   # a set's own PLAY to start from (TONE PITCH ATTACK RELEASE; else
-PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano bright, at once, its dampers ~0.2 s
-SPIKE = {"Piano": (12, 6)}                         # sets whose strike's spike is held down (dB over their tone, at
+PLAY = {"Piano": (88, 0, 40, 42)}                  # a set's own PLAY to start from (TONE PITCH ATTACK RELEASE; else
+PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano bright, its SUSTAIN (where ATTACK is: a
+                                                   # hammer's is at once) a little shorter than recorded, dampers ~0.2 s
+SPIKE = {"Piano": (14, 10)}                         # sets whose strike's spike is held down (dB over their tone, at
                                                    # the lowest root .. the highest)
 KNOCK = {"Piano": (3, 12)}                         # sets whose hammer knock is turned down (dB at the lowest root ..
                                                    # the highest: on a high key it is all you hear of the strike)
-SOFT = {"Piano"}                                   # sets whose attack peaks over the common loudness: a soft clip
+SOFT = set()                                   # sets whose attack peaks over the common loudness: a soft clip
                                                    # (as a tape driven hard) takes them under full scale
 TARGET_RMS = 0.13                                # every set's sustain, full scale 1
 NOTE = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
@@ -113,15 +117,13 @@ def rms(x):
     return float(np.sqrt(np.mean(x * x)) + 1e-12)
 
 
-def loop(x, rate, short=False):
-    """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len). short (a piano key, under
-    a second): a shorter crossfade, its loop after the strike (from 0.12 s) and over the second half"""
+def loop(x, rate):
+    """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len)"""
     n = len(x)
-    xf = int(min(0.35 * rate, 0.25 * n) if short else 0.35 * rate)
-    target = max(xf + CK, int(n * 0.3), xf + int(0.12 * rate) if short else 0)
-    hi = n - xf - CK if short else int(n * 0.6) - xf
+    xf = int(0.35 * rate)
+    target = max(xf + CK, int(n * 0.3))
     best, ls = -2.0, target - target % CK
-    for cand in range(target - target % CK, hi, CK):   # ls on the CK grid: its state is a checkpoint
+    for cand in range(target - target % CK, int(n * 0.6) - xf, CK):   # ls on the CK grid: its state is a checkpoint
         a, b = x[n - xf:], x[cand - xf:cand]
         c = float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
         if c > best:
@@ -157,6 +159,46 @@ def tame_knock(x, rate, db, midi):
         y[i:i + n] += np.fft.irfft(F, n) * w
         norm[i:i + n] += w * w
     return (y / np.maximum(norm, 1e-9))[n:n + len(x)]
+
+
+def steady_tail(x, rate, midi, real_end, xf=0.12):
+    """x (level: its decay taken out) as recorded up to real_end s, then crossfaded (equal power, xf s) into a strictly
+    periodic tone of its own partials (their levels and phases measured around the crossfade), on whose last block of
+    whole periods (0.05-0.12 s) it loops -> (samples, ls). A piano's unison strings beat: a loop of its recording
+    brought that beat round at every turn, a few times a second, a vibrato; a ROMpler loops a steady cycle instead"""
+    f0 = 440 * 2 ** ((midi - 69) / 12)
+    a, b = int(real_end * rate), int((real_end + xf) * rate)
+    best = None
+    for m in range(1, 1000):                    # m periods in a whole number of samples, as near in tune as it gets
+        L = m * rate / f0
+        if L > 0.12 * rate: break
+        if L >= 0.05 * rate and (best is None or abs(L - round(L)) / L < best[0]):
+            best = (abs(L - round(L)) / L, m, int(round(L)))
+    _, m, L = best
+    fp = m * rate / L                           # (its pitch: within a cent or so of f0)
+    c, h = (a + b) // 2, int(0.1 * rate)
+    win = x[c - h:c + h]
+    w = np.hanning(len(win))
+    nf = 1 << 16
+    S = np.fft.rfft(win * w, nf)
+    f = np.fft.rfftfreq(nf, 1 / rate)
+    ls = -(-b // CK) * CK                       # (on the CK grid: its state is a checkpoint)
+    t = (np.arange(ls + L) - c) / rate
+    syn = np.zeros(ls + L)
+    for k in range(1, int(0.45 * rate / fp) + 1):
+        near = np.where((f > k * f0 * 0.98) & (f < k * f0 * 1.06))[0]
+        if not len(near): break
+        j = near[np.argmax(np.abs(S[near]))]
+        amp = 2 * np.abs(S[j]) / w.sum()
+        ph = np.angle(S[j]) + 2 * np.pi * f[j] * h / rate   # (its phase at the window's middle, c)
+        syn += amp * np.cos(2 * np.pi * k * fp * t + ph)
+    y = syn.copy()
+    n = min(len(x), ls + L)
+    y[:a] = x[:a]
+    fade = np.clip((np.arange(a, ls + L) - a) / (b - a), 0, 1)
+    xs = np.concatenate([x[a:n], np.zeros(ls + L - n)])
+    y[a:] = xs * np.cos(fade * np.pi / 2) + syn[a:] * np.sin(fade * np.pi / 2)
+    return y, ls
 
 
 def soften_strike(x, rate, cap_db):
@@ -280,6 +322,12 @@ def build(src, budget, step, rate, which):
             if d in ENVS:                        # take its loudness out: a level loop (the firmware puts it back)
                 env = env_of(x[o:], zr)
                 gi = np.interp(np.arange(len(seg)), np.arange(ENV_N) * ENV_STEP, env / 32767)
+                w = int(0.04 * zr)               # after the strike, level to the ms (its beating out too: looped, it
+                fine = np.sqrt(np.convolve(seg * seg, np.hanning(w) / np.hanning(w).sum(), mode="same")) + 1e-9
+                t0, t1 = int(0.10 * zr), int(0.15 * zr)   # came round at every turn, a tremolo); the table's
+                k = fine[(t0 + t1) // 2] / gi[(t0 + t1) // 2]   # coarser curve does the dying, as recorded
+                bl = np.clip((np.arange(len(seg)) - t0) / (t1 - t0), 0, 1)
+                gi = np.exp((1 - bl) * np.log(np.maximum(gi, 1e-6)) + bl * np.log(fine / k))
                 out.setdefault("envs", []).append(env)
                 decs.append((0, 0.0, len(out["envs"]), gi))   # (taken out once its level is set: as it sounds)
             elif d in DECAYS:                    # take the decay out: a level loop
@@ -307,11 +355,18 @@ def build(src, budget, step, rate, which):
         if d in SOFT:                            # linear to 0.6, then a tanh to 0.95
             segs = [(r, np.where(np.abs(s) < 0.6, s, np.sign(s) * (0.6 + 0.35 * np.tanh((np.abs(s) - 0.6) / 0.35))))
                     for r, s in segs]
-        peak = max(np.abs(s).max() for _, s in segs)
+        peak = max(np.abs(s).max() for _, s in segs) if d not in ENVS else 0   # (the piano: a boost per zone, below)
         if peak > 0.95:
             raise SystemExit(f"{name}: peaks at {peak:.2f} at the common loudness; lower TARGET_RMS")
         for i, (r, s) in enumerate(segs):
-            s, ls = loop(s, zr, d in SECONDS)
+            boost = 32
+            if d in ENVS:                        # its recording up to 0.2 s before its length, then a steady tail;
+                a, b = SECONDS[d]                # under 0.6 (no soft clip), what that takes given back by boost (Q5)
+                s, ls = steady_tail(s, zr, r, a + (b - a) * i / max(1, len(roots) - 1) - 0.2)
+                boost = max(32, int(np.ceil(32 * np.abs(s).max() / 0.6)))
+                s = s * 32 / boost
+            else:
+                s, ls = loop(s, zr)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
             data, cks = ima_encode(pcm)
             lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
@@ -319,12 +374,16 @@ def build(src, budget, step, rate, which):
             pk, dbs, ev, _ = decs[i]
             dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r, lo=lo, hi=hi,
-                                     sh=sh, env=ev, dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
+                                     sh=sh, env=ev, boost=boost, dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
             out["ck"] += cks
         out["sets"].append((name, z0, len(roots), d in STRUCK))
         out.setdefault("play", []).append(PLAY.get(d, PLAY_ELSE))
     return out, int(per0) // CK * CK
+
+
+def onepole_(fc):
+    return round(32768 * (1 - np.exp(-2 * np.pi * fc / SRC_RATE)))
 
 
 def tables():
@@ -352,6 +411,10 @@ def tables():
     lfo10 = [round(0.5 * 20 ** (v / 100) * 10) for v in range(101)]
     eq_hz = [int(round(200 * 25 ** (i / 15), -1 if i < 9 else -2)) for i in range(16)]   # EQ FREQ: 200 Hz .. 5 kHz
     svf = [round(16384 * 2 * np.sin(np.pi * f / SRC_RATE)) for f in eq_hz]
+    # EQ LOW / HIGH, -12..+12 dB: one-pole shelves whose half-way point (in dB) stays at 150 Hz / 2.5 kHz whatever the
+    # gain (a first-order shelf has it at fc / sqrt(G) for HIGH, fc sqrt(G) for LOW: a fixed fc cut far from it)
+    kls = [onepole_(150 / np.sqrt(10 ** ((i - 12) / 20))) for i in range(25)]
+    khs = [onepole_(2500 * np.sqrt(10 ** ((i - 12) / 20))) for i in range(25)]
     rel = []                                     # REL 0..100: 20 ms .. 6 s to -60 dB, per 32 frames, Q16
     for v in range(101):
         t = 0.02 * 300 ** (v / 100)
@@ -390,6 +453,8 @@ def tables():
             arr("static const uint8_t MEL_LFO_HZ10[101] /* (its Hz x 10, shown) */", lfo10) +
             arr("static const uint16_t MEL_EQ_HZ[16]    /* EQ FREQ, Hz */", eq_hz) +
             arr("static const uint16_t MEL_SVF[16]      /* its state-variable filter's f = 2 sin(pi fc / fs), Q14 */", svf) +
+            arr("static const uint16_t MEL_EQ_KLS[25]   /* LOW -12..+12 dB -> its shelf's one-pole, Q15 (150 Hz half way) */", kls) +
+            arr("static const uint16_t MEL_EQ_KHS[25]   /* HIGH -> its shelf's one-pole, Q15 (2.5 kHz half way) */", khs) +
             arr("static const uint16_t MEL_GENLP[101]   /* AGE -> the tape's top end, 9 kHz .. 1.1 kHz, Q15 */", genlp) +
             arr("static const uint16_t MEL_GENHP[101]   /* AGE -> its bottom end, 20 .. 380 Hz, Q15 */", genhp) +
             arr("static const uint16_t MEL_REL[101]     /* REL -> decay per 32 frames, Q16 */", rel) +
@@ -422,7 +487,7 @@ def write(out, path, rate, per):
     L += ["};",
          "static const mel_zone_t MEL_ZONE[MEL_NZONES] = {"]
     for q in z:
-        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, {q['env']}, "
+        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, {q['env']}, {q['boost']}, "
                  f"{q['dk']}u, {q['d1k']}u, {q['pk']}u}},")
     L.append("};")
     L.append("static const uint32_t MEL_CKS[] = {   /* (uint16_t)predictor | step index << 16 */")
