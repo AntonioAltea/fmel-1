@@ -556,7 +556,7 @@ static void stage_setup(void)                   /* SETUP: the four settings, and
 
 static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, the one playing lit */
 {
-    static const char *const HEAD[NPLAY] = {"TONE", "PITCH", "A/S", "REL"};
+    static const char *const HEAD[NPLAY] = {"TONE", "PITCH", "ATK", "REL"};
     uint32_t k, i, own = (uint32_t)PV(P_PMODE), snd = (uint32_t)PV(P_SOUND);
     char s[12];
     tx(8, 0, &F16, own ? "Each sound its own PLAY:" : "PLAY is one for all:", C_INK);
@@ -788,8 +788,7 @@ static void draw_plate(void)                    /* the aluminium plate: the knob
         if (k) cv_rect(cx - 30, 23, 1, 32, RGB(90, 84, 76));   /* the dividers */
         if (!c->name) continue;                 /* (no knob there) */
         fmt_val(c, PV(c->pid), v);
-        tx_c(cx, 3, &F16, c->pid == P_ATK && MEL_SET_STRUCK[PV(P_SOUND)] ? "SUSTAIN" : c->name, C_INK);   /* the
-                                                 * name, printed black on the plate (a piano has no ATTACK) */
+        tx_c(cx, 3, &F16, c->name, C_INK);      /* the name, printed black on the plate */
         if (lit) {                              /* the knob just turned: its quarter amber (round only at the ends) */
             int32_t x0 = k ? cx - 29 : 2, x1 = k < 3u ? cx + 30 : 238;
             rrect(x0, 20, x1 - x0, 38, 4, C_LAMP);

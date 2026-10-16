@@ -22,16 +22,16 @@ the web version).
 
 So: share FMEL-1 freely, but don't sell it, nor anything with these tapes in it. Thank you, Bernie.
 
-The fifth sound, PIANO, is not a Mellotron tape: a Kawai grand from Versilian Studios' [VCSL](https://github.com/sgossner/VCSL)
-(public domain, CC0), a key every half octave from F#3 to F#6, at twice the tapes' rate (less hiss) and under a
-second of each, then a steady tone of its own partials, dying away as the recording does (fast, then a long tail)
-and darker as it dies, with its own dampers (the top keys have none, as on a grand); a lo-fi piano in about 45 KB.
+The fifth sound, PIANO, is not a Mellotron tape: it is [SLOOP](https://github.com/isod89/sloop-fm1)'s LOFI KEYS, its
+four keys of a Steinway B from Versilian Studios' [VCSL](https://github.com/sgossner/VCSL) (public domain, CC0) made
+and played as SLOOP makes and plays them (1 s of each at 22050 Hz, looped; a few bits off, a little drive, a gentle
+low-pass, a 2.5 s decay and a slow pitch wobble); about 44 KB.
 
 To pack the tapes again (another selection, other lengths), fetch his originals (from his old site, via the Wayback
 Machine) and run the packer:
 
     tools/get_tapes.sh                                  # into tapes/, which git ignores
-    tools/get_piano.sh                                  # the piano, also into tapes/ (needs ffmpeg)
+    tools/get_piano.sh                                  # the piano (SLOOP's), also into tapes/
     tools/gen_tapes.py firmware/gen/mel_tapes.h
 
 ## Credits

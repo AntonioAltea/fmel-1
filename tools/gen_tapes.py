@@ -19,17 +19,13 @@ semitones off), each:
     anywhere on its tape (a key pressed again before its tape is back) and the loop jumps exactly.
 The levels of a set are evened out half way (in dB) between its roots; then every set is brought to the same
 loudness (RMS of its sustain), so a change of tape is not a change of level.
-A set that dies away by itself (DECAYS: the vibraphone; ENVS: the piano, its loudness as recorded, a table) has its decay measured per root (dB/s, after its peak) and
+A set that dies away by itself (DECAYS: the vibraphone) has its decay measured per root (dB/s, after its peak) and
 flattened out of the samples, so its loop is level; the zone carries the decay and the firmware applies it as the
 tape runs: a held note dies as the real one does, and a note restarted mid-tape starts as quiet as the tape is.
-The piano (tools/get_piano.sh: VCSL, CC0) is not a Mellotron tape and is packed apart from the budget: every file
-is a root (a key every half octave), short (SECONDS: under a second, then its loop) at the full RATE, 22050 Hz: 4-bit
-ADPCM hisses over a piano's pure tones, ~8 dB less for every doubling of the rate (and a high key keeps its
-partials). Its strike is tamed (KNOCK: the hammer's thump under the note; SPIKE: a high key's first 20 ms, which a
-level match turned into a slap) and its keys evened out on their tone, all the way. It dies away as recorded (ENVS:
-two stages, fast then a long tail, and its beating), its PLAY its own (PLAY: bright, SUSTAIN, dampers of ~0.2 s).
-It is not a loop of its recording (its unison strings beat: looped, that came round a few times a second, a
-vibrato): as recorded for its strike, then a steady tail of its own partials (steady_tail), as a ROMpler does.
+The piano (SLOOP_PIANO; tools/get_piano.sh: SLOOP's four keys of a Steinway B from VCSL, CC0) is not a Mellotron
+tape: it is SLOOP's (isod89/sloop-fm1, tools/gen_samples.py, kind "piano", and its LOFI KEYS preset): 1 s of each
+key at 22050 Hz (RATE), its attack as recorded, then levelled from 0.3 s and looped (0.45-0.65 s .. its end); the
+firmware plays it as SLOOP's SAMPLE engine does (mel.c: kind 1), outside the budget.
 """
 import argparse
 import re
@@ -44,29 +40,24 @@ SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's
 DECAYS = {"Vibes": 0.6}                           # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
-SECONDS = {"Piano": (0.7, 0.45)}                   # sets of a fixed length (s, its lowest root .. its highest: a high
-                                                   # string dies sooner), outside the budget, every file a root (ENVS:
-                                                   # as recorded to 0.2 s before it, then its steady tail)
+SLOOP_PIANO = {"Piano"}                            # sets made as SLOOP makes its piano (sloop_piano): every file a
+                                                   # root, outside the budget, played by mel.c as SLOOP's SAMPLE engine
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
 SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
                                                    # (a tape's key pressed again goes on where its tape is: the
                                                    # vibraphone as quiet as it has died away to, a piano never)
-ENVS = {"Piano"}                                   # sets that die away as their recording does: its loudness every
-ENV_STEP, ENV_N = 4096, 64                         # ENV_STEP samples (0.19 s at 22050 Hz), ENV_N of them (11.9 s),
-                                                   # taken out of the samples (a level loop) and put back by the
-                                                   # firmware: a piano's two-stage decay (fast, then a long tail) and
-                                                   # its beating, as recorded, after a loop of under a second
-PLAY = {"Piano": (88, 0, 40, 42)}                  # a set's own PLAY to start from (TONE PITCH ATTACK RELEASE; else
-PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano bright, its SUSTAIN (where ATTACK is: a
-                                                   # hammer's is at once) a little shorter than recorded, dampers ~0.2 s
-SPIKE = {"Piano": (14, 10)}                         # sets whose strike's spike is held down (dB over their tone, at
-                                                   # the lowest root .. the highest)
-KNOCK = {"Piano": (3, 12)}                         # sets whose hammer knock is turned down (dB at the lowest root ..
-                                                   # the highest: on a high key it is all you hear of the strike)
-SOFT = set()                                   # sets whose attack peaks over the common loudness: a soft clip
-                                                   # (as a tape driven hard) takes them under full scale
+PLAY = {"Piano": (100, 0, 0, 31)}                  # a set's own PLAY to start from (TONE PITCH ATTACK RELEASE; else
+PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano as SLOOP's LOFI KEYS: TONE open (its CUT
+                                                   # does it), ATK 0, REL 60 (~78 ms to -40 dB: MEL's 31)
+# SLOOP's LOFI KEYS (gen_samples.py EXTRA_PRESETS: SAMPLE BITS 45, CUT 78, DRV 30; ENV 0 108 0 60; LFO to pitch 1 at
+# RATE 38, a sine), as mel.c's constants for a kind 1 zone
+PNO_BITS = 45 // 10                                # bits taken off (eng_sample.c: sh = BITS / 10)
+PNO_DRV = 30 * 150                                 # s + (s >> 2) * PNO_DRV >> 11, into the tanh
+PNO_CUT = 4000 + ((78 << 8) * 28767 >> 15)         # its one-pole, Q15 (CUT 78: ~7.5 kHz)
+PNO_GAIN = 32                                      # its level, Q5 (by ear against the tapes: mel.c's G_TAPE)
 TARGET_RMS = 0.13                                # every set's sustain, full scale 1
+SLOOP_FS = 22050                                 # SLOOP's stored rate (gen_samples.py TR)
 NOTE = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
 CK = 256                                         # samples between decoder states
 SRC_RATE = 44100
@@ -134,91 +125,8 @@ def loop(x, rate):
     return y, ls
 
 
-def tame_knock(x, rate, db, midi):
-    """the hammer's knock down by db: in the first 40 ms (back to as it was by 120 ms) whatever is not one of the
-    note's partials (each found near k f0, a piano's a little sharp, where it sustains: 0.15-0.45 s in) is turned
-    down; the partials stay as they are"""
-    n, hop = 1024, 128
-    w = np.hanning(n + 1)[:n]
-    late = x[int(0.15 * rate):int(0.45 * rate)]
-    L = np.abs(np.fft.rfft(late[:n * (len(late) // n)].reshape(-1, n) * w, axis=1)).mean(axis=0)
-    f, f0 = np.fft.rfftfreq(n, 1 / rate), 440 * 2 ** ((midi - 69) / 12)
-    keep = np.zeros(len(f), bool)
-    for k in range(1, int(rate / 2 / f0) + 1):
-        near = np.where((f > k * f0 * 0.97) & (f < k * f0 * 1.08))[0]
-        if len(near):
-            j = near[np.argmax(L[near])]
-            keep[max(0, j - 2):j + 3] = True    # the partial and 2 bins either side
-    pad = np.concatenate([np.zeros(n), x, np.zeros(n)])
-    y, norm = np.zeros(len(pad)), np.zeros(len(pad))
-    for i in range(0, len(pad) - n, hop):
-        t = (i + n / 2 - n) / rate              # the frame's middle, s into x
-        a = 1.0 if t > 0.12 else 10 ** (-db / 20) if t < 0.04 else 10 ** (-db * (0.12 - t) / 0.08 / 20)
-        F = np.fft.rfft(pad[i:i + n] * w)
-        F[~keep] *= a
-        y[i:i + n] += np.fft.irfft(F, n) * w
-        norm[i:i + n] += w * w
-    return (y / np.maximum(norm, 1e-9))[n:n + len(x)]
 
 
-def steady_tail(x, rate, midi, real_end, xf=0.12):
-    """x (level: its decay taken out) as recorded up to real_end s, then crossfaded (xf s) into a strictly
-    periodic tone of its own partials (their levels and phases measured around the crossfade), on whose last block of
-    whole periods (0.05-0.12 s) it loops -> (samples, ls). A piano's unison strings beat: a loop of its recording
-    brought that beat round at every turn, a few times a second, a vibrato; a ROMpler loops a steady cycle instead"""
-    f0 = 440 * 2 ** ((midi - 69) / 12)
-    a, b = int(real_end * rate), int((real_end + xf) * rate)
-    best = None
-    for m in range(1, 1000):                    # m periods in a whole number of samples, as near in tune as it gets
-        L = m * rate / f0
-        if L > 0.12 * rate: break
-        if L >= 0.05 * rate and (best is None or abs(L - round(L)) / L < best[0]):
-            best = (abs(L - round(L)) / L, m, int(round(L)))
-    _, m, L = best
-    fp = m * rate / L                           # (its pitch: within a cent or so of f0)
-    c, h = (a + b) // 2, int(0.1 * rate)
-    win = x[c - h:c + h]
-    w = np.hanning(len(win))
-    nf = 1 << 16
-    S = np.fft.rfft(win * w, nf)
-    f = np.fft.rfftfreq(nf, 1 / rate)
-    ls = -(-b // CK) * CK                       # (on the CK grid: its state is a checkpoint)
-    t = (np.arange(ls + L) - c) / rate
-    syn = np.zeros(ls + L)
-    for k in range(1, int(0.45 * rate / fp) + 1):
-        near = np.where((f > k * f0 * 0.98) & (f < k * f0 * 1.06))[0]
-        if not len(near): break
-        j = near[np.argmax(np.abs(S[near]))]
-        floor = np.median(np.abs(S[(f > (k - 0.5) * f0) & (f < (k + 0.5) * f0)]))
-        if np.abs(S[j]) < 4 * floor:             # (a peak of noise, not a partial: 12 dB over its floor or nothing)
-            continue
-        amp = 2 * np.abs(S[j]) / w.sum()
-        ph = np.angle(S[j]) + 2 * np.pi * f[j] * h / rate   # (its phase at the window's middle, c)
-        syn += amp * np.cos(2 * np.pi * k * fp * t + ph)
-    ref = rms(x[a - int(0.25 * rate):a])        # as loud as the recording before it, over its beating (its unison
-    syn *= ref / rms(syn[ls:ls + L])            # strings, adding up in the window, measured louder than they sound)
-    y = syn.copy()
-    n = min(len(x), ls + L)
-    y[:a] = x[:a]
-    fade = np.clip((np.arange(a, ls + L) - a) / (b - a), 0, 1)
-    xs = np.concatenate([x[a:n], np.zeros(ls + L - n)])
-    y[a:] = xs * (1 - fade) + syn[a:] * fade    # (straight: the two are in phase, equal power added 3 dB mid-way)
-    return y, ls
-
-
-def soften_strike(x, rate, cap_db):
-    """the strike's first spike held to cap_db over the tone 0.1-0.2 s in (a high key's is all of its first 20 ms:
-    under a hard level match it came out as a slap); a slow gain (5 ms), gone by 0.15 s"""
-    w = max(1, int(0.004 * rate))
-    env = np.sqrt(np.convolve(x * x, np.ones(w) / w, mode="same")) + 1e-9
-    limit = rms(x[int(0.1 * rate):int(0.2 * rate)]) * 10 ** (cap_db / 20)
-    gain = np.minimum(1.0, limit / env)
-    k = np.hanning(2 * w + 1)
-    gain = np.minimum(gain, np.convolve(gain, k / k.sum(), mode="same"))   # (no faster than the window)
-    gain = np.convolve(gain, k / k.sum(), mode="same")
-    t = np.arange(len(x)) / rate
-    fade = np.clip((0.15 - t) / 0.05, 0, 1)    # full up to 0.1 s, none from 0.15 s
-    return x * (1 - fade + fade * gain)
 
 
 def ima_encode(s):
@@ -249,44 +157,82 @@ def ima_encode(s):
     return bytes(out), cks
 
 
-def falling(v):
-    """the closest never-rising curve to v (least squares: pool-adjacent-violators)"""
-    blocks = []                                 # [sum, count]
-    for x in v:
-        blocks.append([x, 1])
-        while len(blocks) > 1 and blocks[-2][0] / blocks[-2][1] < blocks[-1][0] / blocks[-1][1]:
-            s_, c = blocks.pop()
-            blocks[-1][0] += s_
-            blocks[-1][1] += c
-    return np.concatenate([np.full(c, s_ / c) for s_, c in blocks])
 
 
-def env_of(x, rate):
-    """a sound's loudness every ENV_STEP samples, ENV_N of them, Q15 of its loudest (1 at 0): RMS over 2 ENV_STEP
-    around each point, never rising again (its beating left to its samples: in the table SUSTAIN, which runs it
-    faster or slower, put the beat's dips where the samples had none, a bump of up to 9 dB); where the recording has
-    ended or sunk into its own noise, its last 1.5 s's slope goes on; the last point 0"""
-    w = ENV_STEP
-    noise = rms(x[-int(0.25 * rate):])
-    e = []
-    for i in range(ENV_N):
-        a, b = max(0, i * ENV_STEP - w), i * ENV_STEP + w
-        v = rms(x[a:b]) if b <= len(x) else 0.0
-        e.append(v if v > 3 * noise else np.nan)
-    e = np.array(e)
-    good = np.where(~np.isnan(e))[0]
-    last = good[-1] if len(good) else 0
-    e[:last + 1] = np.interp(np.arange(last + 1), good, e[good])   # (a dip into the noise, mid-way: across it)
-    db = 20 * np.log10(e[:last + 1])
-    k = max(1, last - int(1.5 * rate / ENV_STEP))
-    slope = np.polyfit(np.arange(k, last + 1), db[k:], 1)[0] if last - k >= 2 else -6 * ENV_STEP / rate
-    slope = min(slope, -1.0 * ENV_STEP / rate)  # (it dies away: at least 1 dB/s)
-    for i in range(last + 1, ENV_N):
-        e[i] = 10 ** ((db[last] + slope * (i - last)) / 20)
-    g = np.minimum(1.0, e / np.nanmax(e[:3]))
-    g = np.minimum(1.0, 10 ** (falling(20 * np.log10(np.maximum(g, 1e-6))) / 20))   # (in dB: a beat's dip and
-    g[0], g[-1] = 1.0, 0.0                      # what follows it averaged, not its dip held)
-    return np.round(g * 32767).astype(int)
+
+
+def sloop_onset(x, rel=0.02):
+    """sampleio.py onset: the first sample over rel x its peak"""
+    thr = rel * max(1e-9, max(map(abs, x)))
+    return next((i for i, v in enumerate(x) if abs(v) > thr), 0)
+
+
+def sloop_resample(x, sr, to):
+    """sampleio.py resample: a crude anti-alias (the mean of ratio samples), then linear interpolation"""
+    if sr == to:
+        return x
+    k = max(1, int(round(sr / to)))
+    if k == 2:
+        x = [(a + b) / 2 for a, b in zip(x, x[1:])] + [x[-1] / 2]
+    elif k > 1:
+        x = [sum(x[i:i + k]) / k for i in range(len(x))]
+    step, out, p, last = sr / to, [], 0.0, len(x) - 1
+    while p < last:
+        i = int(p)
+        f = p - i
+        out.append(x[i] * (1 - f) + x[i + 1] * f)
+        p += step
+    return out
+
+
+def sloop_piano(path):
+    """SLOOP's gen_samples.py cc0_entries, kind "piano": from 16 samples before its onset, 1 s at 22050 Hz; its
+    attack as recorded, from 0.3 s levelled (its loudness every 20 ms taken out: the tone the envelope fades), looped
+    from the best start in 0.45-0.65 s to its end, crossfaded over 80 ms; to a peak of 30000 -> (int16 list, ls)"""
+    x = [float(v) for v in read_wav(path)]
+    x = x[max(0, sloop_onset(x) - 16):]
+    TR = SLOOP_FS
+    x = sloop_resample(x, SRC_RATE, TR)[:int(1.0 * TR)]
+    n = len(x)
+    ls, le, xf, a0 = int(0.55 * TR), n - 1, int(0.08 * TR), int(0.30 * TR)
+    w = int(0.02 * TR)
+    env = [max(1e-6, (sum(v * v for v in x[max(0, i - w):i + w]) / (2 * w)) ** 0.5) for i in range(0, n, w)]
+    ref = env[a0 // w]
+    x = [v * (ref / env[min(len(env) - 1, i // w)] if i >= a0 else 1.0) for i, v in enumerate(x)]
+    lo, hi = int(0.45 * TR), int(0.65 * TR)     # best_loop_start: its last xf samples most like the loop end's
+    tail = x[le - xf:le:4]
+    tn = sum(v * v for v in tail) ** 0.5 + 1e-9
+    best, ls = -2.0, (lo + hi) // 2
+    for c in range(lo, hi, 2):
+        seg = x[c - xf:c:4]
+        k = sum(a * b for a, b in zip(seg, tail)) / ((sum(v * v for v in seg) ** 0.5 + 1e-9) * tn)
+        if k > best:
+            best, ls = k, c
+    for i in range(xf):
+        a = i / xf
+        x[le - xf + i] = x[le - xf + i] * (1 - a) + x[ls - xf + i] * a
+    pk = max(1e-9, max(map(abs, x)))
+    return [int(v * 30000 / pk) for v in x], ls
+
+
+def ima_state(s, at):
+    """the IMA encoder's (predictor, step index) before sample at"""
+    pred, idx = 0, 0
+    for v in s[:at]:
+        step = IMA_STEP[idx]
+        d, code = int(v) - pred, 0
+        if d < 0:
+            code, d = 8, -d
+        vd = step >> 3
+        if d >= step:
+            code |= 4; d -= step; vd += step
+        if d >= step >> 1:
+            code |= 2; d -= step >> 1; vd += step >> 1
+        if d >= step >> 2:
+            code |= 1; vd += step >> 2
+        pred = max(-32768, min(32767, pred - vd if code & 8 else pred + vd))
+        idx = max(0, min(88, idx + IMA_IDX[code & 7]))
+    return pred, idx
 
 
 def decay_of(x, rate):
@@ -312,87 +258,78 @@ def build(src, budget, step, rate, which):
         roots = [r for r in range(lo + step // 2, hi + 1, step)]
         if roots[-1] + step // 2 < hi:
             roots.append(hi)
-        if d in SECONDS:
+        if d in SLOOP_PIANO:
             roots = sorted(files)
         plan.append((name, files, roots))
-    shares = [0.0 if d in SECONDS else DECAYS.get(d, 1.0) for d, _ in sets]
+    shares = [0.0 if d in SLOOP_PIANO else DECAYS.get(d, 1.0) for d, _ in sets]
     nroots = sum(len(r) * w for (_, _, r), w in zip(plan, shares))
     per0 = budget * 2 / nroots                   # 4 bits a sample (+ the checkpoints, ~1.6 %)
     per0 = per0 / (1 + 8 / CK)
     out = {"sets": [], "zones": [], "data": bytearray(), "ck": []}
     for (d, _), (name, files, roots), share in zip(sets, plan, shares):
+        z0 = len(out["zones"])
+        if d in SLOOP_PIANO:                     # SLOOP's piano: its own making, its zones played as SLOOP plays them
+            for i, r in enumerate(roots):
+                pcm, ls = sloop_piano(files[r])
+                data, cks = ima_encode(np.array(pcm, dtype=np.int16))
+                lp, li = ima_state(pcm, ls)
+                lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
+                hi = r + (roots[i + 1] - r) // 2 if i + 1 < len(roots) else 127
+                out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r, lo=lo,
+                                         hi=hi, sh=SHIFT.get(d, SHIFT_ELSE), kind=1, gain=PNO_GAIN, lpred=lp, lidx=li,
+                                         dk=0, d1k=32767, pk=0))
+                out["data"] += data
+                out["ck"] += cks
+            out["sets"].append((name, z0, len(roots), d in STRUCK))
+            out.setdefault("play", []).append(PLAY.get(d, PLAY_ELSE))
+            continue
         segs, decs = [], []
         sh = SHIFT.get(d, SHIFT_ELSE)
         zr = SRC_RATE / (SRC_RATE // rate << sh)    # this set's rate, Hz
         per = int(per0 * share) // CK * CK
-        for i, r in enumerate(roots):
-            if d in SECONDS:
-                a, b = SECONDS[d]
-                per = int((a + (b - a) * i / max(1, len(roots) - 1)) * zr) // CK * CK
+        for r in roots:
             x = resample(read_wav(files[r]), rate, sh)
             o = max(0, onset(x) - int(0.004 * zr))
             seg = x[o:o + per]
-            if d in KNOCK:
-                a, b = KNOCK[d]
-                seg = tame_knock(seg, zr, a + (b - a) * i / max(1, len(roots) - 1), r)
-            if d in SPIKE:
-                a, b = SPIKE[d]
-                seg = soften_strike(seg, zr, a + (b - a) * i / max(1, len(roots) - 1))
-            if d in ENVS:                        # take its loudness out: a level loop (the firmware puts it back)
-                env = env_of(x[o:], zr)
-                gi = np.interp(np.arange(len(seg)), np.arange(ENV_N) * ENV_STEP, env / 32767)
-                out.setdefault("envs", []).append(env)
-                decs.append((0, 0.0, len(out["envs"]), gi))   # (taken out once its level is set: as it sounds)
-            elif d in DECAYS:                    # take the decay out: a level loop
+            if d in DECAYS:                      # take the decay out: a level loop
                 pk, dbs = decay_of(x[o:], zr)
                 t = np.maximum(0, np.arange(len(seg)) - pk) / zr
                 seg = seg * 10 ** (dbs * t / 20)
-                decs.append((pk, dbs, 0, None))
+                decs.append((pk, dbs))
             else:
-                decs.append((0, 0.0, 0, None))
+                decs.append((0, 0.0))
             segs.append((r, seg))
-        if d in SECONDS:                         # the piano: its keys as loud as each other where it is heard, the
-            lv = np.array([20 * np.log10(rms(s[int(0.03 * zr):int(0.3 * zr)])) for _, s in segs])   # strike, all
-                                                 # the way (after its first 30 ms: the hammer's knock is no measure)
-        else:
-            lv = np.array([20 * np.log10(rms(s[len(s) // 3:])) for _, s in segs])
-        z0 = len(out["zones"])
-        gains = 10 ** ((lv.mean() - lv) / (1 if d in SECONDS else 2) / 20)   # (the tapes: half way to their mean)
+        lv = np.array([20 * np.log10(rms(s[len(s) // 3:])) for _, s in segs])
+        gains = 10 ** ((lv.mean() - lv) / 2 / 20)                     # half way to the set's mean level
         segs = [(r, s * g) for (r, s), g in zip(segs, gains)]
-        if d in SECONDS:                         # (the piano: its tone, as for its keys, 3.5 dB over the tapes' sustain:
-            level = np.sqrt(np.mean([rms(s[int(0.03 * zr):int(0.3 * zr)]) ** 2 for _, s in segs])) / 1.5   # it dies)
-        else:
-            level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
+        level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
         segs = [(r, s * TARGET_RMS / level) for r, s in segs]      # every set as loud as the others
-        segs = [(r, s if dc[3] is None else s / np.maximum(dc[3], 1e-3)) for (r, s), dc in zip(segs, decs)]
-        if d in SOFT:                            # linear to 0.6, then a tanh to 0.95
-            segs = [(r, np.where(np.abs(s) < 0.6, s, np.sign(s) * (0.6 + 0.35 * np.tanh((np.abs(s) - 0.6) / 0.35))))
-                    for r, s in segs]
-        peak = max(np.abs(s).max() for _, s in segs) if d not in ENVS else 0   # (the piano: a boost per zone, below)
+        peak = max(np.abs(s).max() for _, s in segs)
         if peak > 0.95:
             raise SystemExit(f"{name}: peaks at {peak:.2f} at the common loudness; lower TARGET_RMS")
         for i, (r, s) in enumerate(segs):
-            boost = 32
-            if d in ENVS:                        # its recording up to 0.2 s before its length, then a steady tail;
-                a, b = SECONDS[d]                # under 0.6 (no soft clip), what that takes given back by boost (Q5)
-                s, ls = steady_tail(s, zr, r, a + (b - a) * i / max(1, len(roots) - 1) - 0.2)
-                boost = max(32, int(np.ceil(32 * np.abs(s).max() / 0.6)))
-                s = s * 32 / boost
-            else:
-                s, ls = loop(s, zr)
+            s, ls = loop(s, zr)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
             data, cks = ima_encode(pcm)
             lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
             hi = r + (roots[i + 1] - r) // 2 if i + 1 < len(roots) else 127
-            pk, dbs, ev, _ = decs[i]
+            pk, dbs = decs[i]
             dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
+            lp, li = cks[ls // CK]                # (its loop's state: the checkpoint at ls, on the CK grid)
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r, lo=lo, hi=hi,
-                                     sh=sh, env=ev, boost=boost, dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
+                                     sh=sh, kind=0, gain=32, lpred=lp, lidx=li, dk=dk,
+                                     d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
             out["ck"] += cks
         out["sets"].append((name, z0, len(roots), d in STRUCK))
         out.setdefault("play", []).append(PLAY.get(d, PLAY_ELSE))
     return out, int(per0) // CK * CK
+
+
+def sloop_env_exp(v):
+    """SLOOP's gen_tables.py ENV_EXP[v]: an exponential's step per 32 frames, Q16, ~99 % of the way in 10000^(v/127) ms"""
+    tau = 10000 ** (v / 127) / 1000 / 4.6
+    return max(1, min(65535, int(65536 * (1 - np.exp(-32 / (tau * SRC_RATE))))))
 
 
 def onepole_(fc):
@@ -472,7 +409,9 @@ def tables():
             arr("static const uint16_t MEL_GENHP[101]   /* AGE -> its bottom end, 20 .. 380 Hz, Q15 */", genhp) +
             arr("static const uint16_t MEL_REL[101]     /* REL -> decay per 32 frames, Q16 */", rel) +
             arr("static const uint16_t MEL_TONE[101]    /* TONE -> one-pole coefficient, Q15 */", tone) +
-            arr("static const uint16_t MEL_SAT[257]     /* saturation: |x| / 2^8 of 2 x full scale -> Q15 */", sat))
+            arr("static const uint16_t MEL_SAT[257]     /* saturation: |x| / 2^8 of 2 x full scale -> Q15 */", sat) +
+            arr("static const uint16_t MEL_TANH[257]    /* tanh(x / 32768) x 32767, x = i x 256 (SLOOP's TANH_Q15) */",
+                [int(32767 * np.tanh(i / 256 * 2)) for i in range(257)]))
 
 
 def write(out, path, rate, per):
@@ -492,16 +431,17 @@ def write(out, path, rate, per):
          "static const uint8_t MEL_SET_STRUCK[MEL_NSETS] = {" + ", ".join(str(int(k)) for *_, k in out["sets"]) + "};",
          "static const int8_t MEL_SET_PLAY[MEL_NSETS][4] = {   /* its own PLAY to start from: TONE PITCH ATTACK RELEASE */",
          "    " + ", ".join("{" + ", ".join(str(v) for v in q) + "}" for q in out["play"]) + "};",
-         f"#define MEL_ENV_STEP {ENV_STEP}u                 /* a zone's loudness (env 1..): every MEL_ENV_STEP of its samples */",
-         f"#define MEL_ENV_N {ENV_N}u",
-         "static const uint16_t MEL_ENV[][MEL_ENV_N] = {   /* Q15; between two points, a straight line */"]
-    for e in out.get("envs", [[0] * ENV_N]):
-        L.append("    {" + ", ".join(str(v) for v in e) + "},")
-    L += ["};",
+         "/* a kind 1 zone (the piano): SLOOP's SAMPLE engine with LOFI KEYS (gen_tapes.py PNO_) */",
+         f"#define MEL_PNO_BITS {PNO_BITS}                   /* bits taken off */",
+         f"#define MEL_PNO_DRV {PNO_DRV}                  /* its drive into the tanh */",
+         f"#define MEL_PNO_CUT {PNO_CUT}                 /* its one-pole, Q15 */",
+         f"#define MEL_PNO_DEC {sloop_env_exp(108)}u                 /* its decay per 32 frames, Q16 (DEC 108: -40 dB in 2.5 s) */",
+         f"#define MEL_PNO_LFO {int(0.05 * 800 ** (38 / 127) * 32 / SRC_RATE * 2 ** 32)}u          /* its pitch LFO, a sine, per 32 frames (RATE 38: 0.37 Hz) */",
+         "#define MEL_PNO_LFO_C16 300               /* its depth, 1/16 cent (PIT 1: +-18.75 cents) */",
          "static const mel_zone_t MEL_ZONE[MEL_NZONES] = {"]
     for q in z:
-        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, {q['env']}, {q['boost']}, "
-                 f"{q['dk']}u, {q['d1k']}u, {q['pk']}u}},")
+        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, {q['kind']}, "
+                 f"{q['gain']}, {q['lidx']}, {q['dk']}u, {q['d1k']}u, {q['pk']}u, {q['lpred']}}},")
     L.append("};")
     L.append("static const uint32_t MEL_CKS[] = {   /* (uint16_t)predictor | step index << 16 */")
     for i in range(0, len(out["ck"]), 8):
