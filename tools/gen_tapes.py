@@ -55,7 +55,9 @@ PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano as S
 PNO_BITS = 45 // 10                                # bits taken off (eng_sample.c: sh = BITS / 10)
 PNO_DRV = 30 * 150                                 # s + (s >> 2) * PNO_DRV >> 11, into the tanh
 PNO_CUT = 4000 + ((78 << 8) * 28767 >> 15)         # its one-pole, Q15 (CUT 78: ~7.5 kHz)
-PNO_GAIN = 32                                      # its level, Q5 (by ear against the tapes: mel.c's G_TAPE)
+PNO_GAIN = 25                                      # its level, Q5: its first half second as loud as a tape's chord
+OCTAVE = {"Piano": 1}                              # sets that sound octaves up from their keys (their zones' roots
+                                                   # and ranges moved down: a key plays the sample of the key above)
 TARGET_RMS = 0.13                                # every set's sustain, full scale 1
 SLOOP_FS = 22050                                 # SLOOP's stored rate (gen_samples.py TR)
 NOTE = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
@@ -275,8 +277,9 @@ def build(src, budget, step, rate, which):
                 lp, li = ima_state(pcm, ls)
                 lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
                 hi = r + (roots[i + 1] - r) // 2 if i + 1 < len(roots) else 127
-                out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r, lo=lo,
-                                         hi=hi, sh=SHIFT.get(d, SHIFT_ELSE), kind=1, gain=PNO_GAIN, lpred=lp, lidx=li,
+                up = 12 * OCTAVE.get(d, 0)
+                out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r - up,
+                                         lo=max(0, lo - up) if i else 0, hi=hi - up if i + 1 < len(roots) else 127, sh=SHIFT.get(d, SHIFT_ELSE), kind=1, gain=PNO_GAIN, lpred=lp, lidx=li,
                                          dk=0, d1k=32767, pk=0))
                 out["data"] += data
                 out["ck"] += cks
