@@ -1,0 +1,36 @@
+# SMK-37: the pads. Top row: SOUND A-D, LAYER A-D (the lit one again: off). Bottom row: a switch each
+100 dump
+200 pad 1 100
+300 pad 1 0
+400 dump
+500 pad 4 90
+600 pad 4 0
+700 dump
+800 pad 4 90
+900 pad 4 0
+1000 dump
+1100 pad 6 90
+1150 pad 6 0
+1200 dump
+1300 pad 8 90
+1310 pad 8 0
+1320 pad 8 90
+1330 pad 8 0
+1400 dump
+1500 pad 9 90
+1600 pad 12 90
+1700 pad 13 90
+1800 pad 10 90
+1900 pad 11 90
+2000 pad 14 90
+2100 pad 15 90
+2200 dump
+2300 pad 12 90
+2400 pad 11 90
+2650 pad 13 90
+2700 dump
+2800 keys 0x80
+3000 dump
+3100 shot
+3300 keys 0
+3600 end
