@@ -30,7 +30,7 @@ LFO, ALGORITHM, ...). The SMK-37 adds the rest.
 | SMK-37 | MEL |
 | --- | --- |
 | Keys F3..G5 (the middle 27) | the FM-1's 27 keys, with velocity |
-| Keys C3..E3 and G#5..C6 (the outer 10) | the notes below and above them: all 37 keys play, C3..C6 at OCTAVE 0. The M400 has 35 keys, G2..F5: OCTAVE- puts all of them under your hands, and the two keys more go on into the next tapes |
+| Keys C3..E3 and G#5..C6 (the outer 10) | the notes below and above them: all 37 keys play, C3..C6 at OCTAVE 0. The M400 has 35 keys, G2..F5: with PITCH at -5 st (PLAY) the keyboard is G2..G5, the M400's 35 notes and two more, F#5 and G5, past its top (MEL pitches every note from its nearest tape) |
 | Velocity | the tape's level, as if the head met the tape harder: a soft key about a third, a hard one full. USB-MIDI in velocity too; ARP and SEQ play at the velocity of the last note struck |
 | Pads 1-4 (top row) | the SOUND: A FLUTE, B CHOIR, C CELLO, D VIBES (as PRESETS) |
 | Pads 5-8 (top row) | the LAYER's sound A..D; the lit one again: no layer |
@@ -99,7 +99,7 @@ installed package keeps the keyboard's model name.
 
 | Flash | MEL on the SMK-37 |
 | --- | --- |
-| `0x04000-0x9CFFF` | the app, with the tapes in it (about 530 KiB of 604 KiB); only the update loader writes it |
+| `0x04000-0x9CFFF` | the app, with the tapes in it (529 KiB of the 605 KiB app slot; the tapes 0x144B0-0x7C2AF); only the update loader writes it |
 | `0x9D000` | the settings (the FM-1 keeps them at `0xFC000`, the SMK-37's protected stock area) |
 | `0xAF000` | the owner tag: at the first start, the stock firmware's settings there and any other firmware's data in these two sectors are cleared once |
 | `0xBB000-0xBFFFF` | the update's staging area |

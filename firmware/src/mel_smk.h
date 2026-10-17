@@ -4,8 +4,8 @@
  * by printed name, the knobs: platform.c); this file adds what the SMK has more. Included by mel.c; main loop only.
  *
  *   keys        all 37, C3..C6 at OCTAVE 0 (keybed 5..31 are the FM-1's F3..G5, so the FM-1's keys stay where they
- *               are; C3-E3 and G#5-C6 go on beyond them). The M400 has 35 keys, G2..F5: OCT- puts all of them under the
- *               hands, the two keys more go on into the next tapes (MEL pitches every note from its nearest tape).
+ *               are; C3-E3 and G#5-C6 go on beyond them). The M400 has 35 keys, G2..F5: with PITCH -5 the keyboard is
+ *               G2..G5, its 35 notes and two more past its top (MEL pitches every note from its nearest tape).
  *               Velocity sets the tape's level (the head pressed harder on it): a soft key ~1/3, a hard one full;
  *               USB-MIDI in velocity too. ARP and SEQ play at the velocity of the last note struck
  *   pads        top row: 1-4 the SOUND (A FLUTE, B CHOIR, C CELLO, D VIBES), 5-8 the LAYER's sound (the lit one
