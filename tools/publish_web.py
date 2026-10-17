@@ -48,8 +48,6 @@ def main():
     for f in ("worklet.js", "mel.wasm"):
         shutil.copy2(emu / f, site / f)
     sim = head((emu / "index.html").read_text(), "style/mel.css")
-    sim = sim.replace('<button class="lang"', '<p><a href="install/"><span data-lang="en">Install it on your FM-1</span>'
-                      '<span data-lang="es">Instalarlo en tu FM-1</span></a></p>\n  <button class="lang"', 1)
     (site / "index.html").write_text(sim)
     (inst / "index.html").write_text(head((a.install_from / "index.html").read_text(), "../style/mel.css"))
     for f in ("install.js", "fm1ota.js", "fm1pkg.js"):
