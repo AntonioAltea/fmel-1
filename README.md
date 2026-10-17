@@ -1,7 +1,10 @@
 # FMEL-1
+## WARNING ⚠️ 
+**I have not have the chance to test this in a real FM-1, so I advise against installing right now until I can attest the installation work without problems.**
 
 This is a personal project to create a few sounds I'm interested in for the M-VAVE FM-1.
 
+## What is this?
 This firmware, based on [zvenson's dinghy](https://github.com/zvenson/dinghy), aims to reproduce Mellotron sounds and
 color them with some basic FX and lo-fi tape effects. It also lets you mix two different Mellotron sounds together.
 
