@@ -9,6 +9,9 @@ color them with some basic FX and lo-fi tape effects. It also lets you mix two d
 To put it on your FM-1, use the [web installer](https://antonioaltea.github.io/fmel-1/install/) (Chrome or Edge) or
 download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/latest).
 
+FMEL-1 also builds for the M-Vave SMK-37 (Pro, Elite, MKE-P37): 37 velocity keys, 16 pads, 4 faders, the wheels. See
+[SMK37.md](SMK37.md); the tapes and their terms are the same there.
+
 ## The tapes
 
 FMEL-1 plays real Mellotron tapes: the samples Bernie Kornowicz (Taijiguy) recorded from his 1973 Mellotron M400S,
