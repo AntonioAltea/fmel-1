@@ -1,0 +1,23 @@
+# SMK-37: the faders, bank A (MIX TONE WOW FLUTTER) and B (AGE DRIVE ECHO REVERB); a fader acts once it moves
+100 fader 0 10
+100 fader 1 10
+100 fader 2 10
+100 fader 3 10
+400 dump
+1000 fader 0 127
+1100 fader 1 0
+1200 fader 2 64
+1300 fader 3 127
+1400 dump
+1500 shot
+# FADER BANK: B; a fader that does not move does nothing, a moved one sets its parameter
+1600 btn 1
+1700 dump
+1800 fader 0 90
+1900 fader 3 127
+2000 fader 3 64
+2100 dump
+2200 btn 1
+2300 fader 1 127
+2400 dump
+2600 end

@@ -1,0 +1,15 @@
+# SMK-37: the pitch wheel bends the motor (+-2 semitones), the mod wheel is the vibrato; both rest at 0
+400 dump
+500 wheel 0 1000
+900 dump
+1000 wheel 0 535
+1400 dump
+1500 wheel 0 50
+1900 dump
+2000 wheel 0 535
+2400 dump
+2500 wheel 1 300
+2900 dump
+3000 wheel 1 620
+3400 dump
+3600 end

@@ -1,0 +1,24 @@
+# SMK-37: the keys with velocity; the outer keys (keybed 0..4 and 32..36) go on beyond the FM-1's 27
+100 vel 10
+200 keys 0x80
+1200 keys 0
+1400 vel 127
+1500 keys 0x80
+2500 keys 0
+2700 xkey 0 90
+2900 xkey 0 0
+3000 xkey 36 70
+3200 xkey 36 0
+3300 btn 4
+3400 xkey 0 50
+3600 xkey 0 0
+3700 btn 5
+# HOLD (CHORD tapped): an outer key latches, the next chord lets it go
+3800 btn 9
+3900 xkey 2 100
+4000 xkey 2 0
+4300 dump
+4400 xkey 33 100
+4500 xkey 33 0
+4600 btn 9
+4800 end

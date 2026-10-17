@@ -11,6 +11,7 @@ complete source under the same licence too.
 | The platform: `firmware/hal/`, `firmware/loader/`, `crt0.S`, `app.ld`, `firmware/src/` (`usb.c`, `ota.c`, `recovery.c`, `lcd.c`, `gfx.c`, `libc.c`, `bootguard.h`, `uac_fir.h`), `tools/` | Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments ([Felucca](https://github.com/hugelton/Felucca)), with the changes of [SLOOP](https://github.com/isod89/sloop-fm1) (isod89) |
 | Dinghy: the wiring `platform.c`, the host mode `tests/`, the docs (the app `dinghy.c`, which MEL grew out of) | zvenson |
 | MEL: `firmware/src/mel.c`, `mel_fx.c`, `mel_seq.c`, `mel_ui.c`, `tools/gen_tapes.py`, `tools/get_tapes.sh`, `tools/gen_sprites.py`, `tools/gen_mel_fonts.py`, `web/emu/` (after the browser emulators of X0X, Felucca and FoMni, GPL-3.0) | AntonioAltea |
+| The SMK-37 layer (`BOARD_SMK37`): `firmware/hal/smk_input.h`, `fm1_flash_map.h`, the SMK parts of `hal/`, `loader/`, `ota.c`, `lcd.c`, `platform.c`, `tools/build.py`, `fm1pkg_make.py`, `fm1_install.py`, after the SLOOP SMK-37 target; `firmware/src/mel_smk.h`, `smk_store.h`, `smk_wheel.h`, `tests/smk*`, `tests/run_tests.sh`, `SMK37.md` | M. Geisler (genkigenki/makkuro); the pad event queue in `smk_input.h`: zvenson |
 
 ## Third-party material
 
