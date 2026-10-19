@@ -460,19 +460,22 @@ static int32_t verb_ms(void)                    /* the REVERB's tail as it is he
     const uint16_t *t = RT[PV(P_RTYPE)];
     return t[i] + (t[i + 1] - t[i]) * (v - i * 25) / 25;
 }
-static void stage_verb(void)                    /* REVERB: the hit, then the tail dying away (in dB, its real RT60 across
-                                                 * the screen up to 5 s), MIX its height; after a note it fills in as it
-                                                 * is heard, from its start */
+static void stage_verb(void)                    /* REVERB: the sound, then the reflections dying away, as heard: their
+                                                 * length its real RT60 (5 s across), MIX their height (the wet's level,
+                                                 * in dB), TONE their colour; after a note they fill in from its start */
 {
-    int32_t rt = verb_ms(), span = rt < 1000 ? 1000 : rt > 5000 ? 5000 : rt, m = PV(P_RMIX), x;
-    int32_t top = echo_h(m * m * 32767 / 10000), at = (int32_t)(fm1_ms - t_hit);
-    uint16_t c = mix565(C_BODY2, C_OXIDE2, (uint32_t)(6 + PV(P_RTONE) * 10 / 100));
+    int32_t x, m = PV(P_RMIX), len = verb_ms() * 7 / 10 * 208 / 5000, top = echo_h(m * m * 32767 / 10000);
+    int32_t at = (int32_t)(fm1_ms - t_hit), x0 = PV(P_RTYPE) ? 14 : 13;   /* (PLATE: its 10 ms pre-delay) */
+    uint16_t c = mix565(C_OXIDE, C_LAMP, (uint32_t)(PV(P_RTONE) * 16 / 100));
+    uint32_t r = 12345u + (ui_lv ? fm1_ms / 60u : 0u);
     if (!t_hit || at < 0 || at > 600000) at = 1 << 30;
-    for (x = 24; x < 232; x += 3) {             /* (the tail: 60 dB over its RT60, the graph's 42 dB of it) */
-        int32_t t = (x - 24) * span / 208, h = top - 80 * 60 * t / (42 * rt);
-        if (h > 0) cv_rect(x, 100 - h, 2, h, at < t ? C_BODY2 : at < t + 80 ? C_LAMP : c);
+    rrect(8, 100 - 70, 3, 70, 1, at < 120 ? C_LAMP : C_INK);   /* the sound */
+    for (x = x0; x < x0 + len && x < 232; x += 3) {   /* (42 dB down at 0.7 RT60: the graph's floor) */
+        int32_t e = top * (x0 + len - x) / len, h;
+        r = r * 1103515245u + 12345u;
+        h = e * (int32_t)(40u + (r >> 25)) / 168;
+        if (h > 0) cv_rect(x, 100 - h, 2, h, at < (x - x0) * 5000 / 208 ? C_BODY2 : c);
     }
-    rrect(12, 20, 9, 80, 2, at < 120 ? C_LAMP : C_INK);   /* the hit, dry */
     cv_rect(8, 100, 224, 1, C_INK2);
 }
 
@@ -497,20 +500,24 @@ static void stage_eq(void)                      /* EQ: the curve: two shelves an
 
 static void stage_setup(void)                   /* SETUP: the settings, and what the one you touch does */
 {
-    static const char *const NAME[2] = {"LENGTH", "SCREEN"};
-    static const char *const HELP[5][2] = {
+    static const char *const NAME[3] = {"LENGTH", "SCREEN", "COLOUR"};
+    static const char *const HELP[6][2] = {
         {"Settings for the whole MEL.", "Turn a knob: it says here."},
         {"A note sounds as long as", "you hold it (the tape loops)."},
         {"As on a real M400: a tape", "runs out after 8 seconds."},
         {"A clean, steady picture.", ""},
-        {"The screen as an old tape:", "scanlines, sway, tears, grain."}};
-    int32_t k, h = touched > 1u ? 0 : touched == 0u ? 1 + PV(P_LEN) : 3 + PV(P_LOOK);
-    for (k = 0; k < 2; k++) {
-        int32_t y = 10 + k * 24;
+        {"The screen as an old tape:", "scanlines, sway, tears, grain."},
+        {"The screen's colour, to go", "with your FM-1's buttons."}};
+    int32_t k, h = touched > 2u ? 0 : touched == 0u ? 1 + PV(P_LEN) : touched == 1u ? 3 + PV(P_LOOK) : 5;
+    for (k = 0; k < 3; k++) {
+        int32_t y = 2 + k * 22;
         if ((uint32_t)k == touched) rrect(2, y + 4, 6, 8, 3, C_LAMP);
         tx(12, y, &F16, NAME[k], C_INK2);
-        tx(84, y, &F16, k ? (PV(P_LOOK) ? "OLD TAPE" : "CLEAN") : PV(P_LEN) ? "8 SECONDS" : "AS HELD", C_INK);
+        tx(84, y, &F16, k == 2 ? N_COLOR[PV(P_COLOR)] : k ? (PV(P_LOOK) ? "OLD TAPE" : "CLEAN")
+                                : PV(P_LEN) ? "8 SECONDS" : "AS HELD", C_INK);
     }
+    rrect(160, 47, 20, 14, 3, C_LAMP);          /* (the colour: its lamp and what runs) */
+    rrect(184, 47, 20, 14, 3, C_OXIDE2);
     cv_rect(8, 72, 224, 1, C_BODY2);
     tx(12, 75, &F16, HELP[h][0], C_INK);
     tx(12, 91, &F16, HELP[h][1], C_INK);

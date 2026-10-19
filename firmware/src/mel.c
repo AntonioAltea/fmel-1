@@ -484,7 +484,7 @@ enum {
     P_AMODE, P_ARATE, P_AOCT, P_AGATE,          /* ARP */
     P_SLEN, P_SGATE, P_STEP, P_SWING,           /* SEQ */
     P_PMODE,                                    /* SETUP: SOUNDS (PLAY: each sound its own, or one for all) */
-    P_COLOR,                                    /*        and the screen's colour, the FM-1's buttons' */
+    P_COLOR,                                    /* SETUP: the screen's colour, the FM-1's buttons' */
     NP
 };
 static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
@@ -638,8 +638,9 @@ static const ctl_t CTL[NPG][4] = {
     {{P_ETIME, F_EMS, "TIME", 0}, {P_EFB, F_NUM, "REPEATS", 0}, {P_ETONE, F_NUM, "TONE", 0}, {P_EMIX, F_PCT, "MIX", 0}},
     {{P_RSIZE, F_NUM, "SIZE", 0}, {P_RTONE, F_NUM, "TONE", 0}, {P_RTYPE, F_ENUM, "TYPE", N_RTYPE}, {P_RMIX, F_PCT, "MIX", 0}},
     {{P_EQLO, F_DB, "LOW", 0}, {P_EQMID, F_DB, "MID", 0}, {P_EQFREQ, F_EQHZ, "FREQ", 0}, {P_EQHI, F_DB, "HIGH", 0}},
-    {{P_LEN, F_ENUM, "LENGTH", N_LEN}, {P_LOOK, F_ENUM, "SCREEN", N_LOOK}, {0, 0, 0, 0}, {0, 0, 0, 0}},
-    {{P_PMODE, F_ENUM, "PLAY", N_PMODE}, {0, 0, 0, 0}, {0, 0, 0, 0}, {P_COLOR, F_ENUM, "COLOUR", N_COLOR}},
+    {{P_LEN, F_ENUM, "LENGTH", N_LEN}, {P_LOOK, F_ENUM, "SCREEN", N_LOOK}, {P_COLOR, F_ENUM, "COLOUR", N_COLOR},
+     {0, 0, 0, 0}},
+    {{P_PMODE, F_ENUM, "PLAY", N_PMODE}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{P_AMODE, F_ENUM, "MODE", ARP_MODE}, {P_ARATE, F_ENUM, "RATE", ARP_RATE}, {P_AOCT, F_X, "OCTAVES", 0},
      {P_AGATE, F_PCT, "GATE", 0}},
     {{P_SLEN, F_NUM, "LENGTH", 0}, {P_SGATE, F_PCT, "GATE", 0}, {P_STEP, F_STEP, "STEP", 0}, {P_SWING, F_PCT, "SWING", 0}},
