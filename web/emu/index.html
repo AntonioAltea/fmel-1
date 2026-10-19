@@ -3,10 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MEL in your browser</title>
-<meta name="description" content="MEL, a tape keyboard (after the Mellotron M400) for the M-VAVE FM-1, in your browser: the same code the FM-1 runs.">
-<script>   /* the language before anything is drawn: English, or Spanish if chosen (the button at the top) */
-try { if (localStorage.getItem("mel-lang") === "es") document.documentElement.lang = "es"; } catch (e) {}
+<title>FMEL-1 simulator</title>
+<meta name="description" content="Simulator of FMEL-1, firmware for the M-VAVE FM-1 that plays Mellotron M400S tape samples. Same code as the FM-1, compiled for the browser.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="FMEL-1 simulator">
+<meta property="og:description" content="Firmware for the M-VAVE FM-1 that plays Mellotron M400S tape samples, running in the browser.">
+<meta property="og:url" content="https://antonioaltea.github.io/fmel-1/">
+<meta property="og:image" content="https://antonioaltea.github.io/fmel-1/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="img/icon.png">
+<script>   /* the language before anything is drawn: the one chosen, else the browser's (Spanish or English) */
+try {
+  const l = localStorage.getItem("mel-lang") || (/^es\b/i.test(navigator.language || "") ? "es" : "en");
+  if (l === "es") document.documentElement.lang = "es";
+} catch (e) {}
 </script>
 <style>
 :root { --ground: #eef5f4; --ink: #1d2e2c; --muted: #5a706d; --rule: #d0e2df; --card: #f8fcfb; --accent: #12998d; color-scheme: light; }
@@ -18,11 +30,13 @@ try { if (localStorage.getItem("mel-lang") === "es") document.documentElement.la
 body { background: var(--ground); color: var(--ink); margin: 0; padding: 24px 16px 48px;
        font: 400 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 main { max-width: 1060px; margin: 0 auto; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem 1rem; margin-bottom: 1rem; }
-h1 { margin: 0; font-size: 1.9rem; letter-spacing: .02em; }
-header p { margin: 0; color: var(--muted); }
 html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: none !important; }
-.lang { margin-left: auto; font: inherit; font-size: .85rem; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .25em .7em; cursor: pointer; }
+a { color: var(--accent); }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: 1rem; }
+.top .grow { flex: 1; }
+.top a, .lang { font: inherit; font-size: .9rem; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .25em .7em; cursor: pointer; text-decoration: none; }
+h1 { margin: 0; font-size: 2.4rem; line-height: 1.1; letter-spacing: .02em; }
+.intro { color: var(--muted); margin: .4rem 0 1.4rem; max-width: 46rem; }
 .device { position: relative; width: 100%; aspect-ratio: 1000 / 640; user-select: none; -webkit-user-select: none; touch-action: none; }
 .device svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .device canvas { position: absolute; left: 30%; top: 7.1875%; width: 23.6%; height: 36.875%; image-rendering: pixelated; background: #000; border-radius: 3px; pointer-events: none; }
@@ -48,7 +62,19 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
 .bar { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin-top: .9rem; color: var(--muted); font-size: .92rem; }
 .bar button { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .3em .8em; cursor: pointer; }
 .bar .grow { flex: 1; }
-.help { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem 2rem; margin-top: 1.6rem; }
+.help { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem 2rem; margin-top: 1rem; }
+.hint { color: var(--muted); font-size: .92rem; margin: .7rem 0 0; }
+details.manual { margin-top: 1.4rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
+details.manual summary { cursor: pointer; font-size: 1.1rem; }
+footer { margin-top: 2.4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .9rem; }
+footer p { margin: .3rem 0; }
+.hint.touch { display: none; }
+@media (pointer: coarse) { .hint.desk { display: none; } .hint.touch { display: block; } }
+@media (max-width: 640px) {
+  .start button { font-size: 1rem; padding: .55em 1.3em; }
+  h1 { font-size: 2rem; }
+  .bar #reset { display: none; }
+}
 .help h2 { font-size: 1.05rem; margin: 0 0 .3rem; }
 .help ul { margin: 0; padding-left: 1.1rem; color: var(--muted); }
 .help li { margin: .15rem 0; }
@@ -58,11 +84,17 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
 </head>
 <body>
 <main>
-<header>
-  <h1>MEL</h1>
-  <p data-lang="en">a tape keyboard for the FM-1, in your browser: the same code the FM-1 runs</p>
-  <p data-lang="es">un teclado de cintas para el FM-1, en el navegador: el mismo código que corre el FM-1</p>
+<nav class="top">
+  <span class="grow"></span>
+  <a href="install/"><span data-lang="en">Install on the FM-1</span><span data-lang="es">Instalar en el FM-1</span></a>
+  <a href="https://github.com/AntonioAltea/fmel-1">GitHub</a>
   <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
+</nav>
+
+<header>
+  <h1>FMEL-1</h1>
+  <p class="intro" data-lang="en">A simulator of FMEL-1, firmware for the M-VAVE FM-1 that plays samples of a Mellotron M400S's tapes. It runs the same code as the FM-1, compiled for the browser.</p>
+  <p class="intro" data-lang="es">Un simulador de FMEL-1, firmware para el M-VAVE FM-1 que toca muestras de las cintas de un Mellotron M400S. Ejecuta el mismo código que el FM-1, compilado para el navegador.</p>
 </header>
 
 <div class="device" id="device">
@@ -74,11 +106,18 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
 <div class="bar">
   <span id="status"></span>
   <span class="grow"></span>
-  <span id="load"></span>
+  <span id="load" hidden></span>
   <button id="midi" type="button"></button>
   <button id="reset" type="button"><span data-lang="en">Factory settings</span><span data-lang="es">Ajustes de fábrica</span></button>
 </div>
+<p class="hint desk" data-lang="en">Keys: click them, or use the computer keyboard (<kbd>Z</kbd>…<kbd>/</kbd> and <kbd>Q</kbd>…<kbd>Y</kbd>) or a MIDI keyboard. Knobs: drag up and down, or the mouse wheel. Each button opens a page; KNOB 1–4 change the values shown at the bottom of the screen.</p>
+<p class="hint desk" data-lang="es">Teclas: haz clic, o usa el teclado del ordenador (<kbd>Z</kbd>…<kbd>/</kbd> y <kbd>Q</kbd>…<kbd>Y</kbd>) o un teclado MIDI. Knobs: arrastra arriba y abajo, o la rueda del ratón. Cada botón abre una página; KNOB 1–4 cambian los valores de la parte de abajo de la pantalla.</p>
 
+<p class="hint touch" data-lang="en">Knobs: drag up and down. Each button opens a page; KNOB 1–4 change the values shown at the bottom of the screen. In landscape the keys are larger.</p>
+<p class="hint touch" data-lang="es">Knobs: arrastra arriba y abajo. Cada botón abre una página; KNOB 1–4 cambian los valores de la parte de abajo de la pantalla. En horizontal las teclas son más grandes.</p>
+
+<details class="manual">
+<summary><span data-lang="en">Manual</span><span data-lang="es">Manual</span></summary>
 <section class="help" data-lang="en">
   <div>
     <h2>How it is laid out</h2>
@@ -163,6 +202,14 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
     </ul>
   </div>
 </section>
+</details>
+
+<footer>
+  <p data-lang="en">The tapes: Bernie Kornowicz (Taijiguy)'s Mellotron M400S, from <a href="http://leisureland.us">leisureland.us</a>, free for non-commercial use. Drawings by Javi. Built on <a href="https://github.com/zvenson/dinghy">Dinghy</a> and <a href="https://github.com/hugelton/Felucca">Felucca</a>; <a href="https://github.com/AntonioAltea/fmel-1#credits">all the credits</a>.</p>
+  <p data-lang="es">Las cintas: el Mellotron M400S de Bernie Kornowicz (Taijiguy), de <a href="http://leisureland.us">leisureland.us</a>, libres para uso no comercial. Dibujos de Javi. Hecho sobre <a href="https://github.com/zvenson/dinghy">Dinghy</a> y <a href="https://github.com/hugelton/Felucca">Felucca</a>; <a href="https://github.com/AntonioAltea/fmel-1#credits">todos los créditos</a>.</p>
+  <p data-lang="en">GPL-3.0 · <a href="https://github.com/AntonioAltea/fmel-1">source</a> · <a href="https://github.com/AntonioAltea/fmel-1/issues">report a bug</a> · not affiliated with M-VAVE.</p>
+  <p data-lang="es">GPL-3.0 · <a href="https://github.com/AntonioAltea/fmel-1">código</a> · <a href="https://github.com/AntonioAltea/fmel-1/issues">avisar de un fallo</a> · sin relación con M-VAVE.</p>
+</footer>
 </main>
 
 <script>
@@ -175,14 +222,14 @@ const TEXT = {                                  // [what it is, what holding it 
   en: { SELECT: ["REEL"], ALGORITHM: ["TEMPO"], PRESETS: ["SOUND A–E"], MASTER: ["VOLUME"], KNOB: ["see screen"],
         HOME: ["PLAY", "again: sound"], LFO: ["LOFI", "hold: out"], FX: ["", "hold: out"], EDIT: ["EQ", "hold: flat"],
         GLO: ["SETUP"], ENV: ["HOLD", "hold: half"], SEL: ["LAYER"], PLAY: ["SEQ ▶"], REC: [""],
-        off: "Off. The sound starts when you switch it on.", loading: "Loading the tapes…",
+        off: "", loading: "Loading the tapes…",
         on: "On. Play with the mouse, the keyboard or a MIDI keyboard.", fail: "Could not start: ", error: "Error: ",
         midi: "Connect MIDI", midiOn: "MIDI connected", noMidi: "This browser has no Web MIDI (try Chrome or Edge).",
         midiNone: "MIDI connected, but there is no MIDI keyboard.", midiNo: "MIDI not allowed: ", key: "key" },
   es: { SELECT: ["BOBINA"], ALGORITHM: ["TEMPO"], PRESETS: ["SONIDO A–E"], MASTER: ["VOLUMEN"], KNOB: ["ver pantalla"],
         HOME: ["PLAY", "otra: sonido"], LFO: ["LOFI", "mant: fuera"], FX: ["", "mant: fuera"], EDIT: ["EQ", "mant: plano"],
         GLO: ["SETUP"], ENV: ["HOLD", "mant: half"], SEL: ["LAYER"], PLAY: ["SEQ ▶"], REC: ["GRABAR"],
-        off: "Apagado. El sonido empieza al encender.", loading: "Cargando las cintas…",
+        off: "", loading: "Cargando las cintas…",
         on: "Encendido. Toca con el ratón, el teclado o un teclado MIDI.", fail: "No ha podido arrancar: ", error: "Error: ",
         midi: "Conectar MIDI", midiOn: "MIDI conectado", noMidi: "Este navegador no tiene Web MIDI (prueba Chrome o Edge).",
         midiNone: "MIDI conectado, pero no hay ningún teclado MIDI.", midiNo: "MIDI no permitido: ", key: "tecla" },
@@ -283,7 +330,7 @@ let statusKey = "off", statusExtra = "", midiOn = false;
 function status(key, extra = "") { statusKey = key; statusExtra = extra; statusEl.textContent = t(key) + extra; }
 function applyLang() {
   document.documentElement.lang = lang;
-  document.title = lang === "es" ? "MEL en el navegador" : "MEL in your browser";
+  document.title = lang === "es" ? "Simulador de FMEL-1" : "FMEL-1 simulator";
   for (const [e, key, line, y, yAlone] of texts) {
     const lines = TEXT[lang][key] || [];
     e.textContent = lines[line] || "";

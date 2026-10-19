@@ -4,7 +4,7 @@
 
   tools/publish_web.py SITE [--fwsc PACKAGE] [--version V] [--install-from DIR]
 
-SITE/            the simulator (build/emu: web/emu/build.sh)
+SITE/            the simulator (build/emu: web/emu/build.sh), with its pictures (img/)
 SITE/install/    the installer (web/install, or --install-from) with the package
                  (--fwsc, default build/mel.fwsc: ./build.sh) and mel.json, its SHA-256, identity and version (--version,
                  default git describe), which the page checks before it installs anything
@@ -47,10 +47,8 @@ def main():
     shutil.copytree(SRC / "web" / "site" / "style", site / "style", dirs_exist_ok=True)
     for f in ("worklet.js", "mel.wasm"):
         shutil.copy2(emu / f, site / f)
-    sim = head((emu / "index.html").read_text(), "style/mel.css")
-    sim = sim.replace('<button class="lang"', '<p><a href="install/"><span data-lang="en">Install it on your FM-1</span>'
-                      '<span data-lang="es">Instalarlo en tu FM-1</span></a></p>\n  <button class="lang"', 1)
-    (site / "index.html").write_text(sim)
+    shutil.copytree(emu / "img", site / "img", dirs_exist_ok=True)
+    (site / "index.html").write_text(head((emu / "index.html").read_text(), "style/mel.css"))
     (inst / "index.html").write_text(head((a.install_from / "index.html").read_text(), "../style/mel.css"))
     for f in ("install.js", "fm1ota.js", "fm1pkg.js"):
         shutil.copy2(a.install_from / f, inst / f)

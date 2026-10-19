@@ -11,14 +11,14 @@ let lang = document.documentElement.lang === "es" ? "es" : "en";
 const M = {                                     // what the page says, by language
   en: {
     pkgChecking: () => "Checking the package…",
-    pkgOk: (v, p, kb) => `MEL ${v} (${p}), ${kb} KB: checked.`,
+    pkgOk: (v, p, kb) => `FMEL-1 ${v} (${p}), ${kb} KB: checked.`,
     pkgBad: (why) => `The package cannot be used: ${why}. Nothing will be installed.`,
     shaBad: () => "the file does not match its fingerprint (SHA-256): reload the page",
     idBad: (p) => `unexpected identity: ${p}`,
     devNone: () => "Not connected.",
     noMidi: () => "this browser has no Web MIDI: use Chrome or Edge",
     denied: () => "The browser did not let this page use MIDI. Allow «MIDI devices» for this page (the lock left of the address), reload, and look again.",
-    canMidi: () => "This browser can install MEL.",
+    canMidi: () => "This browser can install FMEL-1.",
     cantMidi: () => "This browser can't: open this page in Chrome or Edge on a computer.",
     percent: (n) => `Writing… ${n} %. Don't unplug it.`,
     copied: () => "Log copied.",
@@ -26,10 +26,10 @@ const M = {                                     // what the page says, by langua
     notFound: () => "The FM-1 is not found: a data cable? another app using it? Unplug it, plug it in again and try again.",
     cutOff: (t) => `The FM-1 is in update mode (${t}): an install was cut off. Press «Finish the install».`,
     otherLoader: (t) => `The FM-1 is in another firmware's update mode (${t}): finish that update with its own updater (M-UPGRADE), then come back.`,
-    isMel: (t) => `The FM-1 runs MEL (${t}): it can be updated.`,
+    isMel: (t) => `The FM-1 runs FMEL-1 (${t}): it can be updated.`,
     rescue: () => "The FM-1 is in the USB rescue: you can install.",
     official: (t) => `The FM-1 runs the official firmware (${t}): you can install.`,
-    custom: (t) => `The FM-1 runs another unofficial firmware (${t}). Go back to the official V15 first (section 4), then install MEL.`,
+    custom: (t) => `The FM-1 runs another unofficial firmware (${t}). Go back to the official V15 first (step 5), then install FMEL-1.`,
     error: (m) => `Error: ${m}`,
     start: (t) => `Starting on ${t}…`,
     verify: (n) => `The FM-1 checks the package (${n})…`,
@@ -37,21 +37,21 @@ const M = {                                     // what the page says, by langua
     write: () => "Writing… don't unplug it.",
     reboot: () => "Restarting…",
     done: (t) => `Done: the FM-1 runs ${t}. You can unplug it now.`,
-    askMel: () => "Install MEL? Don't unplug the FM-1 until the page says «Done».",
+    askMel: () => "Install FMEL-1? Don't unplug the FM-1 until the page says «Done».",
     askStock: () => "Install the official V15 firmware? Don't unplug the FM-1 until the page says «Done».",
     notReady: () => "The FM-1 is no longer ready to install: look for it again.",
     noResume: () => "Could not finish: unplug it, plug it in again and look for the FM-1 again.",
   },
   es: {
     pkgChecking: () => "Comprobando el paquete…",
-    pkgOk: (v, p, kb) => `MEL ${v} (${p}), ${kb} KB: comprobado.`,
+    pkgOk: (v, p, kb) => `FMEL-1 ${v} (${p}), ${kb} KB: comprobado.`,
     pkgBad: (why) => `No se puede usar el paquete: ${why}. No se instalará nada.`,
     shaBad: () => "el archivo no coincide con su huella (SHA-256): recarga la página",
     idBad: (p) => `identidad inesperada: ${p}`,
     devNone: () => "Sin conectar.",
     noMidi: () => "este navegador no tiene Web MIDI: usa Chrome o Edge",
     denied: () => "El navegador no ha dejado a esta página usar MIDI. Permite «Dispositivos MIDI» para esta página (el candado a la izquierda de la dirección), recarga y busca otra vez.",
-    canMidi: () => "Este navegador puede instalar MEL.",
+    canMidi: () => "Este navegador puede instalar FMEL-1.",
     cantMidi: () => "Este navegador no puede: abre esta página en Chrome o Edge en un ordenador.",
     percent: (n) => `Escribiendo… ${n} %. No lo desconectes.`,
     copied: () => "Registro copiado.",
@@ -59,10 +59,10 @@ const M = {                                     // what the page says, by langua
     notFound: () => "No encuentro el FM-1: ¿cable de datos?, ¿otra app lo usa? Desconecta, vuelve a conectar y prueba otra vez.",
     cutOff: (t) => `El FM-1 está en modo actualización (${t}): una instalación se cortó. Pulsa «Terminar la instalación».`,
     otherLoader: (t) => `El FM-1 está en modo actualización de otro firmware (${t}): termina esa actualización con su propio instalador (M-UPGRADE) y vuelve.`,
-    isMel: (t) => `El FM-1 lleva MEL (${t}): se puede actualizar.`,
+    isMel: (t) => `El FM-1 lleva FMEL-1 (${t}): se puede actualizar.`,
     rescue: () => "El FM-1 está en el rescate USB: se puede instalar.",
     official: (t) => `El FM-1 lleva el firmware oficial (${t}): se puede instalar.`,
-    custom: (t) => `El FM-1 lleva otro firmware no oficial (${t}). Primero vuelve al V15 oficial (apartado 4) y después instala MEL.`,
+    custom: (t) => `El FM-1 lleva otro firmware no oficial (${t}). Primero vuelve al V15 oficial (paso 5) y después instala FMEL-1.`,
     error: (m) => `Error: ${m}`,
     start: (t) => `Empezando en ${t}…`,
     verify: (n) => `El FM-1 comprueba el paquete (${n})…`,
@@ -70,7 +70,7 @@ const M = {                                     // what the page says, by langua
     write: () => "Escribiendo… no lo desconectes.",
     reboot: () => "Reiniciando…",
     done: (t) => `Hecho: el FM-1 lleva ${t}. Ya puedes desconectarlo.`,
-    askMel: () => "¿Instalar MEL? No desconectes el FM-1 hasta que la página diga «Hecho».",
+    askMel: () => "¿Instalar FMEL-1? No desconectes el FM-1 hasta que la página diga «Hecho».",
     askStock: () => "¿Instalar el firmware oficial V15? No desconectes el FM-1 hasta que la página diga «Hecho».",
     notReady: () => "El FM-1 ya no está listo para instalar: búscalo otra vez.",
     noResume: () => "No he podido terminar: desconecta, vuelve a conectar y busca el FM-1 otra vez.",
@@ -202,11 +202,11 @@ $("stock").onclick = () => guarded(async () => {
 $("lang").onclick = () => {
   lang = lang === "es" ? "en" : "es";
   document.documentElement.lang = lang;
-  document.title = lang === "es" ? "Instalar MEL" : "Install MEL";
+  document.title = lang === "es" ? "Instalar FMEL-1" : "Install FMEL-1";
   try { localStorage.setItem("mel-lang", lang); } catch (e) {}
   for (const [el, [key, cls, a]] of Object.entries(shown)) say(el, key, cls, ...a);
 };
-if (lang === "es") document.title = "Instalar MEL";
+if (lang === "es") document.title = "Instalar FMEL-1";
 say("mine", navigator.requestMIDIAccess ? "canMidi" : "cantMidi", navigator.requestMIDIAccess ? "ok" : "bad");
 $("copylog").onclick = async () => {
   try { await navigator.clipboard.writeText($("log").textContent); say("mine", "copied", "ok"); } catch (e) {}
