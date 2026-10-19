@@ -1028,7 +1028,7 @@ static void app_loop(void)
     buttons();
     knobs();
 
-    while (midi_get(&st, &d1, &d2)) {           /* USB-MIDI in, any channel; PITCH moves it as it moves the keys */
+    while (midi_get(&st, &d1, &d2)) {           /* USB-MIDI and TRS in, any channel; PITCH moves it as it moves the keys */
         uint32_t ty = st & 0xF0u;
         d1 &= 127u;
         if (ty == 0x90u && d2) {
