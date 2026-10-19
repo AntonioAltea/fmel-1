@@ -101,6 +101,9 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
     web_mq_r++;
     return 1;
 }
+static uint32_t web_batt = 620;                /* the battery: full (web_battery sets it, to try the icon) */
+static int32_t batt_raw(void) { return (int32_t)web_batt; }
+static int usb_powered(void) { return 0; }
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { (void)st; (void)d1; (void)d2; }
 
 static void platform_poll(void) {}
@@ -156,6 +159,7 @@ EXPORT void web_button(uint32_t id, uint32_t down)
     else { fm1_in.buttons &= ~bit; web_released |= bit; }
 }
 EXPORT void web_enc(uint32_t id, int32_t n) { web_enc_acc[id % 7u] += n; }
+EXPORT void web_battery(uint32_t v) { web_batt = v; }
 EXPORT void web_master(uint32_t v)              /* 0..1023 as the ADC reads it; the curve as platform.c's */
 {
     uint32_t k = v > 1023u ? 1023u : v;

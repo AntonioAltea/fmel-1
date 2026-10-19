@@ -25,10 +25,16 @@ the web version).
 
 So: share FMEL-1 freely, but don't sell it, nor anything with these tapes in it. Thank you, Bernie.
 
+The fifth sound, PIANO, is not a Mellotron tape: it is [SLOOP](https://github.com/isod89/sloop-fm1)'s LOFI KEYS, its
+four keys of a Steinway B from Versilian Studios' [VCSL](https://github.com/sgossner/VCSL) (public domain, CC0) made
+and played as SLOOP makes and plays them (an octave up from the keys; 1 s of each at 22050 Hz, looped; a few bits off, a little drive, a gentle
+low-pass, a 2.5 s decay and a slow pitch wobble); about 44 KB.
+
 To pack the tapes again (another selection, other lengths), fetch his originals (from his old site, via the Wayback
 Machine) and run the packer:
 
     tools/get_tapes.sh                                  # into tapes/, which git ignores
+    tools/get_piano.sh                                  # the piano (SLOOP's), also into tapes/
     tools/gen_tapes.py firmware/gen/mel_tapes.h
 
 ## Credits
@@ -42,5 +48,8 @@ Machine) and run the packer:
   wrong
 - The Mellotron M400S tapes by Bernie Kornowicz (Taijiguy), from his site <http://leisureland.us> (see above)
 - The browser version follows the emulators of X0X, Felucca and FoMni
+- The EQ: Felucca's SPEAKER EQ (FLAT, LOWCUT, BASS+), as it is there
+- The reverbs: HALL after Felucca's, PLATE Jon Dattorro's after FoMni's (Charles Vestal)
+- SELECT as the hand on the tape's reel: the idea is GHOULBOX's crank (jasonpersinger, [ghoulbox-fm1-dungeon-synth](https://github.com/jasonpersinger/ghoulbox-fm1-dungeon-synth))
 - [Terminus](https://terminus-font.sourceforge.net) by Dimitar Zhekov: the screen's font (SIL OFL 1.1)
 - [JieLi AC79 SDK](https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK): the boot files a build is packaged with

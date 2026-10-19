@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Build MEL's tapes (firmware/src/mel.c) from WAV files into a C header.
 
-  tools/gen_tapes.py OUT.h [--src tapes/wav] [--sets MkII_Flute,8_Choir,...] [--budget BYTES] [--step 3] [--rate 11025]
+  tools/gen_tapes.py OUT.h [--src tapes/wav] [--sets MkII_Flute,8_Choir,...] [--budget BYTES] [--step 3] [--rate 22050]
 
 The tapes are the Taijiguy Mellotron M400S samples (one WAV per key, G2..F5, ~7 s, named like
 "A#3.wav"), in tapes/wav/<SET>/: they are not in this tree (free to use, not to redistribute in
@@ -10,7 +10,8 @@ commercial software). tapes/README.md says where they come from.
 
 Per set, one root every STEP semitones (the keys between play the nearest root, at most STEP/2
 semitones off), each:
-  - from 44.1 kHz down to RATE (the tapes hold almost nothing above 5 kHz: 11025 Hz keeps it all);
+  - from 44.1 kHz down to RATE >> SHIFT (the tapes hold almost nothing above 5 kHz: 11025 Hz, half of RATE, keeps
+    it all);
   - from its onset (the head meeting the tape stays in), as long as the budget allows;
   - with a loop over the end, crossfaded in the samples (equal power), so a note can sound for
     ever (MEL's "inf" tape) as well as for the 8 s of a real tape;
@@ -21,6 +22,10 @@ loudness (RMS of its sustain), so a change of tape is not a change of level.
 A set that dies away by itself (DECAYS: the vibraphone) has its decay measured per root (dB/s, after its peak) and
 flattened out of the samples, so its loop is level; the zone carries the decay and the firmware applies it as the
 tape runs: a held note dies as the real one does, and a note restarted mid-tape starts as quiet as the tape is.
+The piano (SLOOP_PIANO; tools/get_piano.sh: SLOOP's four keys of a Steinway B from VCSL, CC0) is not a Mellotron
+tape: it is SLOOP's (isod89/sloop-fm1, tools/gen_samples.py, kind "piano", and its LOFI KEYS preset): 1 s of each
+key at 22050 Hz (RATE), its attack as recorded, then levelled from 0.3 s and looped (0.45-0.65 s .. its end); the
+firmware plays it as SLOOP's SAMPLE engine does (mel.c: kind 1), outside the budget.
 """
 import argparse
 import re
@@ -30,12 +35,31 @@ from pathlib import Path
 import numpy as np
 
 NAMES = {"MkII_Violins": "VIOLINS", "MkII_Flute": "FLUTE", "8_Choir": "CHOIR", "Cello": "CELLO", "Vibes": "VIBES",
-         "Woodwind_2": "WOODWIND"}
-SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes"]  # A B C (the M400's three tracks), D
-DECAYS = {"Vibes": 0.6}                            # sets that die away by themselves, and their share of the flash:
+         "Woodwind_2": "WOODWIND", "Piano": "PIANO"}
+SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's three tracks), D, E
+DECAYS = {"Vibes": 0.6}                           # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
+SLOOP_PIANO = {"Piano"}                            # sets made as SLOOP makes its piano (sloop_piano): every file a
+                                                   # root, outside the budget, played by mel.c as SLOOP's SAMPLE engine
+SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
+SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
+STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
+                                                   # (a tape's key pressed again goes on where its tape is: the
+                                                   # vibraphone as quiet as it has died away to, a piano never)
+PLAY = {"Piano": (100, 0, 0, 31)}                  # a set's own PLAY to start from (TONE PITCH ATTACK RELEASE; else
+PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano as SLOOP's LOFI KEYS: TONE open (its CUT
+                                                   # does it), ATK 0, REL 60 (~78 ms to -40 dB: MEL's 31)
+# SLOOP's LOFI KEYS (gen_samples.py EXTRA_PRESETS: SAMPLE BITS 45, CUT 78, DRV 30; ENV 0 108 0 60; LFO to pitch 1 at
+# RATE 38, a sine), as mel.c's constants for a kind 1 zone
+PNO_BITS = 45 // 10                                # bits taken off (eng_sample.c: sh = BITS / 10)
+PNO_DRV = 30 * 150                                 # s + (s >> 2) * PNO_DRV >> 11, into the tanh
+PNO_CUT = 4000 + ((78 << 8) * 28767 >> 15)         # its one-pole, Q15 (CUT 78: ~7.5 kHz)
+PNO_GAIN = 25                                      # its level, Q5: its first half second as loud as a tape's chord
+OCTAVE = {"Piano": 1}                              # sets that sound octaves up from their keys (their zones' roots
+                                                   # and ranges moved down: a key plays the sample of the key above)
 TARGET_RMS = 0.13                                # every set's sustain, full scale 1
+SLOOP_FS = 22050                                 # SLOOP's stored rate (gen_samples.py TR)
 NOTE = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
 CK = 256                                         # samples between decoder states
 SRC_RATE = 44100
@@ -69,10 +93,10 @@ def lowpass(fc, taps=255):
     return h / h.sum()
 
 
-def resample(x, rate):
+def resample(x, rate, sh=0):
     if SRC_RATE % rate:
         raise SystemExit(f"--rate must divide {SRC_RATE}")
-    d = SRC_RATE // rate
+    d = SRC_RATE // rate << sh
     return np.convolve(x, lowpass(0.45 / d), mode="same")[::d] if d > 1 else x
 
 
@@ -103,6 +127,10 @@ def loop(x, rate):
     return y, ls
 
 
+
+
+
+
 def ima_encode(s):
     """int16 samples -> (bytes, [(pred, idx) at every CK-th sample]); low nibble first"""
     pred, idx, out, cks, cur = 0, 0, bytearray(), [], 0
@@ -131,6 +159,84 @@ def ima_encode(s):
     return bytes(out), cks
 
 
+
+
+
+
+def sloop_onset(x, rel=0.02):
+    """sampleio.py onset: the first sample over rel x its peak"""
+    thr = rel * max(1e-9, max(map(abs, x)))
+    return next((i for i, v in enumerate(x) if abs(v) > thr), 0)
+
+
+def sloop_resample(x, sr, to):
+    """sampleio.py resample: a crude anti-alias (the mean of ratio samples), then linear interpolation"""
+    if sr == to:
+        return x
+    k = max(1, int(round(sr / to)))
+    if k == 2:
+        x = [(a + b) / 2 for a, b in zip(x, x[1:])] + [x[-1] / 2]
+    elif k > 1:
+        x = [sum(x[i:i + k]) / k for i in range(len(x))]
+    step, out, p, last = sr / to, [], 0.0, len(x) - 1
+    while p < last:
+        i = int(p)
+        f = p - i
+        out.append(x[i] * (1 - f) + x[i + 1] * f)
+        p += step
+    return out
+
+
+def sloop_piano(path):
+    """SLOOP's gen_samples.py cc0_entries, kind "piano": from 16 samples before its onset, 1 s at 22050 Hz; its
+    attack as recorded, from 0.3 s levelled (its loudness every 20 ms taken out: the tone the envelope fades), looped
+    from the best start in 0.45-0.65 s to its end, crossfaded over 80 ms; to a peak of 30000 -> (int16 list, ls)"""
+    x = [float(v) for v in read_wav(path)]
+    x = x[max(0, sloop_onset(x) - 16):]
+    TR = SLOOP_FS
+    x = sloop_resample(x, SRC_RATE, TR)[:int(1.0 * TR)]
+    n = len(x)
+    ls, le, xf, a0 = int(0.55 * TR), n - 1, int(0.08 * TR), int(0.30 * TR)
+    w = int(0.02 * TR)
+    env = [max(1e-6, (sum(v * v for v in x[max(0, i - w):i + w]) / (2 * w)) ** 0.5) for i in range(0, n, w)]
+    ref = env[a0 // w]
+    x = [v * (ref / env[min(len(env) - 1, i // w)] if i >= a0 else 1.0) for i, v in enumerate(x)]
+    lo, hi = int(0.45 * TR), int(0.65 * TR)     # best_loop_start: its last xf samples most like the loop end's
+    tail = x[le - xf:le:4]
+    tn = sum(v * v for v in tail) ** 0.5 + 1e-9
+    best, ls = -2.0, (lo + hi) // 2
+    for c in range(lo, hi, 2):
+        seg = x[c - xf:c:4]
+        k = sum(a * b for a, b in zip(seg, tail)) / ((sum(v * v for v in seg) ** 0.5 + 1e-9) * tn)
+        if k > best:
+            best, ls = k, c
+    for i in range(xf):
+        a = i / xf
+        x[le - xf + i] = x[le - xf + i] * (1 - a) + x[ls - xf + i] * a
+    pk = max(1e-9, max(map(abs, x)))
+    return [int(v * 30000 / pk) for v in x], ls
+
+
+def ima_state(s, at):
+    """the IMA encoder's (predictor, step index) before sample at"""
+    pred, idx = 0, 0
+    for v in s[:at]:
+        step = IMA_STEP[idx]
+        d, code = int(v) - pred, 0
+        if d < 0:
+            code, d = 8, -d
+        vd = step >> 3
+        if d >= step:
+            code |= 4; d -= step; vd += step
+        if d >= step >> 1:
+            code |= 2; d -= step >> 1; vd += step >> 1
+        if d >= step >> 2:
+            code |= 1; vd += step >> 2
+        pred = max(-32768, min(32767, pred - vd if code & 8 else pred + vd))
+        idx = max(0, min(88, idx + IMA_IDX[code & 7]))
+    return pred, idx
+
+
 def decay_of(x, rate):
     """(peak sample, decay in dB/s after it) of a sound that dies away"""
     w = max(1, int(0.05 * rate))
@@ -154,29 +260,49 @@ def build(src, budget, step, rate, which):
         roots = [r for r in range(lo + step // 2, hi + 1, step)]
         if roots[-1] + step // 2 < hi:
             roots.append(hi)
+        if d in SLOOP_PIANO:
+            roots = sorted(files)
         plan.append((name, files, roots))
-    shares = [DECAYS.get(d, 1.0) for d, _ in sets]
+    shares = [0.0 if d in SLOOP_PIANO else DECAYS.get(d, 1.0) for d, _ in sets]
     nroots = sum(len(r) * w for (_, _, r), w in zip(plan, shares))
     per0 = budget * 2 / nroots                   # 4 bits a sample (+ the checkpoints, ~1.6 %)
     per0 = per0 / (1 + 8 / CK)
     out = {"sets": [], "zones": [], "data": bytearray(), "ck": []}
     for (d, _), (name, files, roots), share in zip(sets, plan, shares):
+        z0 = len(out["zones"])
+        if d in SLOOP_PIANO:                     # SLOOP's piano: its own making, its zones played as SLOOP plays them
+            for i, r in enumerate(roots):
+                pcm, ls = sloop_piano(files[r])
+                data, cks = ima_encode(np.array(pcm, dtype=np.int16))
+                lp, li = ima_state(pcm, ls)
+                lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
+                hi = r + (roots[i + 1] - r) // 2 if i + 1 < len(roots) else 127
+                up = 12 * OCTAVE.get(d, 0)
+                out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r - up,
+                                         lo=max(0, lo - up) if i else 0, hi=hi - up if i + 1 < len(roots) else 127, sh=SHIFT.get(d, SHIFT_ELSE), kind=1, gain=PNO_GAIN, lpred=lp, lidx=li,
+                                         dk=0, d1k=32767, pk=0))
+                out["data"] += data
+                out["ck"] += cks
+            out["sets"].append((name, z0, len(roots), d in STRUCK))
+            out.setdefault("play", []).append(PLAY.get(d, PLAY_ELSE))
+            continue
         segs, decs = [], []
+        sh = SHIFT.get(d, SHIFT_ELSE)
+        zr = SRC_RATE / (SRC_RATE // rate << sh)    # this set's rate, Hz
         per = int(per0 * share) // CK * CK
         for r in roots:
-            x = resample(read_wav(files[r]), rate)
-            o = max(0, onset(x) - int(0.004 * rate))
+            x = resample(read_wav(files[r]), rate, sh)
+            o = max(0, onset(x) - int(0.004 * zr))
             seg = x[o:o + per]
             if d in DECAYS:                      # take the decay out: a level loop
-                pk, dbs = decay_of(x[o:], rate)
-                t = np.maximum(0, np.arange(len(seg)) - pk) / rate
+                pk, dbs = decay_of(x[o:], zr)
+                t = np.maximum(0, np.arange(len(seg)) - pk) / zr
                 seg = seg * 10 ** (dbs * t / 20)
                 decs.append((pk, dbs))
             else:
                 decs.append((0, 0.0))
             segs.append((r, seg))
         lv = np.array([20 * np.log10(rms(s[len(s) // 3:])) for _, s in segs])
-        z0 = len(out["zones"])
         gains = 10 ** ((lv.mean() - lv) / 2 / 20)                     # half way to the set's mean level
         segs = [(r, s * g) for (r, s), g in zip(segs, gains)]
         level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
@@ -185,19 +311,28 @@ def build(src, budget, step, rate, which):
         if peak > 0.95:
             raise SystemExit(f"{name}: peaks at {peak:.2f} at the common loudness; lower TARGET_RMS")
         for i, (r, s) in enumerate(segs):
-            s, ls = loop(s, rate)
+            s, ls = loop(s, zr)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
             data, cks = ima_encode(pcm)
             lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
             hi = r + (roots[i + 1] - r) // 2 if i + 1 < len(roots) else 127
             pk, dbs = decs[i]
-            dk = round((1 - 10 ** (-dbs / 20 / rate)) * (1 << 24)) if dbs else 0     # per tape sample, Q24
+            dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
+            lp, li = cks[ls // CK]                # (its loop's state: the checkpoint at ls, on the CK grid)
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r, lo=lo, hi=hi,
-                                     dk=dk, d1k=round(32767 * 10 ** (-dbs * 1024 / rate / 20)), pk=pk))
+                                     sh=sh, kind=0, gain=32, lpred=lp, lidx=li, dk=dk,
+                                     d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
             out["ck"] += cks
-        out["sets"].append((name, z0, len(roots)))
+        out["sets"].append((name, z0, len(roots), d in STRUCK))
+        out.setdefault("play", []).append(PLAY.get(d, PLAY_ELSE))
     return out, int(per0) // CK * CK
+
+
+def sloop_env_exp(v):
+    """SLOOP's gen_tables.py ENV_EXP[v]: an exponential's step per 32 frames, Q16, ~99 % of the way in 10000^(v/127) ms"""
+    tau = 10000 ** (v / 127) / 1000 / 4.6
+    return max(1, min(65535, int(65536 * (1 - np.exp(-32 / (tau * SRC_RATE))))))
 
 
 def tables():
@@ -208,6 +343,15 @@ def tables():
             L.append("    " + " ".join(f"{v}u," for v in vals[i:i + per_line]))
         return L + ["};"]
     pow2 = [round(2 ** 30 * 2 ** (c / 1200)) for c in range(1201)]
+    # EQ's screen: how the SPEAKER settings' filters (mel_fx.c, as they run: one-poles y += a (x - y)) answer, across
+    # the screen (224 px, 20 Hz .. 20 kHz), dB x 4 down (0 .. 96: -24 dB); and BASS+'s harmonics' band, its shape
+    zx = np.exp(-2j * np.pi * (20 * 10 ** (3 * np.arange(224) / 224)) / SRC_RATE)
+    lp1 = lambda a: a / (1 - (1 - a) * zx)
+    spk = []
+    for h in (np.ones(224), (1 - lp1(1 / 64)) ** 2, (1 - lp1(1 / 32)) ** 2, lp1(1 / 2) ** 2):
+        spk += [int(min(96, round(-4 * 20 * np.log10(max(1e-9, v))))) for v in np.abs(h)]
+    harm = np.abs((1 - lp1(1 / 32)) ** 2 * lp1(1 / 8))
+    harm = [round(255 * v / harm.max()) for v in harm]
     tone = []                                    # TONE 0..100: a one-pole's coefficient, 350 Hz .. 16 kHz
     for v in range(101):
         fc = 350 * (16000 / 350) ** (v / 100)
@@ -217,14 +361,12 @@ def tables():
         x = 2 * i / 256
         y = x if x < 0.6 else 0.6 + 0.4 * np.tanh((x - 0.6) / 0.4)
         sat.append(round(32767 * min(y, 1)))
-    atk = []                                     # ATTACK 0..100: 3 ms .. 1.8 s, the rise per 32 frames, Q24
-    for v in range(101):
-        t = 0.003 * 600 ** (v / 100)
+    atk = []                                     # ATTACK 0..100: 3 ms .. 2 s, the rise per 32 frames, Q24; as v^1.5, so
+    for v in range(101):                         # the knob is felt from ~10 on (10: 66 ms, 20: 0.18 s, 50: 0.71 s; an
+        t = 0.003 + 2.0 * (v / 100) ** 1.5       # exponential spent its first 40 under the tapes' own rise, 40-70 ms)
         atk.append(min(1 << 24, round((1 << 24) * 32 / (t * SRC_RATE))))
     lfo = [round(0.5 * 20 ** (v / 100) * 2 ** 32 / SRC_RATE) for v in range(101)]   # VIBRATO RATE: 0.5 .. 10 Hz
     lfo10 = [round(0.5 * 20 ** (v / 100) * 10) for v in range(101)]
-    eq_hz = [int(round(200 * 25 ** (i / 15), -1 if i < 9 else -2)) for i in range(16)]   # EQ FREQ: 200 Hz .. 5 kHz
-    svf = [round(16384 * 2 * np.sin(np.pi * f / SRC_RATE)) for f in eq_hz]
     rel = []                                     # REL 0..100: 20 ms .. 6 s to -60 dB, per 32 frames, Q16
     for v in range(101):
         t = 0.02 * 300 ** (v / 100)
@@ -261,31 +403,45 @@ def tables():
             arr("static const uint32_t MEL_ATK[101]     /* ATTACK -> the rise per 32 frames, Q24 */", atk) +
             arr("static const uint32_t MEL_LFO[101]     /* VIBRATO RATE -> phase per frame */", lfo, 6) +
             arr("static const uint8_t MEL_LFO_HZ10[101] /* (its Hz x 10, shown) */", lfo10) +
-            arr("static const uint16_t MEL_EQ_HZ[16]    /* EQ FREQ, Hz */", eq_hz) +
-            arr("static const uint16_t MEL_SVF[16]      /* its state-variable filter's f = 2 sin(pi fc / fs), Q14 */", svf) +
             arr("static const uint16_t MEL_GENLP[101]   /* AGE -> the tape's top end, 9 kHz .. 1.1 kHz, Q15 */", genlp) +
             arr("static const uint16_t MEL_GENHP[101]   /* AGE -> its bottom end, 20 .. 380 Hz, Q15 */", genhp) +
             arr("static const uint16_t MEL_REL[101]     /* REL -> decay per 32 frames, Q16 */", rel) +
+            arr("static const uint8_t MEL_SPK_DB[4 * 224]   /* EQ SPEAKER: its curve, per pixel, dB x 4 down */", spk, 16) +
+            arr("static const uint8_t MEL_SPK_HARM[224]     /* BASS+: its harmonics' band, per pixel, 0..255 */", harm, 16) +
             arr("static const uint16_t MEL_TONE[101]    /* TONE -> one-pole coefficient, Q15 */", tone) +
-            arr("static const uint16_t MEL_SAT[257]     /* saturation: |x| / 2^8 of 2 x full scale -> Q15 */", sat))
+            arr("static const uint16_t MEL_SAT[257]     /* saturation: |x| / 2^8 of 2 x full scale -> Q15 */", sat) +
+            arr("static const uint16_t MEL_TANH[257]    /* tanh(x / 32768) x 32767, x = i x 256 (SLOOP's TANH_Q15) */",
+                [int(32767 * np.tanh(i / 256 * 2)) for i in range(257)]))
 
 
 def write(out, path, rate, per):
     z, data = out["zones"], out["data"]
-    L = ["/* generated by tools/gen_tapes.py: MEL's tapes (Taijiguy's Mellotron M400S samples: README.md, LICENSING.md) */",
+    L = ["/* generated by tools/gen_tapes.py: MEL's tapes (Taijiguy's Mellotron M400S samples; the piano, VCSL's (CC0):"
+         " README.md, LICENSING.md) */",
          f"#define MEL_RATE {rate}u",
-         f"#define MEL_RATE_Q16 {rate * 65536 // 44100}u          /* MEL_RATE / 44100, Q16 */",
+         f"#define MEL_RATE_Q16 {rate * 65536 // 44100}u          /* MEL_RATE / 44100, Q16 (a zone's: >> its sh) */",
          f"#define MEL_CK {CK}u",
          f"#define MEL_NSETS {len(out['sets'])}u",
          f"#define MEL_NZONES {len(z)}u",
-         f"/* {len(z)} zones of {per} samples ({per / rate:.2f} s), {len(data)} B of ADPCM, {4 * len(out['ck'])} B of checkpoints */",
-         "static const char *const MEL_SET_NAME[MEL_NSETS] = {" + ", ".join(f'"{n}"' for n, _, _ in out["sets"]) + "};",
-         "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _ in out["sets"]) + "};",
-         "static const uint8_t MEL_SET_NZ[MEL_NSETS] = {" + ", ".join(str(b) for _, _, b in out["sets"]) + "};",
+         f"/* {len(z)} zones, the tapes' of {per} samples ({per / (rate >> SHIFT_ELSE):.2f} s), {len(data)} B of ADPCM, "
+         f"{4 * len(out['ck'])} B of checkpoints */",
+         "static const char *const MEL_SET_NAME[MEL_NSETS] = {" + ", ".join(f'"{n}"' for n, _, _, _ in out["sets"]) + "};",
+         "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _, _ in out["sets"]) + "};",
+         "static const uint8_t MEL_SET_NZ[MEL_NSETS] = {" + ", ".join(str(b) for _, _, b, _ in out["sets"]) + "};",
+         "static const uint8_t MEL_SET_STRUCK[MEL_NSETS] = {" + ", ".join(str(int(k)) for *_, k in out["sets"]) + "};",
+         "static const int8_t MEL_SET_PLAY[MEL_NSETS][4] = {   /* its own PLAY to start from: TONE PITCH ATTACK RELEASE */",
+         "    " + ", ".join("{" + ", ".join(str(v) for v in q) + "}" for q in out["play"]) + "};",
+         "/* a kind 1 zone (the piano): SLOOP's SAMPLE engine with LOFI KEYS (gen_tapes.py PNO_) */",
+         f"#define MEL_PNO_BITS {PNO_BITS}                   /* bits taken off */",
+         f"#define MEL_PNO_DRV {PNO_DRV}                  /* its drive into the tanh */",
+         f"#define MEL_PNO_CUT {PNO_CUT}                 /* its one-pole, Q15 */",
+         f"#define MEL_PNO_DEC {sloop_env_exp(108)}u                 /* its decay per 32 frames, Q16 (DEC 108: -40 dB in 2.5 s) */",
+         f"#define MEL_PNO_LFO {int(0.05 * 800 ** (38 / 127) * 32 / SRC_RATE * 2 ** 32)}u          /* its pitch LFO, a sine, per 32 frames (RATE 38: 0.37 Hz) */",
+         "#define MEL_PNO_LFO_C16 300               /* its depth, 1/16 cent (PIT 1: +-18.75 cents) */",
          "static const mel_zone_t MEL_ZONE[MEL_NZONES] = {"]
     for q in z:
-        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, "
-                 f"{q['dk']}u, {q['d1k']}u, {q['pk']}u}},")
+        L.append(f"    {{{q['off']}u, {q['n']}u, {q['ls']}u, {q['ck']}u, {q['root']}, {q['lo']}, {q['hi']}, {q['sh']}, {q['kind']}, "
+                 f"{q['gain']}, {q['lidx']}, {q['dk']}u, {q['d1k']}u, {q['pk']}u, {q['lpred']}}},")
     L.append("};")
     L.append("static const uint32_t MEL_CKS[] = {   /* (uint16_t)predictor | step index << 16 */")
     for i in range(0, len(out["ck"]), 8):
@@ -304,14 +460,14 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--src", default=str(Path(__file__).resolve().parents[1] / "tapes" / "wav"))
     ap.add_argument("--sets", default=",".join(SETS), help="the tapes, in order (A, B, C, ...): folders of --src")
-    ap.add_argument("--budget", type=int, default=440_000, help="bytes of tape data (ADPCM + checkpoints) in all")
+    ap.add_argument("--budget", type=int, default=425_000, help="bytes of tape data (ADPCM + checkpoints) in all")
     ap.add_argument("--step", type=int, default=3, help="semitones between roots")
-    ap.add_argument("--rate", type=int, default=11025)
+    ap.add_argument("--rate", type=int, default=22050, help="the firmware's rate (MEL_RATE): a set's is it >> SHIFT")
     a = ap.parse_args()
     out, per = build(Path(a.src), a.budget, a.step, a.rate, a.sets.split(","))
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     write(out, a.out, a.rate, per)
-    print(f"tapes: {', '.join(n for n, _, _ in out['sets'])}: {len(out['zones'])} zones of {per / a.rate:.2f} s, "
+    print(f"tapes: {', '.join(n for n, *_ in out['sets'])}: {len(out['zones'])} zones of {per / (a.rate >> SHIFT_ELSE):.2f} s, "
           f"{len(out['data']) + 4 * len(out['ck'])} B -> {a.out}")
 
 
