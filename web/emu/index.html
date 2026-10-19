@@ -9,11 +9,11 @@
 try { if (localStorage.getItem("mel-lang") === "es") document.documentElement.lang = "es"; } catch (e) {}
 </script>
 <style>
-:root { --ground: #f4f1f8; --ink: #2c2638; --muted: #6f6680; --rule: #ddd6e8; --card: #fbfaff; --accent: #7a52d6; color-scheme: light; }
+:root { --ground: #eef5f4; --ink: #1d2e2c; --muted: #5a706d; --rule: #d0e2df; --card: #f8fcfb; --accent: #12998d; color-scheme: light; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --ground: #16141b; --ink: #ece8f4; --muted: #a59cb6; --rule: #2e2a38; --card: #1f1c26; --accent: #b48cff; color-scheme: dark; }
+  :root:not([data-theme="light"]) { --ground: #0f1716; --ink: #e4f1ef; --muted: #91aaa6; --rule: #253432; --card: #162220; --accent: #4fd3c5; color-scheme: dark; }
 }
-:root[data-theme="dark"] { --ground: #16141b; --ink: #ece8f4; --muted: #a59cb6; --rule: #2e2a38; --card: #1f1c26; --accent: #b48cff; color-scheme: dark; }
+:root[data-theme="dark"] { --ground: #0f1716; --ink: #e4f1ef; --muted: #91aaa6; --rule: #253432; --card: #162220; --accent: #4fd3c5; color-scheme: dark; }
 * { box-sizing: border-box; }
 body { background: var(--ground); color: var(--ink); margin: 0; padding: 24px 16px 48px;
        font: 400 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -29,21 +29,21 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
 .ctl { cursor: pointer; }
 .knob { cursor: ns-resize; }
 .face { transition: fill .05s; }
-.lit .face.btn { fill: #e87828; }
-.lit text.cap { fill: #1c1030; }
+.lit .face.btn { fill: #109488; }
+.lit text.cap { fill: #effffd; }
 .cap.bcap { fill: #2f3f41; }
 .fn.bfn { fill: #1f5a52; }                         /* (on the mint silicone) */
-.down .face { stroke: #f6d2a8; stroke-width: 3; }
-.lit .face.white { fill: #f2b47e; }
-.lit .face.black { fill: #e87828; }
-.fn.dim { fill: #8c8796; font-weight: 400; }
-.fn { fill: #e8a060; font: 600 13px system-ui, sans-serif; letter-spacing: .04em; }
+.down .face { stroke: #0b6d65; stroke-width: 3; }
+.lit .face.white { fill: #2fb5a8; }
+.lit .face.black { fill: #109488; }
+.fn.dim { fill: #9a978f; font-weight: 400; }
+.fn { fill: #12998d; font: 600 13px system-ui, sans-serif; letter-spacing: .04em; }
 .fn.bfn { font-size: 10.5px; letter-spacing: 0; }
 .fn.hold { font-weight: 400; }
-.cap { fill: #d4d4d7; font: 600 15px system-ui, sans-serif; letter-spacing: .05em; pointer-events: none; }
-.start { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(12, 10, 18, .55); border-radius: 4.4% / 6.9%; }
+.cap { fill: #3b3a37; font: 600 15px system-ui, sans-serif; letter-spacing: .05em; pointer-events: none; }
+.start { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(10, 24, 22, .45); border-radius: 4.4% / 6.9%; }
 .start[hidden] { display: none; }
-.start button { font: 600 1.25rem system-ui, sans-serif; padding: .7em 1.7em; border: 0; border-radius: 999px; background: #e87828; color: #24140a; cursor: pointer; }
+.start button { font: 600 1.25rem system-ui, sans-serif; padding: .7em 1.7em; border: 0; border-radius: 999px; background: #19b0a2; color: #04201d; cursor: pointer; }
 .start button:disabled { opacity: .6; cursor: progress; }
 .bar { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin-top: .9rem; color: var(--muted); font-size: .92rem; }
 .bar button { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .3em .8em; cursor: pointer; }
@@ -214,11 +214,11 @@ function textLabel(parent, x, y, key, line, cls, yAlone = y) {
 }
 
 // ---------------------------------------------------------------- the panel
-el("rect", { x: 4, y: 4, width: 992, height: 632, rx: 44, fill: "#3e3e41" });   // the FM-1 "Black & Green": charcoal, mint silicone
+el("rect", { x: 4, y: 4, width: 992, height: 632, rx: 44, fill: "#f3f0e9", stroke: "#d9d4c8", "stroke-width": 3 });   // the FM-1 in white: cream, mint silicone
 const knobs = {};
 function knob(x, y, r, name) {
   const g = el("g", { class: "ctl knob", role: "slider", "aria-label": name });
-  el("circle", { cx: x, cy: y, r: r + 6, fill: "#2a2a2d" }, g);
+  el("circle", { cx: x, cy: y, r: r + 6, fill: "#dcd8ce" }, g);
   el("circle", { cx: x, cy: y, r, fill: "#1c1c1e", stroke: "#4a4a4d", "stroke-width": 2, class: "face" }, g);
   const ind = el("line", { x1: x, y1: y - r + 5, x2: x, y2: y - r + 15, stroke: "#e8e6ee", "stroke-width": 3, "stroke-linecap": "round" }, g);
   label(g, x, y - r - 13, name === "KNOB1" ? "KNOB 1" : name === "KNOB2" ? "KNOB 2" : name === "KNOB3" ? "KNOB 3" : name === "KNOB4" ? "KNOB 4" : name, "cap", 14);
