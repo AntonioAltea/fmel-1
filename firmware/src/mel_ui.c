@@ -231,15 +231,11 @@ static void spr_vibes(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)
     static const uint8_t F[4] = {2, 1, 3, 1};   /* playing: one mallet, both down, the other, both down (150 ms each) */
     spr_pix(&SPR_VIBES, lv ? F[t / 150u % 4u] : 0u, cx, cy, s, 15);   /* (silent: the mallets up) */
 }
-static void spr_piano(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* an upright piano (a stand-in
-                                                                                     * till it is drawn), notes on its stand */
+static void spr_piano(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* a frog at an upright piano
+                                                                                     * (drawn), its hands going */
 {
-    static const int8_t NOTES[2][2][2] = {{{25, 23}, {45, 25}}, {{35, 25}, {55, 23}}};
-    uint32_t ph = t % 600u, k, f = !lv ? 0u : 1u + ph / 300u;   /* (frame 0: silent; 1, 2: other keys down) */
-    spr_pix(&SPR_PIANO, f, cx, cy, s, 15);
-    if (f)
-        for (k = 0; k < 2u; k++)
-            spr_note(&SPR_PIANO, cx, cy, s, NOTES[f - 1u][k][0], NOTES[f - 1u][k][1]);
+    static const uint8_t F[4] = {1, 2, 3, 2};   /* playing: the hands up the keys and back (200 ms each) */
+    spr_pix(&SPR_PIANO, lv ? F[t / 200u % 4u] : 0u, cx, cy, s, 15);   /* (silent: hands in its lap) */
 }
 #undef S
 static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32_t t, int32_t lv)   /* a sound's

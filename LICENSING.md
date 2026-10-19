@@ -27,8 +27,7 @@ complete source under the same licence too.
 
 The instruments on MEL's screen (`assets/sprites/`, and `firmware/gen/mel_sprites.h`, made from them by
 `tools/gen_sprites.py`) are drawn by Javi and used here with his permission. They are his: not under the GPL unless he
-says so. The piano (`piano_*.png`) is not his: a stand-in, drawn by `AntonioAltea` until there is one of his, under
-the GPL as MEL is.
+says so.
 
 ## The logo
 

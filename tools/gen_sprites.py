@@ -20,7 +20,7 @@ SPRITES = {"choir": ["choir_idle", "choir"],   # frame 0: silent; 1: singing
            "flute": ["flute_idle", "flute_1", "flute_2"],   # 0: silent; 1, 2: playing
            "vibes": ["vibes_idle", "vibes_down", "vibes_1", "vibes_2"],   # 0: silent (mallets up); 1..3: playing
            "cello": ["cello_idle", "cello_1", "cello_2", "cello_3"],   # 0: silent (the bow up); 1..3: bowing
-           "piano": ["piano_idle", "piano_1", "piano_2"]}   # 0: silent; 1, 2: keys down (a stand-in, not Javi's)
+           "piano": ["piano_idle", "piano_1", "piano_2", "piano_3"]}   # 0: silent (hands down); 1..3: playing
 
 
 def blobs(px, w, h):
