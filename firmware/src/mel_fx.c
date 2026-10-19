@@ -50,7 +50,8 @@ static int32_t fx_pitch16(void)
     static uint32_t w1, w2, f1, f2;
     static int32_t walk;
     int32_t wow, fl, wd, fd, c;
-    uint32_t sp = (uint32_t)(256 + motor16 * 128 / 19200);   /* the motor's speed, Q8: 256 full .. 128 half */
+    uint32_t sp = (uint32_t)(256 + (motor16 + reel16) * 128 / 19200);   /* the motor's speed, Q8: 256 full .. 128 half
+                                                 * (and the hand on the reel) */
     w1 += (1869949u >> 8) * sp;                 /* 0.60 Hz (per 32 frames: f * 2^32 * 32 / 44100) */
     w2 += (3521737u >> 8) * sp;                 /* 1.13 Hz */
     f1 += (25555964u >> 8) * sp;                /* 8.2 Hz */
@@ -77,8 +78,14 @@ static int32_t fx_pitch16(void)
 /* ---- per block: dropouts now and then (DROPOUT), a dip of 30..200 ms; past half way the motor drags with it */
 static void fx_block(void)
 {
+    static uint8_t flicks;
     int32_t d = f_drop;
-    if (drop_left) {
+    if (flicks != p_flick) {                    /* a flick of the reel: the tape catches, ~60 ms (as a dropout) */
+        flicks = p_flick;
+        drop_left = 10u;
+        drop_t = 13000;
+        drag_t = p_flick_dir * 900;
+    } else if (drop_left) {
         if (!--drop_left) { drop_t = 32768; drag_t = 0; }
     } else if (d && (rnd() >> 16) < (uint32_t)(d * d / 5)) {
         drop_left = 5u + (rnd() >> 27);
@@ -266,7 +273,10 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     static int32_t ls, hs, sv_lp, sv_bp, vt, e_lp, e_d = 8000 << 8, r_hp;
     static uint32_t rnd2 = 0x9E3779B9u, vw, ew, rv_odd;
     static int32_t rv_x, rv_ol, rv_or, rv_type = -1;
-    int32_t age = f_age, kg = MEL_GENLP[age] >> 1, kh = MEL_GENHP[age] >> 1, kt = f_tone >> 1;
+    int32_t age = f_age, kg = MEL_GENLP[age] >> 1, kh = MEL_GENHP[age] >> 1, kt = f_tone >> 1, rl = reel16;
+    int32_t rg = 32768 + (rl < 0 ? rl * 2 : 0);   /* the reel held back: the tape quieter (to -2 dB) .. */
+    kt = (kt * (32768 + rl * 4)) >> 15;         /* .. and darker; pushed on, a little brighter */
+    kt = kt > 16000 ? 16000 : kt < 200 ? 200 : kt;
     int32_t sv_ = f_sat + age / 4 > 100 ? 100 : f_sat + age / 4, hv = f_hiss + age * 2 / 5 > 100 ? 100 : f_hiss + age * 2 / 5;
     int32_t dg = MEL_DRV[sv_], dmk = MEL_DRVMK[sv_], dlk = MEL_DRVLP[sv_] >> 1, dbias = sv_ * 49;   /* DRIVE */
     int32_t hl = (hv * hv * 13 / 100 * (8192 + act * 3 / 4)) >> 15;
@@ -307,6 +317,7 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
             y = (y * (drop_g >> 1)) >> 14;
             lp1 += ((y - lp1) * kt) >> 14;      /* TONE: two poles */
             lp2 += ((lp1 - lp2) * kt) >> 14;
+            if (rl) lp2 = (lp2 * rg) >> 15;
             {                                   /* DRIVE: gain, bias, the clipper, the DC out, warm, the level back */
                 int32_t u = (lp2 * dg) >> 8;
                 u = u > 4000000 ? 4000000 : u < -4000000 ? -4000000 : u;

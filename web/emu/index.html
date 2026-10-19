@@ -83,7 +83,7 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
   <div>
     <h2>How it is laid out</h2>
     <ul>
-      <li>Each button is a <b>section</b>; press it again for its next page (the dots at the top say which). <b>SELECT</b> turns the pages too.</li>
+      <li>Each button is a <b>section</b>; press it again for its next page (the dots at the top say which). <b>SELECT</b> is your hand on the tape's reel: turn it clockwise and the tape runs faster (higher), the other way slower (lower, darker); the faster you turn, the more, up to 2 semitones; let go and the motor brings it back. A flick of the wrist and the tape catches. (The idea is GHOULBOX's crank.)</li>
       <li>On every page, <b>KNOB 1–4</b> do what the screen's aluminium plate says, with their names and values. On FX pages the fourth is always <b>MIX</b>.</li>
       <li><b>PRESETS</b>: the sound, on any page: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO (a track selector, as on the M400: it stops at A and at E; the piano: SLOOP's LOFI KEYS). <b>ALGORITHM</b>: the tempo, on any page.</li>
     </ul>
@@ -109,7 +109,7 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
       <li>Bottom row <kbd>Z</kbd>…<kbd>/</kbd> = white keys F3 to A4, the black ones on <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>L</kbd> <kbd>;</kbd>.</li>
       <li>Top row <kbd>Q</kbd>…<kbd>Y</kbd> = B4 to G5, black ones on <kbd>1</kbd> <kbd>3</kbd> <kbd>4</kbd> <kbd>6</kbd>.</li>
       <li><kbd>Esc</kbd> HOME, <kbd>7</kbd> LOFI, <kbd>8</kbd> FX, <kbd>5</kbd> EQ, <kbd>2</kbd> SETUP, <kbd>9</kbd> ARP, <kbd>0</kbd> SEQ.</li>
-      <li><kbd>↑</kbd> <kbd>↓</kbd> sound, <kbd>Tab</kbd> next page, <kbd>←</kbd> <kbd>→</kbd> octave, <kbd>Space</kbd> PLAY, <kbd>Enter</kbd> REC, <kbd>Shift</kbd> HOLD, <kbd>Backspace</kbd> LAYER. Hold <kbd>7</kbd> or <kbd>8</kbd> to take LOFI or FX out.</li>
+      <li><kbd>↑</kbd> <kbd>↓</kbd> sound, <kbd>←</kbd> <kbd>→</kbd> octave, <kbd>Space</kbd> PLAY, <kbd>Enter</kbd> REC, <kbd>Shift</kbd> HOLD, <kbd>Backspace</kbd> LAYER. Hold <kbd>7</kbd> or <kbd>8</kbd> to take LOFI or FX out.</li>
     </ul>
   </div>
   <div>
@@ -125,7 +125,7 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
   <div>
     <h2>Cómo está ordenado</h2>
     <ul>
-      <li>Cada botón es un <b>apartado</b>; si lo vuelves a pulsar, pasa a su siguiente página (los puntos de arriba dicen en cuál estás). <b>SELECT</b> también pasa las páginas.</li>
+      <li>Cada botón es un <b>apartado</b>; si lo vuelves a pulsar, pasa a su siguiente página (los puntos de arriba dicen en cuál estás). <b>SELECT</b> es tu mano en la bobina de la cinta: hacia la derecha la cinta corre más (más agudo), hacia la izquierda la frenas (más grave y más oscuro); cuanto más rápido giras, más, hasta 2 semitonos; suéltalo y el motor la devuelve. Un golpe de muñeca y la cinta se engancha. (La idea es la manivela de GHOULBOX.)</li>
       <li>En todas las páginas, <b>KNOB 1–4</b> hacen lo que dice la placa de aluminio de la pantalla, con su nombre y su valor. En FX el cuarto es siempre <b>MIX</b>.</li>
       <li><b>PRESETS</b>: el sonido, en cualquier página: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO (un selector de pistas como el del M400: se para en A y en E; el piano: el LOFI KEYS de SLOOP). <b>ALGORITHM</b>: el tempo, en cualquier página.</li>
     </ul>
@@ -151,7 +151,7 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
       <li>Fila de abajo <kbd>Z</kbd>…<kbd>/</kbd> = teclas blancas de F3 a A4, con las negras en <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>L</kbd> <kbd>Ñ</kbd>/<kbd>;</kbd>.</li>
       <li>Arriba <kbd>Q</kbd>…<kbd>Y</kbd> = B4 a G5, negras en <kbd>1</kbd> <kbd>3</kbd> <kbd>4</kbd> <kbd>6</kbd>.</li>
       <li><kbd>Esc</kbd> HOME, <kbd>7</kbd> LOFI, <kbd>8</kbd> FX, <kbd>5</kbd> EQ, <kbd>2</kbd> SETUP, <kbd>9</kbd> ARP, <kbd>0</kbd> SEQ.</li>
-      <li><kbd>↑</kbd> <kbd>↓</kbd> sonido, <kbd>Tab</kbd> siguiente página, <kbd>←</kbd> <kbd>→</kbd> octava, <kbd>Espacio</kbd> PLAY, <kbd>Enter</kbd> REC, <kbd>Shift</kbd> HOLD, <kbd>Retroceso</kbd> LAYER. Mantén <kbd>7</kbd> u <kbd>8</kbd> para sacar LOFI o FX.</li>
+      <li><kbd>↑</kbd> <kbd>↓</kbd> sonido, <kbd>←</kbd> <kbd>→</kbd> octava, <kbd>Espacio</kbd> PLAY, <kbd>Enter</kbd> REC, <kbd>Shift</kbd> HOLD, <kbd>Retroceso</kbd> LAYER. Mantén <kbd>7</kbd> u <kbd>8</kbd> para sacar LOFI o FX.</li>
     </ul>
   </div>
   <div>
@@ -172,14 +172,14 @@ const BTN = { "OCT-": 0, "OCT+": 1, FX: 2, SEL: 3, ENV: 4, LFO: 5, EDIT: 6, GLO:
 const ENC = { SELECT: 0, ALGORITHM: 1, KNOB1: 2, KNOB2: 3, KNOB3: 4, KNOB4: 5, PRESETS: 6 };
 let lang = document.documentElement.lang === "es" ? "es" : "en";
 const TEXT = {                                  // [what it is, what holding it does] above the buttons; under the knobs
-  en: { SELECT: ["PAGE"], ALGORITHM: ["TEMPO"], PRESETS: ["SOUND A–E"], MASTER: ["VOLUME"], KNOB: ["see screen"],
+  en: { SELECT: ["REEL"], ALGORITHM: ["TEMPO"], PRESETS: ["SOUND A–E"], MASTER: ["VOLUME"], KNOB: ["see screen"],
         HOME: ["PLAY", "again: sound"], LFO: ["LOFI", "hold: out"], FX: ["", "hold: out"], EDIT: ["EQ", "hold: flat"],
         GLO: ["SETUP"], ENV: ["HOLD", "hold: half"], SEL: ["LAYER"], PLAY: ["SEQ ▶"], REC: [""],
         off: "Off. The sound starts when you switch it on.", loading: "Loading the tapes…",
         on: "On. Play with the mouse, the keyboard or a MIDI keyboard.", fail: "Could not start: ", error: "Error: ",
         midi: "Connect MIDI", midiOn: "MIDI connected", noMidi: "This browser has no Web MIDI (try Chrome or Edge).",
         midiNone: "MIDI connected, but there is no MIDI keyboard.", midiNo: "MIDI not allowed: ", key: "key" },
-  es: { SELECT: ["PÁGINA"], ALGORITHM: ["TEMPO"], PRESETS: ["SONIDO A–E"], MASTER: ["VOLUMEN"], KNOB: ["ver pantalla"],
+  es: { SELECT: ["BOBINA"], ALGORITHM: ["TEMPO"], PRESETS: ["SONIDO A–E"], MASTER: ["VOLUMEN"], KNOB: ["ver pantalla"],
         HOME: ["PLAY", "otra: sonido"], LFO: ["LOFI", "mant: fuera"], FX: ["", "mant: fuera"], EDIT: ["EQ", "mant: plano"],
         GLO: ["SETUP"], ENV: ["HOLD", "mant: half"], SEL: ["LAYER"], PLAY: ["SEQ ▶"], REC: ["GRABAR"],
         off: "Apagado. El sonido empieza al encender.", loading: "Cargando las cintas…",
@@ -400,7 +400,6 @@ window.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || !node) return;
   if (e.code in KEYMAP) { if (!e.repeat) keyHold(KEYMAP[e.code], e.code, true); e.preventDefault(); }
   else if (e.code in KEYBTN) { if (!e.repeat) buttonSet(KEYBTN[e.code], true); e.preventDefault(); }
-  else if (e.code === "Tab") { turn("SELECT", 1); e.preventDefault(); }
   else if (e.code === "ArrowUp") { turn("PRESETS", 1); e.preventDefault(); }
   else if (e.code === "ArrowDown") { turn("PRESETS", -1); e.preventDefault(); }
   else if (e.code === "ArrowLeft") { if (!e.repeat) buttonSet("OCT-", true); e.preventDefault(); }

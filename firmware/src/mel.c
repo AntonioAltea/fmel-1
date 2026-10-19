@@ -4,7 +4,7 @@
  * starts where it is). Built on Dinghy (its platform.c: updates, the USB rescue, USB-MIDI, USB audio, the panel,
  * the screen, settings).
  *
- * The panel: a button is a section; pressed again it turns its pages; SELECT turns them too. On every page the
+ * The panel: a button is a section; pressed again it turns its pages; SELECT is the hand on the reel. On every page the
  * four knobs do what the screen's aluminium plate says (on FX pages the last one is always MIX).
  *   HOME   PLAY    the M400: TONE, PITCH (semitones), ATTACK, RELEASE (each sound its own: SETUP's SOUNDS);
  *                  HOME again: the next sound
@@ -94,6 +94,10 @@ static volatile uint8_t p_sound, p_tape8, p_layer;   /* main -> ISR (one writer 
 static volatile int32_t p_tune16, p_bend16, p_drift, p_mod, p_atk, p_relk, p_loct, p_ldet16, p_ga, p_gb;
 static volatile uint8_t p_half;                 /* main -> ISR: HALF SPEED */
 static int32_t motor16;                         /* ISR: the motor's speed, 0 (full) .. -19200 (half: an octave, 1/16 cents) */
+static volatile int32_t p_reel16;               /* main -> ISR: the hand on the reel (SELECT), where it pulls, 1/16 cents */
+static volatile uint8_t p_flick;                /* main -> ISR: its flicks so far (a change: a new one) */
+static volatile int8_t p_flick_dir;             /* .. the last one's way */
+static volatile int32_t reel16;                 /* ISR -> screen: the reel's pull now (with its inertia), 1/16 cents */
 static int32_t pno16;                           /* ISR: the piano's pitch LFO now (LOFI KEYS: a slow sine), 1/16 cents */
 
 static int32_t sine(uint32_t ph)                /* a full cycle over 2^32 -> -32767..32767 (Dinghy's parabola) */
@@ -382,7 +386,11 @@ static void app_audio(int32_t *out, uint32_t n)
         int32_t g16;
         motor16 += p_half ? (motor16 > -19200 + 35 ? -35 : -19200 - motor16)   /* HALF SPEED: ~0.4 s to get there */
                           : (motor16 < -35 ? 35 : -motor16);
-        g16 = p_tune16 + p_bend16 + fx_pitch16() + motor16;
+        {                                       /* the reel: pulled at once, let go it comes back (~0.2 s) */
+            int32_t t = p_reel16, a = t < 0 ? -t : t, r = reel16 < 0 ? -reel16 : reel16;
+            reel16 += (t - reel16) >> (a > r ? 4 : 8);
+        }
+        g16 = p_tune16 + p_bend16 + fx_pitch16() + motor16 + reel16;
         {                                       /* the piano's LFO: free-running, as SLOOP's part's */
             static uint32_t ph;
             ph += MEL_PNO_LFO;
@@ -713,6 +721,44 @@ static int set_param(uint32_t pid, int32_t v)   /* clamped to its range: 1 if it
     set.p[pid] = (int16_t)v;
     return 1;
 }
+/* SELECT: the hand on the reel. The idea is GHOULBOX's (jasonpersinger's FM-1 dungeon synth, after Felucca: SELECT
+ * as a hurdy-gurdy's crank, how fast it turns from when its clicks come). Here it is the tape: turned clockwise it
+ * pushes the tape on (faster, higher), the other way it holds it back (slower, lower, darker, quieter), the more the
+ * faster it turns, up to 2 semitones at 30 clicks a second; let go, the motor brings it back. A flick of the wrist
+ * (as GHOULBOX's stroke: 1.7 x the recent speed on a reel already turning) and the tape catches: a dip and a tug */
+#define REEL_STOP 300u                          /* ms without a click: let go */
+static int32_t reel_v, reel_avg;                /* clicks a second x 16 (signed: clockwise +), now and of late */
+static uint32_t reel_last, reel_flick_t;
+static void reel_turn(int32_t d)                /* d clicks, now */
+{
+    uint32_t dt = fm1_ms - reel_last;
+    int32_t v = dt > REEL_STOP ? 0 : d * 16000 / (int32_t)(dt ? dt : 1u), a = v < 0 ? -v : v;
+    int32_t b = reel_avg < 0 ? -reel_avg : reel_avg;
+    reel_last = fm1_ms;                         /* (from a stop: no speed yet; the next click has one) */
+    if (!reel_avg)
+        reel_avg = v;
+    else {
+        if (a * 10 > b * 17 && b >= 6 * 16 && (v ^ reel_avg) >= 0 && fm1_ms - reel_flick_t >= 70u) {
+            p_flick_dir = (int8_t)(v < 0 ? -1 : 1);
+            p_flick++;
+            reel_flick_t = fm1_ms;
+        }
+        reel_avg += (v - reel_avg) * (int32_t)(dt < 128u ? dt : 128u) / 128;
+    }
+    reel_v = v;
+}
+static void reel_idle(void)                     /* between clicks: no faster than one over the time since; then let go */
+{
+    uint32_t e = fm1_ms - reel_last;
+    int32_t m = e ? 16000 / (int32_t)e : 1 << 30, p;
+    if (e > REEL_STOP)
+        reel_v = reel_avg = 0;
+    else
+        reel_v = reel_v > m ? m : reel_v < -m ? -m : reel_v;
+    p = reel_v * 20 / 3;                        /* 30 clicks a second: 2 semitones */
+    p_reel16 = p > 3200 ? 3200 : p < -3200 ? -3200 : p;
+}
+
 static void go_group(uint32_t g)                /* a section's button: its page, or (in it) its next page */
 {
     if (PG_GROUP[page] == g)
@@ -909,20 +955,16 @@ static void buttons(void)
 
 static void knobs(void)
 {
-    uint32_t k, g = PG_GROUP[page];
+    uint32_t k;
     int32_t d;
     if ((d = turn(ENC_PRESETS)) != 0) {         /* the sound, on every page: A .. E, and there it stops */
         int32_t v = PV(P_SOUND) + d, hi = (int32_t)MEL_NSETS - 1;
         v = v < 0 ? 0 : v > hi ? hi : v;
         if (v != PV(P_SOUND)) to_sound(v);
     }
-    if ((d = turn(ENC_SELECT)) != 0 && G_COUNT[g] > 1u) {   /* SELECT: the section's pages */
-        int32_t n = G_COUNT[g];
-        page = G_FIRST[g] + (uint32_t)((((int32_t)(page - G_FIRST[g]) + d) % n + n) % n);
-        g_last[g] = (uint8_t)page;
-        touched = 99;
-        redraw |= 0xFu;
-    }
+    if ((d = fm1_enc_take(ENC_SELECT)) != 0)    /* SELECT: the hand on the reel (the pages: the sections' buttons) */
+        reel_turn(d);
+    reel_idle();
     if ((d = turn(ENC_ALGORITHM)) != 0 && set_param(P_BPM, PV(P_BPM) + d)) {   /* ALGORITHM: the tempo, anywhere */
         changed(99);
         {
@@ -1050,7 +1092,7 @@ static void app_loop(void)
         t_msg = 0;
         redraw |= 1u;
     }
-    if ((redraw & 1u) || (ui_lv && fm1_ms - t_head >= 100u) || (!ui_lv && head_lv)) {
+    if ((redraw & 1u) || ((ui_lv || reel16) && fm1_ms - t_head >= 100u) || (!ui_lv && head_lv)) {
         draw_header(ui_lv > 0);                 /* (the reel turns while something sounds) */
         t_head = fm1_ms;
         head_lv = (uint32_t)ui_lv;

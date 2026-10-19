@@ -283,7 +283,9 @@ static void draw_header(int sounding)
 {
     uint32_t g = PG_GROUP[page], k;
     int32_t x = 236, xe;
-    uint32_t a = sounding ? fm1_ms * 0x00400000u : 0u;
+    static uint32_t a, t0;                      /* the reel: turning while tapes run, and with the hand on it */
+    a += (uint32_t)((sounding ? 600 : 0) + reel16 / 2) * (fm1_ms - t0) * 0x2000u;
+    t0 = fm1_ms;
     cv_begin(240, 24, C_BODY);
     disc(12, 12, 9, C_SKIRT);                   /* the reel */
     disc(12, 12, 3, C_BODY);
@@ -639,7 +641,8 @@ static void ui_motion(void)                     /* the cassette's tape runs with
     uint32_t dt = fm1_ms - t_reel;
     t_reel = fm1_ms;
     if (ui_lv) {
-        int32_t sp = (40 + ui_lv / 4 + fxv_wow / 64) >> set.half;   /* (HALF SPEED: half as fast) */
+        int32_t sp = (40 + ui_lv / 4 + fxv_wow / 64 + reel16 / 40) >> set.half;   /* (HALF SPEED: half as fast; the
+                                                 * hand on the reel) */
         tape_run += (uint32_t)(sp > 0 ? sp : 0) * dt;   /* (16000 a frame: 400 ms at the tapes' speed) */
     }
 }
