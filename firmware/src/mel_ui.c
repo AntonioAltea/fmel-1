@@ -374,7 +374,7 @@ static void stage_tape(void)                    /* TAPE: a cassette (drawn), a s
                                                  * (wow), quivering (flutter); stopped, its tongue flicking */
 {
     int32_t fl = ui_lv && !by_lofi ? fxv_flut / 500 : 0;
-    uint32_t f = ui_lv ? 2u + tape_run / 6000u % 6u : fm1_ms / 400u % 2u;
+    uint32_t f = ui_lv ? 2u + tape_run / 16000u % 6u : fm1_ms / 400u % 2u;
     spr_pix(&SPR_TAPE, f, 120, 54 + (fl > 2 ? 2 : fl < -2 ? -2 : fl), 332, 0);
 }
 
@@ -640,7 +640,7 @@ static void ui_motion(void)                     /* the cassette's tape runs with
     t_reel = fm1_ms;
     if (ui_lv) {
         int32_t sp = (40 + ui_lv / 4 + fxv_wow / 64) >> set.half;   /* (HALF SPEED: half as fast) */
-        tape_run += (uint32_t)(sp > 0 ? sp : 0) * dt;   /* (6000 a frame: 150 ms at the tapes' speed) */
+        tape_run += (uint32_t)(sp > 0 ? sp : 0) * dt;   /* (16000 a frame: 400 ms at the tapes' speed) */
     }
 }
 static void draw_stage(void)
