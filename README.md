@@ -14,7 +14,7 @@ download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/la
 
 ## Disclaimer
 
-This is a hobby project, not an official M-VAVE thing. Install at your own risk, no warranty. If something goes wrong,
+This is a hobby project, not an official M-VAVE thing. Install at your own risk. If something goes wrong,
 the installer's "If something goes wrong" section shows how to get back to the official firmware.
 
 ## The tapes
