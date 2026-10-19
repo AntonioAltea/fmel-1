@@ -4,43 +4,71 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Install MEL</title>
-<script>   /* the language before anything is drawn: English, or Spanish if chosen (the button at the top) */
-try { if (localStorage.getItem("mel-lang") === "es") document.documentElement.lang = "es"; } catch (e) {}
+<meta name="description" content="Install MEL, a tape keyboard after the Mellotron M400, on the M-VAVE FM-1, from your browser.">
+<script>   /* the language before anything is drawn: the one chosen, else the browser's (Spanish or English) */
+try {
+  const l = localStorage.getItem("mel-lang") || (/^es\b/i.test(navigator.language || "") ? "es" : "en");
+  if (l === "es") document.documentElement.lang = "es";
+} catch (e) {}
 </script>
 <style>
-:root { --ground: #f4f1f8; --ink: #2c2638; --muted: #6f6680; --rule: #ddd6e8; --card: #fbfaff; --accent: #7a52d6;
-        --ok: #2f7d4f; --bad: #b3261e; color-scheme: light; }
+:root { --ground: #eef5f4; --ink: #1d2e2c; --muted: #5a706d; --rule: #d0e2df; --card: #f8fcfb; --accent: #12857b;
+        --accent-ink: #ffffff; --soft: #dff1ee; --ok: #2f7d4f; --bad: #b3261e; --warn: #8a5a00; color-scheme: light; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --ground: #16141b; --ink: #ece8f4; --muted: #a59cb6; --rule: #2e2a38; --card: #1f1c26;
-                                    --accent: #b48cff; --ok: #6fcf97; --bad: #ff8a80; color-scheme: dark; }
+  :root:not([data-theme="light"]) { --ground: #0f1716; --ink: #e4f1ef; --muted: #91aaa6; --rule: #253432; --card: #162220;
+                                    --accent: #4fd3c5; --accent-ink: #04201d; --soft: #1b302d; --ok: #6fcf97; --bad: #ff8a80;
+                                    --warn: #f0c060; color-scheme: dark; }
 }
+:root[data-theme="dark"] { --ground: #0f1716; --ink: #e4f1ef; --muted: #91aaa6; --rule: #253432; --card: #162220;
+                           --accent: #4fd3c5; --accent-ink: #04201d; --soft: #1b302d; --ok: #6fcf97; --bad: #ff8a80;
+                           --warn: #f0c060; color-scheme: dark; }
 * { box-sizing: border-box; }
 body { background: var(--ground); color: var(--ink); margin: 0; padding: 24px 16px 48px;
-       font: 400 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-main { max-width: 680px; margin: 0 auto; }
-h1 { margin: 0 0 .2rem; font-size: 1.9rem; }
-h2 { font-size: 1.1rem; margin: 0 0 .6rem; }
-p { margin: .4rem 0; }
+       font: 400 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 720px; margin: 0 auto; }
+h1 { margin: 0; font-size: 2rem; letter-spacing: .01em; }
+h2 { font-size: 1.12rem; margin: 0 0 .6rem; display: flex; align-items: center; gap: .6rem; }
+h2 .n { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; flex: none;
+        background: var(--accent); color: var(--accent-ink); font-size: .9rem; font-weight: 700; }
+p { margin: .45rem 0; }
+ul, ol { margin: .4rem 0; padding-left: 1.25rem; }
+li { margin: .2rem 0; }
 .muted { color: var(--muted); }
-section { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; margin: 16px 0; }
-button { font: inherit; padding: .5rem 1rem; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent);
-         color: #fff; cursor: pointer; }
+section { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 18px; margin: 16px 0; }
+button { font: inherit; font-weight: 600; padding: .6rem 1.15rem; border-radius: 9px; border: 1px solid var(--accent);
+         background: var(--accent); color: var(--accent-ink); cursor: pointer; }
 button.secondary { background: transparent; color: var(--accent); }
+button.small { font-size: .85rem; padding: .3rem .7rem; font-weight: 500; }
 button:disabled { opacity: .45; cursor: not-allowed; }
-label { display: flex; gap: .5rem; align-items: flex-start; margin: .35rem 0; }
-input[type=checkbox] { margin-top: .3rem; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+label { display: flex; gap: .55rem; align-items: flex-start; margin: .5rem 0; font-weight: 600; }
+input[type=checkbox] { margin-top: .32rem; width: 1.05rem; height: 1.05rem; accent-color: var(--accent); flex: none; }
 .ok { color: var(--ok); }
 .bad { color: var(--bad); }
-progress { width: 100%; height: 14px; }
+.warn { color: var(--warn); }
+progress { width: 100%; height: 16px; accent-color: var(--accent); }
 code { font-size: .92em; }
-#log { white-space: pre-wrap; font: 12px/1.4 ui-monospace, monospace; color: var(--muted); max-height: 160px; overflow: auto; }
 a { color: var(--accent); }
-a.big { display: block; text-align: center; padding: 1.1rem 1rem; margin: 18px 0 6px; font-size: 1.35rem;
-        text-decoration: none; color: #fff; background: var(--accent); border-radius: 10px; }
-a.big:hover, a.big:focus-visible { filter: brightness(1.08); }
+.top { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.top p { margin: 0; color: var(--muted); flex: 1 1 16rem; }
+button.lang { margin-left: auto; font-size: .85rem; font-weight: 500; padding: .25em .7em; background: var(--card);
+              color: var(--ink); border-color: var(--rule); }
+a.big { display: block; text-align: center; padding: 1rem; margin: 16px 0 4px; font-size: 1.2rem; font-weight: 600;
+        text-decoration: none; color: var(--accent-ink); background: var(--accent); border-radius: 12px; }
+a.big:hover { filter: brightness(1.07); }
+.browsers { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: .5rem; margin: .6rem 0; }
+.browsers div { border: 1px solid var(--rule); border-radius: 9px; padding: .5rem .7rem; font-size: .92rem; }
+.browsers b { display: block; }
+.yes { background: var(--soft); }
+#mine { font-weight: 600; }
+.row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: .6rem 0; }
+.steps-seen { font-size: .95rem; }
+details { margin: .55rem 0; }
+summary { cursor: pointer; font-weight: 600; }
+#log { white-space: pre-wrap; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); max-height: 180px; overflow: auto;
+       background: var(--card); border: 1px solid var(--rule); border-radius: 9px; padding: .6rem; margin: .4rem 0; }
+#log:empty { display: none; }
 html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: none !important; }
-.top { display: flex; align-items: baseline; gap: 1rem; }
-button.lang { margin-left: auto; font-size: .85rem; padding: .25em .7em; background: var(--card); color: var(--ink); border-color: var(--rule); }
 </style>
 </head>
 <body>
@@ -49,73 +77,133 @@ button.lang { margin-left: auto; font-size: .85rem; padding: .25em .7em; backgro
     <h1><span data-lang="en">Install MEL</span><span data-lang="es">Instalar MEL</span></h1>
     <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
   </div>
-  <p class="muted" data-lang="en">On the M-VAVE FM-1, over USB, from Chrome or Edge (it needs Web MIDI).</p>
-  <p class="muted" data-lang="es">En el M-VAVE FM-1, por USB, desde Chrome o Edge (hace falta Web MIDI).</p>
-  <p><a class="big" href="../"><span data-lang="en">Try MEL in the simulator →</span><span data-lang="es">Probar MEL en el simulador →</span></a></p>
-  <p class="muted" data-lang="en">It sounds and plays as on the FM-1, in your browser, with nothing to install.</p>
-  <p class="muted" data-lang="es">Suena y se toca como en el FM-1, en el navegador, sin instalar nada.</p>
+  <p class="muted" data-lang="en">MEL, a tape keyboard after the Mellotron M400, on your M-VAVE FM-1: over USB, from this page, in a couple of minutes.</p>
+  <p class="muted" data-lang="es">MEL, un teclado de cintas inspirado en el Mellotron M400, en tu M-VAVE FM-1: por USB, desde esta página, en un par de minutos.</p>
+  <p><a class="big" href="../"><span data-lang="en">Try it first in the simulator →</span><span data-lang="es">Pruébalo antes en el simulador →</span></a></p>
 
-  <section>
-    <h2><span data-lang="en">1. The package</span><span data-lang="es">1. El paquete</span></h2>
-    <p id="pkg"></p>
+  <section aria-labelledby="h-browser">
+    <h2 id="h-browser"><span class="n">1</span><span data-lang="en">Your browser</span><span data-lang="es">Tu navegador</span></h2>
+    <p data-lang="en">The install talks to the FM-1 over Web MIDI, which only Chromium browsers on a computer have.</p>
+    <p data-lang="es">La instalación habla con el FM-1 por Web MIDI, que solo tienen los navegadores Chromium de ordenador.</p>
+    <div class="browsers">
+      <div class="yes"><b>Chrome</b><span data-lang="en">works</span><span data-lang="es">funciona</span></div>
+      <div class="yes"><b>Edge</b><span data-lang="en">works</span><span data-lang="es">funciona</span></div>
+      <div><b>Firefox</b><span data-lang="en">no SysEx: won't work</span><span data-lang="es">sin SysEx: no sirve</span></div>
+      <div><b>Safari / iPhone</b><span data-lang="en">no Web MIDI</span><span data-lang="es">sin Web MIDI</span></div>
+    </div>
+    <p id="mine" role="status"></p>
+    <p class="muted" data-lang="en">When you look for the FM-1, the browser asks to let this page use MIDI devices: say <b>Allow</b>.</p>
+    <p class="muted" data-lang="es">Al buscar el FM-1, el navegador pide permiso para que esta página use dispositivos MIDI: pulsa <b>Permitir</b>.</p>
   </section>
 
-  <section>
-    <h2><span data-lang="en">2. Before you start</span><span data-lang="es">2. Antes de empezar</span></h2>
-    <label><input type="checkbox" class="pre"> <span data-lang="en">The FM-1's battery is charged.</span><span data-lang="es">La batería del FM-1 está cargada.</span></label>
-    <label><input type="checkbox" class="pre"> <span data-lang="en">A USB data cable, straight into the computer (no hub).</span><span data-lang="es">Un cable USB de datos, directo al ordenador (sin hub).</span></label>
-    <label><input type="checkbox" class="pre"> <span data-lang="en">No other app is using the FM-1 (close the DAW, other tabs, M-UPGRADE).</span><span data-lang="es">Ninguna otra app usa el FM-1 (cierra el DAW, otras pestañas, M-UPGRADE).</span></label>
-    <label><input type="checkbox" class="pre"> <span data-lang="en">I won't unplug it until this page says it is done.</span><span data-lang="es">No lo desconectaré hasta que esta página diga que ha terminado.</span></label>
-    <p class="muted" data-lang="en">If the FM-1 runs another unofficial firmware (Felucca, SLOOP, Dinghy…), go back to the official V15 first
-      (below, in 4). One unofficial firmware straight over another has left FM-1s that no computer saw.</p>
-    <p class="muted" data-lang="es">Si el FM-1 lleva otro firmware no oficial (Felucca, SLOOP, Dinghy…), primero vuelve al oficial V15
-      (abajo, en 4). Instalar uno no oficial encima de otro ha dejado FM-1 que ningún ordenador veía.</p>
+  <section aria-labelledby="h-ready">
+    <h2 id="h-ready"><span class="n">2</span><span data-lang="en">Get ready</span><span data-lang="es">Prepáralo</span></h2>
+    <ul>
+      <li data-lang="en">The FM-1's battery charged.</li><li data-lang="es">La batería del FM-1 cargada.</li>
+      <li data-lang="en">A USB <b>data</b> cable, straight into the computer (no hub).</li>
+      <li data-lang="es">Un cable USB <b>de datos</b>, directo al ordenador (sin hub).</li>
+      <li data-lang="en">Nothing else using the FM-1: close the DAW, other MIDI tabs, M-UPGRADE.</li>
+      <li data-lang="es">Nada más usando el FM-1: cierra el DAW, otras pestañas MIDI, M-UPGRADE.</li>
+      <li data-lang="en">The FM-1 runs the official firmware, MEL, or is in the USB rescue. Another unofficial firmware (Felucca, SLOOP,
+        Melodee, Dinghy…)? Go back to the official V15 first (step 5): one unofficial firmware straight over another has
+        left FM-1s that no computer saw.</li>
+      <li data-lang="es">El FM-1 lleva el firmware oficial, MEL, o está en el rescate USB. ¿Otro firmware no oficial (Felucca, SLOOP,
+        Melodee, Dinghy…)? Primero vuelve al V15 oficial (paso 5): instalar uno no oficial encima de otro ha dejado FM-1 que
+        ningún ordenador veía.</li>
+    </ul>
+    <label><input type="checkbox" class="pre" id="ack">
+      <span data-lang="en">Done, and I won't unplug it until this page says «Done».</span>
+      <span data-lang="es">Hecho, y no lo desconectaré hasta que esta página diga «Hecho».</span></label>
   </section>
 
-  <section>
-    <h2><span data-lang="en">3. Install</span><span data-lang="es">3. Instalar</span></h2>
-    <p><button id="connect"><span data-lang="en">Find the FM-1</span><span data-lang="es">Buscar el FM-1</span></button></p>
-    <p id="dev" class="muted"></p>
-    <p><button id="install" disabled><span data-lang="en">Install MEL</span><span data-lang="es">Instalar MEL</span></button>
-      <button id="resume" class="secondary" hidden><span data-lang="en">Finish the install</span><span data-lang="es">Terminar la instalación</span></button></p>
-    <progress id="bar" max="100" value="0" hidden></progress>
-    <p id="status"></p>
+  <section aria-labelledby="h-install">
+    <h2 id="h-install"><span class="n">3</span><span data-lang="en">Install</span><span data-lang="es">Instalar</span></h2>
+    <p id="pkg" role="status"></p>
+    <div class="row">
+      <button id="connect"><span data-lang="en">Find my FM-1</span><span data-lang="es">Buscar mi FM-1</span></button>
+      <span id="dev" class="muted" role="status" aria-live="polite"></span>
+    </div>
+    <div class="row">
+      <button id="install" disabled><span data-lang="en">Install MEL</span><span data-lang="es">Instalar MEL</span></button>
+      <button id="resume" class="secondary" hidden><span data-lang="en">Finish the install</span><span data-lang="es">Terminar la instalación</span></button>
+    </div>
+    <progress id="bar" max="100" value="0" hidden aria-label="Install progress"></progress>
+    <p id="status" role="status" aria-live="polite"></p>
   </section>
 
-  <section>
-    <h2><span data-lang="en">4. Back to the official firmware (V15)</span><span data-lang="es">4. Volver al firmware oficial (V15)</span></h2>
-    <p class="muted" data-lang="en">Download <code>FM-1.fwsc</code> (PC Firmware, V15) from <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
+  <section aria-labelledby="h-seen">
+    <h2 id="h-seen"><span class="n">4</span><span data-lang="en">What you will see</span><span data-lang="es">Qué verás</span></h2>
+    <ol class="steps-seen" data-lang="en">
+      <li>The FM-1 checks the package, then restarts into update mode (the page says so).</li>
+      <li>The page writes MEL, with the bar above. Leave the cable alone.</li>
+      <li>The FM-1 restarts into MEL, and the page says <b>Done</b>: now you can unplug it.</li>
+    </ol>
+    <ol class="steps-seen" data-lang="es">
+      <li>El FM-1 comprueba el paquete y se reinicia en modo actualización (la página lo dice).</li>
+      <li>La página escribe MEL, con la barra de arriba. No toques el cable.</li>
+      <li>El FM-1 se reinicia en MEL y la página dice <b>Hecho</b>: ya puedes desconectarlo.</li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="h-stock">
+    <h2 id="h-stock"><span class="n">5</span><span data-lang="en">Back to the official firmware (V15)</span><span data-lang="es">Volver al firmware oficial (V15)</span></h2>
+    <p data-lang="en">Get <code>FM-1.fwsc</code> (PC Firmware, V15) from <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
+      (or <a href="https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/FM-1.fwsc" rel="noopener">straight from M-VAVE's server</a>)
       and choose it here. Only the unmodified official file is accepted.</p>
-    <p class="muted" data-lang="es">Descarga <code>FM-1.fwsc</code> (PC Firmware, V15) de <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
+    <p data-lang="es">Descarga <code>FM-1.fwsc</code> (PC Firmware, V15) de <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
+      (o <a href="https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/FM-1.fwsc" rel="noopener">directo del servidor de M-VAVE</a>)
       y elígelo aquí. Solo se acepta el archivo oficial sin modificar.</p>
-    <p><input type="file" id="stockfile" accept=".fwsc"> <button id="stock" class="secondary" disabled><span data-lang="en">Install the official V15</span><span data-lang="es">Instalar el V15 oficial</span></button></p>
+    <div class="row"><input type="file" id="stockfile" accept=".fwsc" aria-label="FM-1.fwsc">
+      <button id="stock" class="secondary" disabled><span data-lang="en">Install the official V15</span><span data-lang="es">Instalar el V15 oficial</span></button></div>
+    <p class="muted" data-lang="en">Coming from another unofficial firmware, some of their installers offer
+      <a href="https://quixotic7.github.io/TransitFM1/" rel="noopener">TransitFM1</a> as a safer stop than V15; MEL installs over it as over V15.</p>
+    <p class="muted" data-lang="es">Si vienes de otro firmware no oficial, algunos de sus instaladores ofrecen
+      <a href="https://quixotic7.github.io/TransitFM1/" rel="noopener">TransitFM1</a> como paso intermedio más seguro que el V15; MEL se instala encima igual que sobre el V15.</p>
   </section>
 
-  <section data-lang="en">
-    <h2>If something goes wrong</h2>
-    <p><b>Cut off while writing:</b> nothing serious. Plug it in again and press «Find the FM-1»: «Finish the install» appears.</p>
-    <p><b>MEL does not start (red screen or restarts):</b> after two tries it goes to the USB rescue by itself; you can also
-      hold <b>OCT−</b> while switching it on. From there, install again or go back to V15.</p>
-    <p><b>Black screen and the computer sees a disk «WL82 UBOOT1.00»:</b>
-      <a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> with V15.
-      If nothing shows up over USB: <a href="https://github.com/kurogedelic/FM-1-transporter" rel="noopener">FM-1-transporter</a>.</p>
-  </section>
-  <section data-lang="es">
-    <h2>Si algo sale mal</h2>
-    <p><b>Se corta mientras escribe:</b> no pasa nada grave. Vuelve a conectar y pulsa «Buscar el FM-1»: aparecerá «Terminar la
-      instalación».</p>
-    <p><b>MEL no arranca (pantalla roja o reinicios):</b> tras dos intentos entra solo en el rescate USB; también puedes
-      mantener <b>OCT−</b> al encenderlo. Desde ahí, instala otra vez o vuelve al V15.</p>
-    <p><b>Pantalla negra y el ordenador ve un disco «WL82 UBOOT1.00»:</b>
-      <a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> con el V15.
-      Si no aparece nada por USB: <a href="https://github.com/kurogedelic/FM-1-transporter" rel="noopener">FM-1-transporter</a>.</p>
+  <section aria-labelledby="h-help">
+    <h2 id="h-help"><span class="n">?</span><span data-lang="en">If something goes wrong</span><span data-lang="es">Si algo sale mal</span></h2>
+    <div data-lang="en">
+      <details><summary>The browser blocked MIDI</summary>
+        <p>Click the lock (or the MIDI icon) left of the address, set <b>MIDI devices</b> to <b>Allow</b>, reload, and look again.</p></details>
+      <details><summary>The FM-1 is not found</summary>
+        <p>Use a data cable (many charge only), plug it straight in, close anything else using MIDI, unplug it, plug it in and look again.</p></details>
+      <details><summary>Windows: the browser freezes when the FM-1 restarts</summary>
+        <p>Open <code>chrome://flags/#use-winrt-midi-api</code> (Edge: <code>edge://flags/#use-winrt-midi-api</code>), set it to <b>Enabled</b>, restart the browser.</p></details>
+      <details><summary>Cut off while writing</summary>
+        <p>Nothing serious. Plug it in again and press «Find my FM-1»: «Finish the install» appears.</p></details>
+      <details><summary>MEL does not start (red screen or restarts)</summary>
+        <p>After two tries it goes to the USB rescue by itself; you can also hold <b>OCT−</b> while switching it on. From there, install again or go back to V15.</p></details>
+      <details><summary>Black screen, and the computer sees a disk «WL82 UBOOT1.00»</summary>
+        <p><a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> with V15.
+          If nothing shows up over USB: <a href="https://github.com/kurogedelic/FM-1-transporter" rel="noopener">FM-1-transporter</a>.</p></details>
+    </div>
+    <div data-lang="es">
+      <details><summary>El navegador ha bloqueado el MIDI</summary>
+        <p>Pulsa el candado (o el icono MIDI) a la izquierda de la dirección, pon <b>Dispositivos MIDI</b> en <b>Permitir</b>, recarga y busca otra vez.</p></details>
+      <details><summary>No encuentra el FM-1</summary>
+        <p>Usa un cable de datos (muchos solo cargan), conéctalo directo, cierra lo que use MIDI, desconecta, vuelve a conectar y busca otra vez.</p></details>
+      <details><summary>Windows: el navegador se congela cuando el FM-1 se reinicia</summary>
+        <p>Abre <code>chrome://flags/#use-winrt-midi-api</code> (Edge: <code>edge://flags/#use-winrt-midi-api</code>), ponlo en <b>Enabled</b> y reinicia el navegador.</p></details>
+      <details><summary>Se corta mientras escribe</summary>
+        <p>No pasa nada grave. Vuelve a conectar y pulsa «Buscar mi FM-1»: aparecerá «Terminar la instalación».</p></details>
+      <details><summary>MEL no arranca (pantalla roja o reinicios)</summary>
+        <p>Tras dos intentos entra solo en el rescate USB; también puedes mantener <b>OCT−</b> al encenderlo. Desde ahí, instala otra vez o vuelve al V15.</p></details>
+      <details><summary>Pantalla negra y el ordenador ve un disco «WL82 UBOOT1.00»</summary>
+        <p><a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> con el V15.
+          Si no aparece nada por USB: <a href="https://github.com/kurogedelic/FM-1-transporter" rel="noopener">FM-1-transporter</a>.</p></details>
+    </div>
+    <div class="row">
+      <button id="copylog" class="secondary small" type="button"><span data-lang="en">Copy the log</span><span data-lang="es">Copiar el registro</span></button>
+      <a href="https://github.com/AntonioAltea/fmel-1/issues" rel="noopener"><span data-lang="en">Tell us on GitHub</span><span data-lang="es">Cuéntanoslo en GitHub</span></a>
+    </div>
+    <div id="log" aria-label="log"></div>
   </section>
 
-  <div id="log"></div>
   <p class="muted" data-lang="en">The installer is <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>'s
-    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), with MEL's checks on top.</p>
+    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), with MEL's checks on top. Nothing is sent anywhere: the page only talks to your FM-1.</p>
   <p class="muted" data-lang="es">El instalador es el de <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>
-    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), con las comprobaciones de MEL encima.</p>
+    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), con las comprobaciones de MEL encima. No se envía nada a ningún sitio: la página solo habla con tu FM-1.</p>
 </main>
 <script type="module" src="install.js"></script>
 </body>

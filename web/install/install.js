@@ -17,6 +17,11 @@ const M = {                                     // what the page says, by langua
     idBad: (p) => `unexpected identity: ${p}`,
     devNone: () => "Not connected.",
     noMidi: () => "this browser has no Web MIDI: use Chrome or Edge",
+    denied: () => "The browser did not let this page use MIDI. Allow «MIDI devices» for this page (the lock left of the address), reload, and look again.",
+    canMidi: () => "This browser can install MEL.",
+    cantMidi: () => "This browser can't: open this page in Chrome or Edge on a computer.",
+    percent: (n) => `Writing… ${n} %. Don't unplug it.`,
+    copied: () => "Log copied.",
     looking: () => "Looking…",
     notFound: () => "The FM-1 is not found: a data cable? another app using it? Unplug it, plug it in again and try again.",
     cutOff: (t) => `The FM-1 is in update mode (${t}): an install was cut off. Press «Finish the install».`,
@@ -45,6 +50,11 @@ const M = {                                     // what the page says, by langua
     idBad: (p) => `identidad inesperada: ${p}`,
     devNone: () => "Sin conectar.",
     noMidi: () => "este navegador no tiene Web MIDI: usa Chrome o Edge",
+    denied: () => "El navegador no ha dejado a esta página usar MIDI. Permite «Dispositivos MIDI» para esta página (el candado a la izquierda de la dirección), recarga y busca otra vez.",
+    canMidi: () => "Este navegador puede instalar MEL.",
+    cantMidi: () => "Este navegador no puede: abre esta página en Chrome o Edge en un ordenador.",
+    percent: (n) => `Escribiendo… ${n} %. No lo desconectes.`,
+    copied: () => "Registro copiado.",
     looking: () => "Buscando…",
     notFound: () => "No encuentro el FM-1: ¿cable de datos?, ¿otra app lo usa? Desconecta, vuelve a conectar y prueba otra vez.",
     cutOff: (t) => `El FM-1 está en modo actualización (${t}): una instalación se cortó. Pulsa «Terminar la instalación».`,
@@ -116,7 +126,8 @@ function refresh() {
 async function connect() {
   try {
     if (!navigator.requestMIDIAccess) throw new Say("noMidi");
-    access = access || await navigator.requestMIDIAccess({ sysex: true });
+    try { access = access || await navigator.requestMIDIAccess({ sysex: true }); }
+    catch (e) { if (e && (e.name === "SecurityError" || e.name === "NotAllowedError")) throw new Say("denied"); throw e; }
     say("dev", "looking", "muted");
     const dev = await new Updater(access, log).find();
     if (!dev) { device = null; say("dev", "notFound", "bad"); return refresh(); }
@@ -140,7 +151,11 @@ function progress(total) {
     if (k === "start") say("status", "start", "", n);
     else if (k === "verify") say("status", "verify", "", n);
     else if (k === "loader") say("status", "loader");
-    else if (k === "write") { $("bar").hidden = false; $("bar").value = Math.min(99, Math.round(n * 512 * 100 / total)); say("status", "write"); }
+    else if (k === "write") {
+      const pc = Math.min(99, Math.round(n * 512 * 100 / total));
+      $("bar").hidden = false; $("bar").value = pc; $("bar").setAttribute("aria-valuetext", pc + " %");
+      say("status", "percent", "", pc);
+    }
     else if (k === "reboot") say("status", "reboot");
     else if (k === "done") { $("bar").value = 100; say("status", "done", "ok", n); }
     log(`${k} ${n ?? ""}`);
@@ -151,6 +166,8 @@ async function guarded(work) {
   busy = true; refresh();
   const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
   window.addEventListener("beforeunload", warn);
+  let wake = null;                                // (the screen stays on while it writes)
+  try { wake = navigator.wakeLock ? await navigator.wakeLock.request("screen") : null; } catch (e) {}
   try { await work(); }
   catch (e) {
     if (e.key) say("status", e.key, "bad", ...e.args);
@@ -158,6 +175,7 @@ async function guarded(work) {
     log(`error ${e.code || ""} ${e.message}`);
   } finally {
     window.removeEventListener("beforeunload", warn);
+    try { if (wake) await wake.release(); } catch (e) {}
     busy = false; device = null; refresh();
   }
 }
@@ -189,6 +207,10 @@ $("lang").onclick = () => {
   for (const [el, [key, cls, a]] of Object.entries(shown)) say(el, key, cls, ...a);
 };
 if (lang === "es") document.title = "Instalar MEL";
+say("mine", navigator.requestMIDIAccess ? "canMidi" : "cantMidi", navigator.requestMIDIAccess ? "ok" : "bad");
+$("copylog").onclick = async () => {
+  try { await navigator.clipboard.writeText($("log").textContent); say("mine", "copied", "ok"); } catch (e) {}
+};
 say("pkg", "pkgChecking");
 say("dev", "devNone", "muted");
 $("connect").onclick = connect;
