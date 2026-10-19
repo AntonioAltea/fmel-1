@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FMEL-1: Mellotron tapes for the M-VAVE FM-1</title>
-<meta name="description" content="Free, open-source firmware that turns the M-VAVE FM-1 into a little Mellotron. Try it in your browser: the same code the FM-1 runs.">
+<title>FMEL-1 simulator</title>
+<meta name="description" content="Simulator of FMEL-1, firmware for the M-VAVE FM-1 that plays Mellotron M400S tape samples. Same code as the FM-1, compiled for the browser.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="FMEL-1: Mellotron tapes for the M-VAVE FM-1">
-<meta property="og:description" content="Free, open-source firmware for the FM-1. Try it in your browser.">
+<meta property="og:title" content="FMEL-1 simulator">
+<meta property="og:description" content="Firmware for the M-VAVE FM-1 that plays Mellotron M400S tape samples, running in the browser.">
 <meta property="og:url" content="https://antonioaltea.github.io/fmel-1/">
 <meta property="og:image" content="https://antonioaltea.github.io/fmel-1/img/og.png">
 <meta property="og:image:width" content="1200">
@@ -32,22 +32,11 @@ body { background: var(--ground); color: var(--ink); margin: 0; padding: 24px 16
 main { max-width: 1060px; margin: 0 auto; }
 html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: none !important; }
 a { color: var(--accent); }
-.top { display: flex; align-items: center; gap: .6rem; margin-bottom: 1.4rem; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: 1rem; }
 .top .grow { flex: 1; }
 .top a, .lang { font: inherit; font-size: .9rem; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .25em .7em; cursor: pointer; text-decoration: none; }
-.hero { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem 2.5rem; margin-bottom: 2.4rem; }
-.hero .text { flex: 1 1 20rem; }
-h1 { margin: 0; font-size: 3rem; line-height: 1.05; letter-spacing: .02em; }
-.lead { font-size: 1.3rem; margin: .5rem 0 .4rem; }
-.hero .sub { color: var(--muted); margin: 0 0 1.2rem; }
-.cta { display: flex; flex-wrap: wrap; gap: .7rem; }
-.cta a { display: inline-block; padding: .65em 1.3em; border: 1px solid var(--accent); border-radius: 10px; text-decoration: none; font-size: 1.05rem; }
-.cta a.primary { background: var(--accent); color: var(--ground); }
-.shots { display: flex; gap: 1rem; margin: 0; flex: 0 1 auto; }
-.shots figure { margin: 0; flex: 1 1 0; }
-.shots img { display: block; width: 100%; max-width: 240px; aspect-ratio: 1; border-radius: 6px; box-shadow: 0 2px 14px rgba(0, 0, 0, .25); }
-.shots figcaption { color: var(--muted); font-size: .85rem; margin-top: .4rem; }
-h2.try { font-size: 1.4rem; margin: 0 0 .7rem; font-weight: 400; }
+h1 { margin: 0; font-size: 2.4rem; line-height: 1.1; letter-spacing: .02em; }
+.intro { color: var(--muted); margin: .4rem 0 1.4rem; max-width: 46rem; }
 .device { position: relative; width: 100%; aspect-ratio: 1000 / 640; user-select: none; -webkit-user-select: none; touch-action: none; }
 .device svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .device canvas { position: absolute; left: 30%; top: 7.1875%; width: 23.6%; height: 36.875%; image-rendering: pixelated; background: #000; border-radius: 3px; pointer-events: none; }
@@ -83,8 +72,7 @@ footer p { margin: .3rem 0; }
 @media (pointer: coarse) { .hint.desk { display: none; } .hint.touch { display: block; } }
 @media (max-width: 640px) {
   .start button { font-size: 1rem; padding: .55em 1.3em; }
-  h1 { font-size: 2.4rem; }
-  .shots img { max-width: none; }
+  h1 { font-size: 2rem; }
   .bar #reset { display: none; }
 }
 .help h2 { font-size: 1.05rem; margin: 0 0 .3rem; }
@@ -98,34 +86,21 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
 <main>
 <nav class="top">
   <span class="grow"></span>
+  <a href="install/"><span data-lang="en">Install on the FM-1</span><span data-lang="es">Instalar en el FM-1</span></a>
   <a href="https://github.com/AntonioAltea/fmel-1">GitHub</a>
   <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
 </nav>
 
-<header class="hero">
-  <div class="text">
-    <h1>FMEL-1</h1>
-    <p class="lead" data-lang="en">Mellotron tapes for the M-VAVE FM-1.</p>
-    <p class="lead" data-lang="es">Cintas de Mellotron para el M-VAVE FM-1.</p>
-    <p class="sub" data-lang="en">Free, open-source firmware. Five real M400 tapes, layered two at a time, worn with wow, flutter and hiss; echo, reverb, arpeggiator and sequencer.</p>
-    <p class="sub" data-lang="es">Firmware libre y gratuito. Cinco cintas reales de un M400, de dos en dos, gastadas con wow, flutter y soplido; eco, reverb, arpegiador y secuenciador.</p>
-    <div class="cta">
-      <a class="primary" href="#try"><span data-lang="en">Try it below</span><span data-lang="es">Pruébalo aquí abajo</span></a>
-      <a href="install/"><span data-lang="en">Install on your FM-1</span><span data-lang="es">Instalar en tu FM-1</span></a>
-    </div>
-  </div>
-  <div class="shots">
-    <figure><img src="img/choir.png" width="240" height="240" alt="The FM-1's screen playing the choir tape: a fox, a cat and a mouse singing"><figcaption data-lang="en">B · CHOIR</figcaption><figcaption data-lang="es">B · CHOIR (coro)</figcaption></figure>
-    <figure><img src="img/tape.png" width="240" height="240" alt="The LOFI page: a cassette whose tape is a snake"><figcaption data-lang="en">LOFI · the tape</figcaption><figcaption data-lang="es">LOFI · la cinta</figcaption></figure>
-  </div>
+<header>
+  <h1>FMEL-1</h1>
+  <p class="intro" data-lang="en">A simulator of FMEL-1, firmware for the M-VAVE FM-1 that plays samples of a Mellotron M400S's tapes. It runs the same code as the FM-1, compiled for the browser.</p>
+  <p class="intro" data-lang="es">Un simulador de FMEL-1, firmware para el M-VAVE FM-1 que toca muestras de las cintas de un Mellotron M400S. Ejecuta el mismo código que el FM-1, compilado para el navegador.</p>
 </header>
-
-<h2 class="try" id="try"><span data-lang="en">Play it here</span><span data-lang="es">Tócalo aquí</span></h2>
 
 <div class="device" id="device">
   <svg id="panel" viewBox="0 0 1000 640" role="application" aria-label="FM-1"></svg>
   <canvas id="screen" width="240" height="240" aria-label="FM-1 screen"></canvas>
-  <div class="start" id="start"><button id="go"><span data-lang="en">▶ Switch on</span><span data-lang="es">▶ Encender</span></button></div>
+  <div class="start" id="start"><button id="go"><span data-lang="en">Switch on</span><span data-lang="es">Encender</span></button></div>
 </div>
 
 <div class="bar">
@@ -135,14 +110,14 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
   <button id="midi" type="button"></button>
   <button id="reset" type="button"><span data-lang="en">Factory settings</span><span data-lang="es">Ajustes de fábrica</span></button>
 </div>
-<p class="hint desk" data-lang="en">Play with the mouse (drag the knobs up and down), your computer keyboard (<kbd>Z</kbd>…<kbd>/</kbd> and <kbd>Q</kbd>…<kbd>Y</kbd>) or a MIDI keyboard. Each button opens a page; KNOB 1–4 do what the screen says.</p>
-<p class="hint desk" data-lang="es">Toca con el ratón (arrastra los knobs arriba y abajo), el teclado del ordenador (<kbd>Z</kbd>…<kbd>/</kbd> y <kbd>Q</kbd>…<kbd>Y</kbd>) o un teclado MIDI. Cada botón abre una página; KNOB 1–4 hacen lo que dice la pantalla.</p>
+<p class="hint desk" data-lang="en">Keys: click them, or use the computer keyboard (<kbd>Z</kbd>…<kbd>/</kbd> and <kbd>Q</kbd>…<kbd>Y</kbd>) or a MIDI keyboard. Knobs: drag up and down, or the mouse wheel. Each button opens a page; KNOB 1–4 change the values shown at the bottom of the screen.</p>
+<p class="hint desk" data-lang="es">Teclas: haz clic, o usa el teclado del ordenador (<kbd>Z</kbd>…<kbd>/</kbd> y <kbd>Q</kbd>…<kbd>Y</kbd>) o un teclado MIDI. Knobs: arrastra arriba y abajo, o la rueda del ratón. Cada botón abre una página; KNOB 1–4 cambian los valores de la parte de abajo de la pantalla.</p>
 
-<p class="hint touch" data-lang="en">Turn your phone sideways for bigger keys. Drag the knobs up and down; each button opens a page, and KNOB 1–4 do what the screen says.</p>
-<p class="hint touch" data-lang="es">Gira el móvil para tener las teclas más grandes. Arrastra los knobs arriba y abajo; cada botón abre una página y KNOB 1–4 hacen lo que dice la pantalla.</p>
+<p class="hint touch" data-lang="en">Knobs: drag up and down. Each button opens a page; KNOB 1–4 change the values shown at the bottom of the screen. In landscape the keys are larger.</p>
+<p class="hint touch" data-lang="es">Knobs: arrastra arriba y abajo. Cada botón abre una página; KNOB 1–4 cambian los valores de la parte de abajo de la pantalla. En horizontal las teclas son más grandes.</p>
 
 <details class="manual">
-<summary><span data-lang="en">The whole manual</span><span data-lang="es">El manual entero</span></summary>
+<summary><span data-lang="en">Manual</span><span data-lang="es">Manual</span></summary>
 <section class="help" data-lang="en">
   <div>
     <h2>How it is laid out</h2>
@@ -355,7 +330,7 @@ let statusKey = "off", statusExtra = "", midiOn = false;
 function status(key, extra = "") { statusKey = key; statusExtra = extra; statusEl.textContent = t(key) + extra; }
 function applyLang() {
   document.documentElement.lang = lang;
-  document.title = lang === "es" ? "FMEL-1: cintas de Mellotron para el M-VAVE FM-1" : "FMEL-1: Mellotron tapes for the M-VAVE FM-1";
+  document.title = lang === "es" ? "Simulador de FMEL-1" : "FMEL-1 simulator";
   for (const [e, key, line, y, yAlone] of texts) {
     const lines = TEXT[lang][key] || [];
     e.textContent = lines[line] || "";

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Install FMEL-1</title>
-<meta name="description" content="Install FMEL-1, free Mellotron firmware, on the M-VAVE FM-1 from your browser.">
+<meta name="description" content="Install FMEL-1, firmware for the M-VAVE FM-1 that plays Mellotron M400S tape samples, over USB from the browser.">
 <link rel="icon" href="../img/icon.png">
 <meta property="og:title" content="Install FMEL-1 on the M-VAVE FM-1">
 <meta property="og:image" content="https://antonioaltea.github.io/fmel-1/img/og.png">
@@ -73,6 +73,10 @@ summary { cursor: pointer; font-weight: 600; }
 #log { white-space: pre-wrap; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); max-height: 180px; overflow: auto;
        background: var(--card); border: 1px solid var(--rule); border-radius: 9px; padding: .6rem; margin: .4rem 0; }
 #log:empty { display: none; }
+.shots { display: flex; gap: 1rem; margin: 1rem 0 .4rem; }
+.shots figure { margin: 0; flex: 0 1 240px; }
+.shots img { display: block; width: 100%; height: auto; border-radius: 6px; }
+.shots figcaption { color: var(--muted); font-size: .85rem; margin-top: .3rem; }
 html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: none !important; }
 </style>
 </head>
@@ -83,9 +87,13 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
     <a class="gh" href="https://github.com/AntonioAltea/fmel-1">GitHub</a>
     <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
   </div>
-  <p class="muted" data-lang="en">FMEL-1, a tape keyboard after the Mellotron M400, on your M-VAVE FM-1: over USB, from this page, in a couple of minutes.</p>
-  <p class="muted" data-lang="es">FMEL-1, un teclado de cintas inspirado en el Mellotron M400, en tu M-VAVE FM-1: por USB, desde esta página, en un par de minutos.</p>
-  <p><a class="big" href="../"><span data-lang="en">Try it first in the simulator →</span><span data-lang="es">Pruébalo antes en el simulador →</span></a></p>
+  <p class="muted" data-lang="en">FMEL-1 is firmware for the M-VAVE FM-1. It plays samples of a Mellotron M400S's tapes (flute, choir, cello, vibes) and a piano, with tape effects (wow, flutter, saturation, hiss), echo, reverb, an arpeggiator and a 16-step sequencer. This page installs it on the FM-1 over USB.</p>
+  <p class="muted" data-lang="es">FMEL-1 es un firmware para el M-VAVE FM-1. Toca muestras de las cintas de un Mellotron M400S (flauta, coro, chelo, vibráfono) y un piano, con efectos de cinta (wow, flutter, saturación, soplido), eco, reverb, arpegiador y secuenciador de 16 pasos. Esta página lo instala en el FM-1 por USB.</p>
+  <div class="shots">
+    <figure><img src="../img/choir.png" width="240" height="240" alt="The FM-1's screen on the PLAY page with the choir sound"><figcaption data-lang="en">PLAY page, sound B (choir)</figcaption><figcaption data-lang="es">Página PLAY, sonido B (coro)</figcaption></figure>
+    <figure><img src="../img/tape.png" width="240" height="240" alt="The FM-1's screen on the LOFI page"><figcaption data-lang="en">LOFI page (tape effects)</figcaption><figcaption data-lang="es">Página LOFI (efectos de cinta)</figcaption></figure>
+  </div>
+  <p><a class="big" href="../"><span data-lang="en">Open the simulator (runs in the browser)</span><span data-lang="es">Abrir el simulador (funciona en el navegador)</span></a></p>
 
   <section aria-labelledby="h-browser">
     <h2 id="h-browser"><span class="n">1</span><span data-lang="en">Your browser</span><span data-lang="es">Tu navegador</span></h2>
