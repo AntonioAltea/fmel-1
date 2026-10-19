@@ -14,4 +14,5 @@ $ZIG cc -target wasm32-freestanding -O2 -nostdlib -fno-builtin -Wall -Wno-unused
     -Wl,--no-entry -Wl,--export-dynamic -Wl,-z,stack-size=1048576 -Wl,--initial-memory=33554432 \
     -o build/emu/mel.wasm firmware/src/mel.c
 cp web/emu/index.html web/emu/worklet.js build/emu/
+cp -r web/emu/img build/emu/
 echo "emu: build/emu ($(wc -c < build/emu/mel.wasm | tr -d ' ') B wasm)"

@@ -1,5 +1,7 @@
 # FMEL-1
 
+<p><img src="web/emu/img/choir.png" width="240" alt="The choir tape"> <img src="web/emu/img/tape.png" width="240" alt="The LOFI page: the cassette"></p>
+
 This is a personal project to create a few sounds I'm interested in for the M-VAVE FM-1.
 
 This firmware, based on [zvenson's dinghy](https://github.com/zvenson/dinghy), aims to reproduce Mellotron sounds and

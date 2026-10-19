@@ -3,8 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Install MEL</title>
-<meta name="description" content="Install MEL, a tape keyboard after the Mellotron M400, on the M-VAVE FM-1, from your browser.">
+<title>Install FMEL-1</title>
+<meta name="description" content="Install FMEL-1, free Mellotron firmware, on the M-VAVE FM-1 from your browser.">
+<link rel="icon" href="../img/icon.png">
+<meta property="og:title" content="Install FMEL-1 on the M-VAVE FM-1">
+<meta property="og:image" content="https://antonioaltea.github.io/fmel-1/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
 <script>   /* the language before anything is drawn: the one chosen, else the browser's (Spanish or English) */
 try {
   const l = localStorage.getItem("mel-lang") || (/^es\b/i.test(navigator.language || "") ? "es" : "en");
@@ -51,7 +55,8 @@ code { font-size: .92em; }
 a { color: var(--accent); }
 .top { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .top p { margin: 0; color: var(--muted); flex: 1 1 16rem; }
-button.lang { margin-left: auto; font-size: .85rem; font-weight: 500; padding: .25em .7em; background: var(--card);
+a.gh { margin-left: auto; font-size: .85rem; padding: .25em .7em; border: 1px solid var(--rule); border-radius: 9px; color: var(--ink); text-decoration: none; }
+button.lang { font-size: .85rem; font-weight: 500; padding: .25em .7em; background: var(--card);
               color: var(--ink); border-color: var(--rule); }
 a.big { display: block; text-align: center; padding: 1rem; margin: 16px 0 4px; font-size: 1.2rem; font-weight: 600;
         text-decoration: none; color: var(--accent-ink); background: var(--accent); border-radius: 12px; }
@@ -74,11 +79,12 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
 <body>
 <main>
   <div class="top">
-    <h1><span data-lang="en">Install MEL</span><span data-lang="es">Instalar MEL</span></h1>
+    <h1><span data-lang="en">Install FMEL-1</span><span data-lang="es">Instalar FMEL-1</span></h1>
+    <a class="gh" href="https://github.com/AntonioAltea/fmel-1">GitHub</a>
     <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
   </div>
-  <p class="muted" data-lang="en">MEL, a tape keyboard after the Mellotron M400, on your M-VAVE FM-1: over USB, from this page, in a couple of minutes.</p>
-  <p class="muted" data-lang="es">MEL, un teclado de cintas inspirado en el Mellotron M400, en tu M-VAVE FM-1: por USB, desde esta página, en un par de minutos.</p>
+  <p class="muted" data-lang="en">FMEL-1, a tape keyboard after the Mellotron M400, on your M-VAVE FM-1: over USB, from this page, in a couple of minutes.</p>
+  <p class="muted" data-lang="es">FMEL-1, un teclado de cintas inspirado en el Mellotron M400, en tu M-VAVE FM-1: por USB, desde esta página, en un par de minutos.</p>
   <p><a class="big" href="../"><span data-lang="en">Try it first in the simulator →</span><span data-lang="es">Pruébalo antes en el simulador →</span></a></p>
 
   <section aria-labelledby="h-browser">
@@ -104,10 +110,10 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
       <li data-lang="es">Un cable USB <b>de datos</b>, directo al ordenador (sin hub).</li>
       <li data-lang="en">Nothing else using the FM-1: close the DAW, other MIDI tabs, M-UPGRADE.</li>
       <li data-lang="es">Nada más usando el FM-1: cierra el DAW, otras pestañas MIDI, M-UPGRADE.</li>
-      <li data-lang="en">The FM-1 runs the official firmware, MEL, or is in the USB rescue. Another unofficial firmware (Felucca, SLOOP,
+      <li data-lang="en">The FM-1 runs the official firmware, FMEL-1, or is in the USB rescue. Another unofficial firmware (Felucca, SLOOP,
         Melodee, Dinghy…)? Go back to the official V15 first (step 5): one unofficial firmware straight over another has
         left FM-1s that no computer saw.</li>
-      <li data-lang="es">El FM-1 lleva el firmware oficial, MEL, o está en el rescate USB. ¿Otro firmware no oficial (Felucca, SLOOP,
+      <li data-lang="es">El FM-1 lleva el firmware oficial, FMEL-1, o está en el rescate USB. ¿Otro firmware no oficial (Felucca, SLOOP,
         Melodee, Dinghy…)? Primero vuelve al V15 oficial (paso 5): instalar uno no oficial encima de otro ha dejado FM-1 que
         ningún ordenador veía.</li>
     </ul>
@@ -124,7 +130,7 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
       <span id="dev" class="muted" role="status" aria-live="polite"></span>
     </div>
     <div class="row">
-      <button id="install" disabled><span data-lang="en">Install MEL</span><span data-lang="es">Instalar MEL</span></button>
+      <button id="install" disabled><span data-lang="en">Install FMEL-1</span><span data-lang="es">Instalar FMEL-1</span></button>
       <button id="resume" class="secondary" hidden><span data-lang="en">Finish the install</span><span data-lang="es">Terminar la instalación</span></button>
     </div>
     <progress id="bar" max="100" value="0" hidden aria-label="Install progress"></progress>
@@ -135,13 +141,13 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
     <h2 id="h-seen"><span class="n">4</span><span data-lang="en">What you will see</span><span data-lang="es">Qué verás</span></h2>
     <ol class="steps-seen" data-lang="en">
       <li>The FM-1 checks the package, then restarts into update mode (the page says so).</li>
-      <li>The page writes MEL, with the bar above. Leave the cable alone.</li>
-      <li>The FM-1 restarts into MEL, and the page says <b>Done</b>: now you can unplug it.</li>
+      <li>The page writes FMEL-1, with the bar above. Leave the cable alone.</li>
+      <li>The FM-1 restarts into FMEL-1, and the page says <b>Done</b>: now you can unplug it.</li>
     </ol>
     <ol class="steps-seen" data-lang="es">
       <li>El FM-1 comprueba el paquete y se reinicia en modo actualización (la página lo dice).</li>
-      <li>La página escribe MEL, con la barra de arriba. No toques el cable.</li>
-      <li>El FM-1 se reinicia en MEL y la página dice <b>Hecho</b>: ya puedes desconectarlo.</li>
+      <li>La página escribe FMEL-1, con la barra de arriba. No toques el cable.</li>
+      <li>El FM-1 se reinicia en FMEL-1 y la página dice <b>Hecho</b>: ya puedes desconectarlo.</li>
     </ol>
   </section>
 
@@ -156,9 +162,9 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
     <div class="row"><input type="file" id="stockfile" accept=".fwsc" aria-label="FM-1.fwsc">
       <button id="stock" class="secondary" disabled><span data-lang="en">Install the official V15</span><span data-lang="es">Instalar el V15 oficial</span></button></div>
     <p class="muted" data-lang="en">Coming from another unofficial firmware, some of their installers offer
-      <a href="https://quixotic7.github.io/TransitFM1/" rel="noopener">TransitFM1</a> as a safer stop than V15; MEL installs over it as over V15.</p>
+      <a href="https://quixotic7.github.io/TransitFM1/" rel="noopener">TransitFM1</a> as a safer stop than V15; FMEL-1 installs over it as over V15.</p>
     <p class="muted" data-lang="es">Si vienes de otro firmware no oficial, algunos de sus instaladores ofrecen
-      <a href="https://quixotic7.github.io/TransitFM1/" rel="noopener">TransitFM1</a> como paso intermedio más seguro que el V15; MEL se instala encima igual que sobre el V15.</p>
+      <a href="https://quixotic7.github.io/TransitFM1/" rel="noopener">TransitFM1</a> como paso intermedio más seguro que el V15; FMEL-1 se instala encima igual que sobre el V15.</p>
   </section>
 
   <section aria-labelledby="h-help">
@@ -172,7 +178,7 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
         <p>Open <code>chrome://flags/#use-winrt-midi-api</code> (Edge: <code>edge://flags/#use-winrt-midi-api</code>), set it to <b>Enabled</b>, restart the browser.</p></details>
       <details><summary>Cut off while writing</summary>
         <p>Nothing serious. Plug it in again and press «Find my FM-1»: «Finish the install» appears.</p></details>
-      <details><summary>MEL does not start (red screen or restarts)</summary>
+      <details><summary>FMEL-1 does not start (red screen or restarts)</summary>
         <p>After two tries it goes to the USB rescue by itself; you can also hold <b>OCT−</b> while switching it on. From there, install again or go back to V15.</p></details>
       <details><summary>Black screen, and the computer sees a disk «WL82 UBOOT1.00»</summary>
         <p><a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> with V15.
@@ -187,7 +193,7 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
         <p>Abre <code>chrome://flags/#use-winrt-midi-api</code> (Edge: <code>edge://flags/#use-winrt-midi-api</code>), ponlo en <b>Enabled</b> y reinicia el navegador.</p></details>
       <details><summary>Se corta mientras escribe</summary>
         <p>No pasa nada grave. Vuelve a conectar y pulsa «Buscar mi FM-1»: aparecerá «Terminar la instalación».</p></details>
-      <details><summary>MEL no arranca (pantalla roja o reinicios)</summary>
+      <details><summary>FMEL-1 no arranca (pantalla roja o reinicios)</summary>
         <p>Tras dos intentos entra solo en el rescate USB; también puedes mantener <b>OCT−</b> al encenderlo. Desde ahí, instala otra vez o vuelve al V15.</p></details>
       <details><summary>Pantalla negra y el ordenador ve un disco «WL82 UBOOT1.00»</summary>
         <p><a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> con el V15.
@@ -201,9 +207,9 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
   </section>
 
   <p class="muted" data-lang="en">The installer is <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>'s
-    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), with MEL's checks on top. Nothing is sent anywhere: the page only talks to your FM-1.</p>
+    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), with FMEL-1's checks on top. Nothing is sent anywhere: the page only talks to your FM-1.</p>
   <p class="muted" data-lang="es">El instalador es el de <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>
-    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), con las comprobaciones de MEL encima. No se envía nada a ningún sitio: la página solo habla con tu FM-1.</p>
+    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), con las comprobaciones de FMEL-1 encima. No se envía nada a ningún sitio: la página solo habla con tu FM-1.</p>
 </main>
 <script type="module" src="install.js"></script>
 </body>
