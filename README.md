@@ -1,6 +1,4 @@
 # FMEL-1
-## WARNING ⚠️ 
-**I have not have the chance to test this in a real FM-1, so I advise against installing right now until I can attest the installation work without problems.**
 
 <p><img src="web/emu/img/choir.png" width="240" alt="The choir tape"> <img src="web/emu/img/tape.png" width="240" alt="The LOFI page: the cassette"></p>
 
@@ -13,6 +11,13 @@ color them with some basic FX and lo-fi tape effects. It also lets you mix two d
 **[Try it in your browser](https://antonioaltea.github.io/fmel-1/)**: the same code the FM-1 runs, in a simulator.
 To put it on your FM-1, use the [web installer](https://antonioaltea.github.io/fmel-1/install/) (Chrome or Edge) or
 download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/latest).
+
+## Disclaimer
+
+FMEL-1 is unofficial firmware, not made or supported by M-VAVE. You install it at your own risk: I am not responsible
+if your FM-1, or anything else, stops working or gets damaged. It comes with no warranty (GPL-3.0, sections 15 and 16).
+If an install goes wrong, the installer's "If something goes wrong" section explains how to get back to the official
+firmware.
 
 ## The tapes
 
