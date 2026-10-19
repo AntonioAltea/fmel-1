@@ -25,9 +25,9 @@ complete source under the same licence too.
 
 ## The drawings
 
-The instruments on MEL's screen (`assets/sprites/`, and `firmware/gen/mel_sprites.h`, made from them by
-`tools/gen_sprites.py`) are drawn by Javi and used here with his permission. They are his: not under the GPL unless he
-says so.
+The instruments on MEL's screen and its cassette, the snake (`assets/sprites/`, and `firmware/gen/mel_sprites.h`, made
+from them by `tools/gen_sprites.py`) are drawn by Javi and used here with his permission. They are his: not under the
+GPL unless he says so.
 
 ## The logo
 

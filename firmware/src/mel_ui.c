@@ -146,12 +146,16 @@ static void spr_violins(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t l
     spr_fiddle(cx + S(30), cy - S(6), S(170), t + 700u, lv, 0, RGB(176, 94, 40));
     spr_fiddle(cx, cy + S(4), S(220), t, lv, 0, RGB(214, 120, 46));
 }
-static void spr_unpack(const sprite_t *sp, uint32_t f, uint8_t *px)
+static void spr_unpack(const sprite_t *sp, uint32_t f, uint8_t *px)   /* (a frame after the first: only where it
+                                                                     * is not the first; 255, as the first there) */
 {
     const uint8_t *r = sp->frame[f];
     uint32_t i = 0, n, end = (uint32_t)sp->w * sp->h;
+    if (f) spr_unpack(sp, 0u, px);
     for (; i < end; r += 2)
-        for (n = r[0]; n--; ) px[i++] = r[1];
+        if (r[1] == 255u) i += r[0];
+        else
+            for (n = r[0]; n--; ) px[i++] = r[1];
 }
 static const uint8_t *spr_frame(const sprite_t *sp, uint32_t f)   /* a frame unpacked (the last one kept) */
 {
@@ -365,52 +369,13 @@ static void stage_layer(void)                   /* LAYER: the sound and the laye
     disc(x + 4, 108, 6, ly ? C_INK : C_INK2);
 }
 
-static uint32_t reel_a, counter;                /* the cassette: its reels' angle, its counter */
-static void hub(int32_t cx, int32_t cy, int32_t pack, uint32_t a)
+static uint32_t tape_run;                       /* the cassette: how far its tape has run (its snake's head round) */
+static void stage_tape(void)                    /* TAPE: a cassette (drawn), a snake its tape: running with the tapes
+                                                 * (wow), quivering (flutter); stopped, its tongue flicking */
 {
-    int32_t k;
-    disc(cx, cy, pack, C_OXIDE);
-    disc(cx, cy, 6, RGB(236, 234, 228));
-    for (k = 0; k < 3; k++) {
-        uint32_t ph = a + (uint32_t)k * 0x55555555u;
-        thick(cx, cy, cx + sn(ph, 5), cy + cs(ph, 5), 2, RGB(70, 66, 62));
-    }
-    disc(cx, cy, 2, RGB(70, 66, 62));
-}
-static void stage_tape(void)                    /* TAPE: a cassette, its reels turning as the tapes run (wow), the
-                                                 * tape quivering (flutter) */
-{
-    char s[4];
-    int32_t y, x, pk = 6 + (int32_t)(counter % 1000u) * 7 / 1000;
-    int32_t fl = ui_lv && !by_lofi ? fxv_flut : 0;   /* the flutter: the tape quivers, the reels tug */
-    int32_t bow = fl / 250 > 4 ? 4 : fl / 250 < -4 ? -4 : fl / 250;
-    uint32_t tug = (uint32_t)(fl * 100000);
-    rrect(28, 4, 184, 100, 8, RGB(56, 52, 50));
-    disc(34, 10, 2, RGB(120, 118, 116));
-    disc(205, 10, 2, RGB(120, 118, 116));
-    rrect(36, 10, 168, 60, 4, C_BODY);          /* the label */
-    cv_rect(36, 14, 168, 4, C_LAMP);
-    cv_rect(36, 18, 168, 2, C_RED);
-    tx(42, 21, &F16, "MEL C-60", C_INK);
-    tx(116, 21, &F16, PV(P_LEN) ? "8S" : "INF", C_INK2);
-    s[0] = (char)('0' + counter / 100u % 10u);  /* the counter */
-    s[1] = (char)('0' + counter / 10u % 10u);
-    s[2] = (char)('0' + counter % 10u);
-    s[3] = 0;
-    rrect(170, 21, 28, 16, 2, C_INK);
-    tx(172, 21, &F16, s, C_LAMP);
-    rrect(66, 38, 108, 28, 8, RGB(34, 30, 30)); /* the window */
-    hub(92, 52, 13 - pk, reel_a + tug);
-    hub(148, 52, pk, reel_a * 13u / 10u + tug);
-    for (x = 0; x < 80; x++)                    /* the tape between them, bowing like a plucked string */
-        cv_rect(80 + x, 63 + sn((uint32_t)x * 26843545u, bow), 1, 2, C_OXIDE);
-    for (y = 76; y < 104; y++) {                /* the bottom, where the heads go in */
-        int32_t i = (y - 76) * 12 / 28;
-        cv_rect(60 + i, y, 120 - 2 * i, 1, RGB(40, 38, 36));
-    }
-    cv_rect(84, 92, 8, 10, RGB(20, 20, 20));
-    cv_rect(116, 90, 8, 12, RGB(20, 20, 20));
-    cv_rect(148, 92, 8, 10, RGB(20, 20, 20));
+    int32_t fl = ui_lv && !by_lofi ? fxv_flut / 500 : 0;
+    uint32_t f = ui_lv ? 2u + tape_run / 6000u % 6u : fm1_ms / 400u % 2u;
+    spr_pix(&SPR_TAPE, f, 120, 54 + (fl > 2 ? 2 : fl < -2 ? -2 : fl), 332, 0);
 }
 
 static void stage_wear(void)                    /* WEAR: a phrase of wave, the master and the worn copy */
@@ -663,20 +628,19 @@ static int stage_moves(void)                    /* does the stage need drawing a
 {
     if (spr_lv() || lv_drawn) return 1;
     switch (page) {
-    case PG_VIB: case PG_SETUP: return 1;
+    case PG_VIB: case PG_SETUP: case PG_TAPE: return 1;   /* (TAPE: the snake's tongue, stopped) */
     case PG_ECHO: return PV(P_EMIX) != 0;
     default: return 0;
     }
 }
-static void ui_motion(void)                     /* the cassette's reels and counter run with the tapes (and the wow) */
+static void ui_motion(void)                     /* the cassette's tape runs with the tapes (and the wow) */
 {
-    static uint32_t t_reel, t_cnt;
+    static uint32_t t_reel;
     uint32_t dt = fm1_ms - t_reel;
     t_reel = fm1_ms;
     if (ui_lv) {
         int32_t sp = (40 + ui_lv / 4 + fxv_wow / 64) >> set.half;   /* (HALF SPEED: half as fast) */
-        reel_a += (uint32_t)(sp > 0 ? sp : 0) * dt * 0x00080000u;
-        if (fm1_ms - t_cnt >= 150u) { t_cnt = fm1_ms; counter = (counter + 1u) % 1000u; }
+        tape_run += (uint32_t)(sp > 0 ? sp : 0) * dt;   /* (6000 a frame: 150 ms at the tapes' speed) */
     }
 }
 static void draw_stage(void)
