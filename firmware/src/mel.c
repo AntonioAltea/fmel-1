@@ -351,13 +351,6 @@ static void voice_sub(uint32_t vi, int32_t *mix, int32_t g16, int32_t drift, int
         tpos[note] += ran;
 }
 
-/* the reverb: four combs and two allpasses per side (Freeverb's lengths), in the pool */
-static const uint16_t RV_CL[4] = {1116, 1188, 1277, 1356}, RV_AL[4] = {556, 441, 579, 464};
-static int32_t rv_c[4][1356] __attribute__((section(".pool")));
-static int32_t rv_a[4][580] __attribute__((section(".pool")));
-static uint16_t rv_ci[4], rv_ai[4];
-static int32_t rv_f[4];
-
 static int32_t sat(int32_t x)                   /* the tape's saturation, 2 x full scale -> full scale */
 {
     uint32_t a = (uint32_t)(x < 0 ? -x : x), i, f;
@@ -418,10 +411,12 @@ enum { S_KEY = 1, S_MIDI = 2, S_LATCH = 4, S_PED = 8 };   /* (+ S_ARP, S_SEQ: me
 static uint8_t src[128];
 static uint32_t ages;
 
+static uint32_t t_hit;                          /* (the screen) when a note last started: the ECHO's and REVERB's graphs */
 static void note_on(uint32_t note)
 {
     uint32_t v, pick = 0, best = 0xFFFFFFFFu;
     int st = struck();
+    t_hit = fm1_ms;
     for (v = 0; v < NV && !st; v++)         /* its own voice still sounding: the tape just goes on (the piano: a
                                                  * new strike in a voice of its own, the last one dying away) */
         if ((voice[v].busy || voice[v].gate) && voice[v].note == note) {
@@ -475,12 +470,13 @@ enum {
     P_AGE, P_DROP, P_DRIFT, P_CRUSH,            /*       WEAR */
     P_VRATE, P_VDEPTH, P_VTONE, P_VMIX,         /* FX: VIBRATO */
     P_ETIME, P_EFB, P_ETONE, P_EMIX,            /*     ECHO */
-    P_RSIZE, P_RTONE, P_RPRE, P_RMIX,           /*     REVERB */
+    P_RSIZE, P_RTONE, P_RTYPE, P_RMIX,          /*     REVERB */
     P_EQLO, P_EQMID, P_EQFREQ, P_EQHI,          /* EQ */
     P_BPM, P_TUNE, P_LEN, P_LOOK,               /* SETUP */
     P_AMODE, P_ARATE, P_AOCT, P_AGATE,          /* ARP */
     P_SLEN, P_SGATE, P_STEP, P_SWING,           /* SEQ */
     P_PMODE,                                    /* SETUP: SOUNDS (PLAY: each sound its own, or one for all) */
+    P_COLOR,                                    /*        and the screen's colour, the FM-1's buttons' */
     NP
 };
 static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
@@ -489,18 +485,19 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, MEL_NSETS, 0, 1}, {0, 100, 50, 1}, {-1, 1, 0, 1}, {0, 30, 0, 1},
     {0, 100, 28, 1}, {0, 100, 22, 1}, {0, 100, 22, 1}, {0, 100, 12, 1},
     {0, 100, 18, 1}, {0, 100, 0, 1}, {0, 100, 30, 1}, {0, 100, 0, 1},
-    {0, 100, 75, 1}, {0, 100, 35, 1}, {0, 100, 70, 1}, {0, 100, 0, 1},
+    {0, 100, 60, 1}, {0, 100, 50, 1}, {0, 100, 70, 1}, {0, 100, 100, 1},   /* (VIBRATO: 3 Hz, on) */
     {0, 100, 38, 1}, {0, 100, 35, 1}, {0, 100, 45, 1}, {0, 100, 0, 1},
-    {0, 100, 55, 1}, {0, 100, 45, 1}, {0, 100, 15, 1}, {0, 100, 18, 1},
+    {0, 100, 55, 1}, {0, 100, 45, 1}, {0, 1, 1, 1}, {0, 100, 34, 1},
     {-12, 12, 0, 1}, {-12, 12, 0, 1}, {0, 15, 8, 1}, {-12, 12, 0, 1},
     {40, 240, 90, 1}, {-50, 50, 0, 1}, {0, 1, 0, 1}, {0, 1, 1, 1},
     {0, 4, 0, 1}, {0, 5, 3, 1}, {1, 3, 1, 1}, {10, 100, 60, 5},
     {1, 16, 16, 1}, {10, 100, 80, 5}, {0, 15, 0, 1}, {0, 100, 0, 5},
     {0, 1, 1, 1},
+    {0, 5, 0, 1},
 };
 
-#define SET_VER 10u                             /* (7 .. 9: the same, but the piano's PLAY (7: the tapes', 8, 9: an
-                                                 * earlier piano's) starts again from its own) */
+#define SET_VER 11u                             /* (10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
+                                                 * tapes', 8, 9: an earlier piano's) starts again from its own) */
 #define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
 typedef struct {
     uint8_t ver, np, half, rsv;                 /* half: HALF SPEED (a reserved byte before: older settings load, off) */
@@ -508,13 +505,30 @@ typedef struct {
     uint8_t steps[16][4];                       /* the pattern: up to 4 notes a step, 0 = none */
     int16_t play[MEL_NSETS][NPLAY];             /* every sound's PLAY (the one playing: in p, here when it changes) */
 } mel_set_t;
-typedef struct {                                /* version 6, before SOUNDS: it loads, its PLAY every sound's */
+typedef struct {                                /* versions 7 .. 10, before COLOUR: they load */
     uint8_t ver, np, half, rsv;
     int16_t p[NP - 1u];
+    uint8_t steps[16][4];
+    int16_t play[MEL_NSETS][NPLAY];
+} mel_set10_t;
+typedef struct {                                /* version 6, before SOUNDS: it loads, its PLAY every sound's */
+    uint8_t ver, np, half, rsv;
+    int16_t p[NP - 2u];
     uint8_t steps[16][4];
 } mel_set6_t;
 static mel_set_t set;
 #define PV(i) ((int32_t)set.p[i])
+static const char *const N_COLOR[6] = {"MINT", "BLUE", "PURPLE", "ORANGE", "GREY", "BLACK"};
+static const uint16_t COLOR_PAL[6][3] = {      /* COLOUR: the screen's lamps, their print on the body, what runs; after
+                                                 * the FM-1's buttons (Black & Green and White & Green: MINT; White &
+                                                 * Blue; Purple; Orange; White & Grey; Black) */
+    {RGB(14, 140, 128), RGB(8, 100, 92), RGB(70, 160, 150)},
+    {RGB(58, 98, 150), RGB(40, 72, 116), RGB(120, 150, 190)},
+    {RGB(140, 80, 190), RGB(104, 56, 148), RGB(180, 140, 210)},
+    {RGB(226, 84, 32), RGB(176, 60, 20), RGB(236, 140, 100)},
+    {RGB(70, 86, 100), RGB(52, 64, 76), RGB(140, 152, 164)},
+    {RGB(112, 112, 120), RGB(40, 40, 44), RGB(156, 156, 162)}};
+static uint16_t c_pal[3];                       /* (the one chosen: mel_ui.c's C_LAMP, C_LAMPT, C_OXIDE2) */
 
 static const int16_t EQ_G[25] = {1029, 1154, 1295, 1453, 1631, 1830, 2053, 2303, 2584, 2900, 3254, 3651, 4096,   /* dB -> Q12 */
                                   4596, 5157, 5786, 6492, 7284, 8173, 9170, 10289, 11544, 12953, 14533, 16306};
@@ -524,6 +538,9 @@ static void apply(void)                         /* the parameters -> the sound *
 {
     int32_t d = PV(P_VDEPTH);
     p_sound = (uint8_t)PV(P_SOUND);
+    c_pal[0] = COLOR_PAL[PV(P_COLOR)][0];
+    c_pal[1] = COLOR_PAL[PV(P_COLOR)][1];
+    c_pal[2] = COLOR_PAL[PV(P_COLOR)][2];
     p_loct = PV(P_BOCT);                        /* (the octave before the layer: a voice reads them together) */
     p_ldet16 = PV(P_BDET) * 16;
     p_ga = sine(0x40000000u - (uint32_t)PV(P_BMIX) * (0x40000000u / 100u));   /* MIX: the same power all the way */
@@ -551,10 +568,11 @@ static void apply(void)                         /* the parameters -> the sound *
     f_efb = PV(P_EFB) * 320;
     f_etone = MEL_TONE[PV(P_ETONE)];
     f_emix = PV(P_EMIX) * 327;
-    f_rfb = 22938 + PV(P_RSIZE) * 79;
-    f_rdamp = 4915 + PV(P_RTONE) * 262;
-    f_rpre = PV(P_RPRE) * 5292 / 100;
-    f_rmix = PV(P_RMIX) * 327;
+    f_rtype = PV(P_RTYPE);                      /* REVERB: HALL its gains, PLATE its decay (0.35 .. 0.9); TONE their */
+    rv_hall_gains(PV(P_RSIZE) * 127 / 100);     /* low-pass (HALL: Felucca's DAMP 127 .. 0; PLATE: 0.4 .. 1) */
+    f_rfb = 11469 + PV(P_RSIZE) * 180;
+    f_rdamp = PV(P_RTYPE) ? 13000 + PV(P_RTONE) * 197 : 32767 - (100 - PV(P_RTONE)) * 127 / 100 * 180;
+    f_rmix = PV(P_RMIX) * PV(P_RMIX) * 32767 / 10000;   /* (squared: fine where it is little, all wet at 100) */
     f_glo = EQ_G[PV(P_EQLO) + 12];
     f_gmid = EQ_G[PV(P_EQMID) + 12];
     f_ghi = EQ_G[PV(P_EQHI) + 12];
@@ -591,7 +609,7 @@ static const uint8_t G_COUNT[NG] = {1, 1, 2, 3, 1, 2, 1, 1};
 static const char *const G_NAME[NG] = {"PLAY", "LAYER", "LOFI", "FX", "EQ", "SETUP", "ARP", "SEQ"};
 static const char *const PG_NAME[NPG] = {"PLAY", "LAYER", "TAPE", "WEAR", "VIBRATO", "ECHO", "REVERB", "EQ", "SETUP",
                                          "SOUNDS", "ARP", "SEQ"};
-enum { F_NUM, F_ST, F_DB, F_CT, F_PCT, F_EMS, F_PMS, F_VHZ, F_EQHZ, F_X, F_STEP, F_BPM, F_SND, F_OCT, F_ENUM };
+enum { F_NUM, F_ST, F_DB, F_CT, F_PCT, F_EMS, F_VHZ, F_EQHZ, F_X, F_STEP, F_BPM, F_SND, F_OCT, F_ENUM };
 typedef struct {
     uint8_t pid, fmt;
     const char *name;                           /* 0: no knob there */
@@ -600,6 +618,7 @@ typedef struct {
 static const char *const N_LEN[2] = {"HELD", "8 SEC"};
 static const char *const N_LOOK[2] = {"CLEAN", "TAPE"};
 static const char *const N_PMODE[2] = {"SHARED", "OWN"};
+static const char *const N_RTYPE[2] = {"HALL", "PLATE"};
 static const char *const ARP_MODE[5] = {"UP", "DOWN", "UP+DN", "RANDOM", "PLAYED"};
 static const char *const ARP_RATE[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
 static const ctl_t CTL[NPG][4] = {
@@ -609,11 +628,10 @@ static const ctl_t CTL[NPG][4] = {
     {{P_AGE, F_NUM, "AGE", 0}, {P_DROP, F_NUM, "DROPOUT", 0}, {P_DRIFT, F_NUM, "DRIFT", 0}, {P_CRUSH, F_NUM, "CRUSH", 0}},
     {{P_VRATE, F_VHZ, "RATE", 0}, {P_VDEPTH, F_NUM, "DEPTH", 0}, {P_VTONE, F_NUM, "TONE", 0}, {P_VMIX, F_PCT, "MIX", 0}},
     {{P_ETIME, F_EMS, "TIME", 0}, {P_EFB, F_NUM, "REPEATS", 0}, {P_ETONE, F_NUM, "TONE", 0}, {P_EMIX, F_PCT, "MIX", 0}},
-    {{P_RSIZE, F_NUM, "SIZE", 0}, {P_RTONE, F_NUM, "TONE", 0}, {P_RPRE, F_PMS, "PRE", 0}, {P_RMIX, F_PCT, "MIX", 0}},
+    {{P_RSIZE, F_NUM, "SIZE", 0}, {P_RTONE, F_NUM, "TONE", 0}, {P_RTYPE, F_ENUM, "TYPE", N_RTYPE}, {P_RMIX, F_PCT, "MIX", 0}},
     {{P_EQLO, F_DB, "LOW", 0}, {P_EQMID, F_DB, "MID", 0}, {P_EQFREQ, F_EQHZ, "FREQ", 0}, {P_EQHI, F_DB, "HIGH", 0}},
-    {{P_BPM, F_BPM, "TEMPO", 0}, {P_TUNE, F_CT, "TUNE", 0}, {P_LEN, F_ENUM, "LENGTH", N_LEN},
-     {P_LOOK, F_ENUM, "SCREEN", N_LOOK}},
-    {{P_PMODE, F_ENUM, "PLAY", N_PMODE}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{P_LEN, F_ENUM, "LENGTH", N_LEN}, {P_LOOK, F_ENUM, "SCREEN", N_LOOK}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{P_PMODE, F_ENUM, "PLAY", N_PMODE}, {0, 0, 0, 0}, {0, 0, 0, 0}, {P_COLOR, F_ENUM, "COLOUR", N_COLOR}},
     {{P_AMODE, F_ENUM, "MODE", ARP_MODE}, {P_ARATE, F_ENUM, "RATE", ARP_RATE}, {P_AOCT, F_X, "OCTAVES", 0},
      {P_AGATE, F_PCT, "GATE", 0}},
     {{P_SLEN, F_NUM, "LENGTH", 0}, {P_SGATE, F_PCT, "GATE", 0}, {P_STEP, F_STEP, "STEP", 0}, {P_SWING, F_PCT, "SWING", 0}},
@@ -626,7 +644,6 @@ static void fmt_val(const ctl_t *c, int32_t v, char *s)   /* a parameter as the 
     case F_CT: put(put_int(s, v, 1), " ct"); break;
     case F_PCT: put(put_int(s, v, 0), "%"); break;
     case F_EMS: put(put_int(s, echo_ms(v), 0), " ms"); break;
-    case F_PMS: put(put_int(s, v * 120 / 100, 0), " ms"); break;
     case F_VHZ: {
         char *p = put_int(s, MEL_LFO_HZ10[v] / 10, 0);
         *p++ = '.';
@@ -696,13 +713,6 @@ static int set_param(uint32_t pid, int32_t v)   /* clamped to its range: 1 if it
     set.p[pid] = (int16_t)v;
     return 1;
 }
-static void say_ctl(const char *what, uint32_t pg, uint32_t k)
-{
-    char s[32], *p = put(s, what);
-    *p++ = ' ';
-    fmt_val(&CTL[pg][k], PV(CTL[pg][k].pid), p);
-    say(s);
-}
 static void go_group(uint32_t g)                /* a section's button: its page, or (in it) its next page */
 {
     if (PG_GROUP[page] == g)
@@ -724,19 +734,24 @@ static int16_t play_ok(uint32_t k, int32_t v)  /* a stored PLAY value, or its de
 static void app_init(void)
 {
     uint32_t k, n = 0;
-    static mel_set_t s;                         /* (a version 6 loads into its start) */
+    static mel_set_t s;                         /* (an older version loads into its start) */
+    mel_set10_t *q = (mel_set10_t *)(void *)&s;
     mel_set6_t *o = (mel_set6_t *)(void *)&s;
+    const int16_t *p = 0;
+    const uint8_t *st = 0;
+    const int16_t (*pl)[NPLAY] = 0;
     for (k = 0; k < NP; k++)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && s.ver >= 7u && s.ver <= SET_VER && s.np == NP)   /* (else: the defaults) */
-        n = NP;
-    else if (!settings_load(o, sizeof *o) && o->ver == 6u && o->np == NP - 1u)
-        n = NP - 1u;
+    if (!settings_load(&s, sizeof s) && s.ver == SET_VER && s.np == NP) {   /* (else: the defaults) */
+        n = NP; p = s.p; st = &s.steps[0][0]; pl = s.play;
+    } else if (!settings_load(q, sizeof *q) && q->ver >= 7u && q->ver <= 10u && q->np == NP - 1u) {
+        n = NP - 1u; p = q->p; st = &q->steps[0][0]; pl = q->play;
+    } else if (!settings_load(o, sizeof *o) && o->ver == 6u && o->np == NP - 2u) {
+        n = NP - 2u; p = o->p; st = &o->steps[0][0];
+    }
     if (n) {
-        const int16_t *p = n == NP ? s.p : o->p;
-        const uint8_t *st = n == NP ? &s.steps[0][0] : &o->steps[0][0];
         set.half = s.half == 1u;
         for (k = 0; k < n; k++)
             if (p[k] >= PINFO[k][0] && p[k] <= PINFO[k][1])
@@ -747,13 +762,14 @@ static void app_init(void)
     for (k = 0; k < MEL_NSETS * NPLAY; k++) {   /* every sound's PLAY: its own, or (new) as PLAY was; the piano's
                                                  * from its own (before 8 it had the tapes') */
         uint32_t st = k / NPLAY, i = k % NPLAY;
-        set.play[st][i] = n == NP && (s.ver == SET_VER || !MEL_SET_STRUCK[st]) ? play_ok(i, s.play[st][i])
+        set.play[st][i] = pl && (s.ver >= 10u || !MEL_SET_STRUCK[st]) ? play_ok(i, pl[st][i])
                         : n && !MEL_SET_STRUCK[st] ? set.p[P_TONE + i] : (int16_t)MEL_SET_PLAY[st][i];
     }
     if (PV(P_PMODE) || !n)                      /* (OWN: the knobs are the sound playing's) */
         for (k = 0; k < NPLAY; k++)
             set.p[P_TONE + k] = set.play[PV(P_SOUND)][k];
     set.p[P_STEP] = 0;
+    set.p[P_TUNE] = 0;                          /* (TUNE is gone from SETUP: none left from before) */
     apply();
     for (k = 0; k < 27u; k++)
         held_note[k] = 255;
@@ -909,8 +925,11 @@ static void knobs(void)
     }
     if ((d = turn(ENC_ALGORITHM)) != 0 && set_param(P_BPM, PV(P_BPM) + d)) {   /* ALGORITHM: the tempo, anywhere */
         changed(99);
-        say_ctl("TEMPO", PG_SETUP, 0);
-        if (page == PG_SETUP) redraw |= 8u;
+        {
+            char s[16];
+            put(put_int(put(s, "TEMPO "), PV(P_BPM), 0), " BPM");
+            say(s);
+        }
     }
     set.p[P_STEP] = (int16_t)seq_cur;
     for (k = 0; k < 4u; k++) {                  /* KNOB 1..4: this page's */
@@ -930,6 +949,7 @@ static void knobs(void)
                 if (seq_step >= (uint32_t)PV(P_SLEN)) seq_step = 0;
             }
             if (c->pid == P_LEN) redraw |= 4u;
+            if (c->pid == P_COLOR) redraw |= 0xFu;
             changed(k);
         }
     }

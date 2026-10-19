@@ -16,9 +16,10 @@
 #define C_KNOB RGB(26, 26, 28)
 #define C_SKIRT RGB(150, 152, 156)
 #define C_OXIDE RGB(92, 54, 30)                 /* tape at rest */
-#define C_OXIDE2 RGB(176, 104, 52)              /* tape running */
+#define C_OXIDE2 c_pal[2]                       /* what runs (waves, MIX, levels): COLOUR's, light */
 #define C_FRAME RGB(34, 30, 28)
-#define C_LAMP RGB(232, 120, 40)                /* amber */
+#define C_LAMP c_pal[0]                         /* the lamps, what is lit: SETUP > SOUNDS: COLOUR's */
+#define C_LAMPT c_pal[1]                        /* its print on the body (darker: to be read) */
 #define C_RED RGB(220, 44, 34)
 #define C_GREEN RGB(70, 170, 90)
 #define STAGE_Y 24
@@ -322,14 +323,14 @@ static void stage_play(void)                    /* the sound (and the layer), th
     if (ly) {                                   /* (two fit beside the selector at their size; one, half as big again) */
         spr_sound(MEL_SET_NAME[snd], 104, 50, 256, t, spr_lv());
         spr_sound(MEL_SET_NAME[ly - 1u], 192, 50, 256, t + 400u, spr_lv());
-        tx_c(34, 100, &F16, MEL_SET_NAME[ly - 1u], C_LAMP);
+        tx_c(34, 100, &F16, MEL_SET_NAME[ly - 1u], C_LAMPT);
     } else
         spr_sound(MEL_SET_NAME[snd], 150, 54, 384, t, spr_lv());
     tx_c(34, 86, &F16, MEL_SET_NAME[snd], C_INK);   /* the names, small, under the selector */
-    for (k = 0; k < MEL_NSETS && k < 6u; k++) { /* A B C D E round the selector: the sound's needle, the layer's amber */
+    for (k = 0; k < MEL_NSETS && k < 6u; k++) { /* A B C D E round the selector: the sound's needle, the layer's lit */
         uint32_t ph = sel_angle(k);
         char l[2] = {(char)('A' + k), 0};
-        tx_c(34 + sn(ph, 26), 44 - cs(ph, 26) - 8, &F16, l, k == snd ? C_INK : ly == k + 1u ? C_LAMP : C_INK2);
+        tx_c(34 + sn(ph, 26), 44 - cs(ph, 26) - 8, &F16, l, k == snd ? C_INK : ly == k + 1u ? C_LAMPT : C_INK2);
     }
     disc(34, 52, 14, C_SKIRT);
     disc(34, 52, 11, C_KNOB);
@@ -352,14 +353,14 @@ static void stage_layer(void)                   /* LAYER: the sound and the laye
     tx_c(62, 86, &F16, MEL_SET_NAME[snd], C_INK);
     if (ly) {
         spr_sound(MEL_SET_NAME[ly - 1u], 178, 38, 320, t + 400u, spr_lv());
-        tx_c(178, 86, &F16, MEL_SET_NAME[ly - 1u], C_LAMP);
+        tx_c(178, 86, &F16, MEL_SET_NAME[ly - 1u], C_LAMPT);
     } else {
         rrect(140, 10, 76, 50, 6, C_BODY2);
         tx_c(178, 25, &F20, "OFF", C_INK2);
         tx_c(178, 86, &F16, "SEL: A LAYER", C_INK2);
     }
     tx(8, 100, &F16, "A", C_INK);               /* the MIX: A .. B */
-    tx(224, 100, &F16, "B", ly ? C_LAMP : C_INK2);
+    tx(224, 100, &F16, "B", ly ? C_LAMPT : C_INK2);
     rrect(24, 104, 192, 8, 4, C_BODY2);
     x = 24 + mix * 184 / 100;
     if (ly) {
@@ -422,37 +423,54 @@ static void stage_vib(void)                     /* VIBRATO: its wave; how much o
     if (mix) rrect(40, 92, 8 + mix * 152 / 100, 8, 4, C_OXIDE2);
 }
 
-static void stage_echo(void)                    /* ECHO: the tape loop and its heads; the repeats, fading */
+static int32_t echo_h(int32_t l)                /* a level (Q15) as the ECHO graph draws it: 80 px at full, 0 at -42 dB */
 {
-    int32_t k, ms = echo_ms(PV(P_ETIME)), fb = PV(P_EFB), gap = 6 + ms * 30 / 1000, h = 30, mix = PV(P_EMIX);
-    rrect(40, 4, 160, 50, 22, C_OXIDE);         /* the loop */
-    rrect(45, 9, 150, 40, 18, C_BODY);
-    for (k = 0; k < 3; k++)                     /* record, play, play */
-        rrect(92 + k * 22, 48, 12, 10, 2, RGB(150, 152, 156));
-    if (mix) {
-        uint32_t a = fm1_ms * (uint32_t)(140000 / ms) * 4096u;
-        disc(120 + cs(a, 74), 29 + sn(a, 22), 3, C_LAMP);
+    int32_t b = 0;
+    if (l <= 256) return 0;
+    while (l >= 32) { l >>= 1; b += 16; }       /* (log2, in 16ths) */
+    return 80 * (b + l + 48 - 128) / 112;
+}
+static void stage_echo(void)                    /* ECHO: the hit and its repeats (in dB): one every TIME apart, MIX the
+                                                 * first's height, REPEATS how slowly they fall (the sound's own gains),
+                                                 * TONE each one paler and thinner; after a note they come as they are
+                                                 * heard, from its start, the one just come lit */
+{
+    int32_t k, ms = echo_ms(PV(P_ETIME)), gap = 10 + ms * 54 / 1000, l0 = PV(P_EMIX) * 327, l = l0;
+    int32_t fb = PV(P_EFB) * 320, dk = 100 - PV(P_ETONE), n = 0, at = (int32_t)(fm1_ms - t_hit), x, w, c;
+    for (; l > 256 && 16 + (n + 1) * gap <= 226; n++) l = l * fb >> 15;   /* n: the repeats that show */
+    if (!t_hit || at < 0 || at > 600000) at = 1 << 30;   /* (none yet: all settled) */
+    cv_rect(8, 100, 224, 1, C_INK2);
+    for (k = 1, l = l0; k <= n; k++, l = l * fb >> 15) {
+        x = 16 + k * gap;
+        w = 7 - k * dk / 50;
+        c = 14 - k * dk / 25;
+        w = w < 2 ? 2 : w;
+        rrect(x - w / 2, 100 - echo_h(l), w, echo_h(l), w / 2 < 2 ? w / 2 : 2, at < k * ms ? C_BODY2   /* to come */
+              : at < k * ms + (ms < 120 ? ms : 120) ? C_LAMP : mix565(C_BODY2, C_OXIDE2, (uint32_t)(c < 5 ? 5 : c)));
     }
-    for (k = 0; k < 14 && h > 1; k++) {         /* the repeats: one every TIME, each REPEATS weaker */
-        int32_t x = 20 + k * gap;
-        if (x > 228) break;
-        rrect(x, 104 - h, 5, h, 2, k ? mix565(C_BODY2, C_OXIDE2, (uint32_t)(4 + h * 12 / 30)) : C_INK);
-        h = h * (20 + fb * 75 / 100) / 100;
-    }
+    rrect(12, 20, 9, 80, 2, at < 120 ? C_LAMP : C_INK);   /* the hit, dry */
 }
 
-static void stage_verb(void)                    /* REVERB: the pre-delay, then the reflections dying away */
+static int32_t verb_ms(void)                    /* the REVERB's tail as it is heard: its RT60 (ms), measured (TONE 45) */
 {
-    int32_t x, x0 = 12 + PV(P_RPRE) * 40 / 100, len = 40 + PV(P_RSIZE) * 170 / 100, top = 20 + PV(P_RMIX) * 60 / 100;
-    uint16_t c = mix565(C_OXIDE, C_LAMP, (uint32_t)(PV(P_RTONE) * 16 / 100));
-    uint32_t r = 12345u + (ui_lv ? fm1_ms / 60u : 0u);
-    rrect(8, 100 - 70, 3, 70, 1, C_INK);        /* the sound */
-    for (x = x0; x < x0 + len && x < 232; x += 3) {
-        int32_t e = top * (x0 + len - x) / len, h;
-        r = r * 1103515245u + 12345u;
-        h = e * (int32_t)(40u + (r >> 25)) / 168;
-        if (h > 0) cv_rect(x, 100 - h, 2, h, c);
+    static const uint16_t RT[2][5] = {{420, 900, 1740, 3180, 4680}, {1200, 1920, 2700, 4140, 9060}};
+    int32_t v = PV(P_RSIZE), i = v >= 100 ? 3 : v / 25;
+    const uint16_t *t = RT[PV(P_RTYPE)];
+    return t[i] + (t[i + 1] - t[i]) * (v - i * 25) / 25;
+}
+static void stage_verb(void)                    /* REVERB: the hit, then the tail dying away (in dB, its real RT60 across
+                                                 * the screen up to 5 s), MIX its height; after a note it fills in as it
+                                                 * is heard, from its start */
+{
+    int32_t rt = verb_ms(), span = rt < 1000 ? 1000 : rt > 5000 ? 5000 : rt, m = PV(P_RMIX), x;
+    int32_t top = echo_h(m * m * 32767 / 10000), at = (int32_t)(fm1_ms - t_hit);
+    uint16_t c = mix565(C_BODY2, C_OXIDE2, (uint32_t)(6 + PV(P_RTONE) * 10 / 100));
+    if (!t_hit || at < 0 || at > 600000) at = 1 << 30;
+    for (x = 24; x < 232; x += 3) {             /* (the tail: 60 dB over its RT60, the graph's 42 dB of it) */
+        int32_t t = (x - 24) * span / 208, h = top - 80 * 60 * t / (42 * rt);
+        if (h > 0) cv_rect(x, 100 - h, 2, h, at < t ? C_BODY2 : at < t + 80 ? C_LAMP : c);
     }
+    rrect(12, 20, 9, 80, 2, at < 120 ? C_LAMP : C_INK);   /* the hit, dry */
     cv_rect(8, 100, 224, 1, C_INK2);
 }
 
@@ -475,44 +493,25 @@ static void stage_eq(void)                      /* EQ: the curve: two shelves an
     tx_c(fx < 40 ? 40 : fx > 200 ? 200 : fx, 86, &F20, s, C_INK2);
 }
 
-static void stage_setup(void)                   /* SETUP: the four settings, and what the one you touch does */
+static void stage_setup(void)                   /* SETUP: the settings, and what the one you touch does */
 {
-    static const char *const NAME[4] = {"TEMPO", "TUNE", "LENGTH", "SCREEN"};
-    static const char *const HELP[7][2] = {
+    static const char *const NAME[2] = {"LENGTH", "SCREEN"};
+    static const char *const HELP[5][2] = {
         {"Settings for the whole MEL.", "Turn a knob: it says here."},
-        {"ARP and SEQ follow it.", "ALGORITHM sets it anywhere."},
-        {"Fine tuning, in cents, to", "play along with others."},
         {"A note sounds as long as", "you hold it (the tape loops)."},
         {"As on a real M400: a tape", "runs out after 8 seconds."},
         {"A clean, steady picture.", ""},
         {"The screen as an old tape:", "scanlines, sway, tears, grain."}};
-    char s[24], *p;
-    int32_t k, tune = PV(P_TUNE), hz10, h = touched > 3u ? 0 : touched == 0u ? 1 : touched == 1u ? 2
-                                                    : touched == 2u ? 3 + PV(P_LEN) : 5 + PV(P_LOOK);
-    uint32_t beat = 60000u / (uint32_t)PV(P_BPM), ph = (fm1_ms % (2u * beat)) * 0x80000000u / beat;
-    hz10 = tune >= 0 ? (int32_t)(((MEL_POW2[tune] >> 14) * 4400u) >> 16)
-                     : (int32_t)(((MEL_POW2[1200 + tune] >> 14) * 4400u) >> 17);
-    for (k = 0; k < 4; k++) {
-        int32_t y = 2 + k * 17;
-        switch (k) {
-        case 0: put(put_int(s, PV(P_BPM), 0), " BPM"); break;
-        case 1: p = put_int(put(s, "A4 = "), hz10 / 10, 0); *p++ = '.'; *p++ = (char)('0' + hz10 % 10); put(p, " Hz"); break;
-        case 2: put(s, PV(P_LEN) ? "8 SECONDS" : "AS HELD"); break;
-        default: put(s, PV(P_LOOK) ? "OLD TAPE" : "CLEAN"); break;
-        }
+    int32_t k, h = touched > 1u ? 0 : touched == 0u ? 1 + PV(P_LEN) : 3 + PV(P_LOOK);
+    for (k = 0; k < 2; k++) {
+        int32_t y = 10 + k * 24;
         if ((uint32_t)k == touched) rrect(2, y + 4, 6, 8, 3, C_LAMP);
         tx(12, y, &F16, NAME[k], C_INK2);
-        tx(72, y, &F16, s, C_INK);
+        tx(84, y, &F16, k ? (PV(P_LOOK) ? "OLD TAPE" : "CLEAN") : PV(P_LEN) ? "8 SECONDS" : "AS HELD", C_INK);
     }
     cv_rect(8, 72, 224, 1, C_BODY2);
     tx(12, 75, &F16, HELP[h][0], C_INK);
     tx(12, 91, &F16, HELP[h][1], C_INK);
-    rrect(196, 4, 36, 64, 5, RGB(122, 74, 40)); /* the metronome, at the tempo */
-    {
-        int32_t sw = sn(ph, 12);
-        thick(214, 62, 214 + sw, 14, 2, C_INK);
-        disc(214 + sw * 3 / 4, 26, 3, C_LAMP);
-    }
 }
 
 static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, the one playing lit */
@@ -628,8 +627,9 @@ static int stage_moves(void)                    /* does the stage need drawing a
 {
     if (spr_lv() || lv_drawn) return 1;
     switch (page) {
-    case PG_VIB: case PG_SETUP: case PG_TAPE: return 1;   /* (TAPE: the snake's tongue, stopped) */
-    case PG_ECHO: return PV(P_EMIX) != 0;
+    case PG_VIB: case PG_TAPE: return 1;   /* (TAPE: the snake's tongue, stopped) */
+    case PG_ECHO: return PV(P_EMIX) && fm1_ms - t_hit < (uint32_t)echo_ms(PV(P_ETIME)) * 40u + 200u;   /* (its repeats */
+    case PG_VERB: return PV(P_RMIX) && fm1_ms - t_hit < (uint32_t)verb_ms() + 200u;   /* coming, its tail filling) */
     default: return 0;
     }
 }
@@ -692,9 +692,9 @@ static void draw_tapes(uint32_t base, int force)
         if (black(base + k)) {
             int32_t x = wx[k] - 5;
             cv_rect(x, 0, 10, 19, C_FRAME);
-            cv_rect(x + 1, 0, 8, 18, lit[k] ? RGB(150, 70, 20) : C_KNOB);
+            cv_rect(x + 1, 0, 8, 18, lit[k] ? C_LAMPT : C_KNOB);
             if (lit[k]) cv_rect(x + 1, 18 - lit[k] * 18 / 24, 8, lit[k] * 18 / 24, C_LAMP);
-            cv_rect(x + 2, 14, 6, 2, lit[k] ? RGB(250, 170, 90) : RGB(70, 70, 76));   /* (its front edge, caught by light) */
+            cv_rect(x + 2, 14, 6, 2, lit[k] ? C_OXIDE2 : RGB(70, 70, 76));   /* (its front edge, caught by light) */
         }
     cv_rect(0, 0, 240, 2, C_FRAME);             /* the felt */
     cv_rect(0, 1, 240, 1, RGB(120, 30, 34));
@@ -749,15 +749,15 @@ static void draw_plate(void)                    /* the aluminium plate: the knob
         if (!c->name) continue;                 /* (no knob there) */
         fmt_val(c, PV(c->pid), v);
         tx_c(cx, 3, &F16, c->name, C_INK);      /* the name, printed black on the plate */
-        if (lit) {                              /* the knob just turned: its quarter amber (round only at the ends) */
+        if (lit) {                              /* the knob just turned: its quarter lit (round only at the ends) */
             int32_t x0 = k ? cx - 29 : 2, x1 = k < 3u ? cx + 30 : 238;
             rrect(x0, 20, x1 - x0, 38, 4, C_LAMP);
             if (k) cv_rect(x0, 20, 4, 38, C_LAMP);
             if (k < 3u) cv_rect(x1 - 4, 20, 4, 38, C_LAMP);
         }
-        plate_val(cx, 21, v, lit ? C_INK : C_BODY);
+        plate_val(cx, 21, v, C_BODY);
         plate_bar(cx, 51, c->pid, c->pid == P_STEP ? (int32_t)seq_cur * 256 / 15 : pos256(c->pid),
-                  lit ? RGB(176, 92, 30) : RGB(84, 78, 72), lit ? C_INK : C_BODY);
+                  lit ? C_LAMPT : RGB(84, 78, 72), lit ? C_INK : C_BODY);
     }
     cv_blit(0, PLATE_Y);
 }

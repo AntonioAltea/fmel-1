@@ -45,5 +45,6 @@ Machine) and run the packer:
   wrong
 - The Mellotron M400S tapes by Bernie Kornowicz (Taijiguy), from his site <http://leisureland.us> (see above)
 - The browser version follows the emulators of X0X, Felucca and FoMni
+- The reverbs: HALL after Felucca's, PLATE Jon Dattorro's after FoMni's (Charles Vestal)
 - [Terminus](https://terminus-font.sourceforge.net) by Dimitar Zhekov: the screen's font (SIL OFL 1.1)
 - [JieLi AC79 SDK](https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK): the boot files a build is packaged with

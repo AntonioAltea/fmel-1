@@ -31,16 +31,16 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
 .face { transition: fill .05s; }
 .lit .face.btn { fill: #109488; }
 .lit text.cap { fill: #effffd; }
-.cap.bcap { fill: #2f3f41; }
-.fn.bfn { fill: #1f5a52; }                         /* (on the mint silicone) */
-.down .face { stroke: #0b6d65; stroke-width: 3; }
+.cap.bcap { fill: #c9c9cd; }
+.fn.bfn { fill: #5fd0c3; }                         /* (on the black silicone) */
+.down .face { stroke: #5fd0c3; stroke-width: 3; }
 .lit .face.white { fill: #2fb5a8; }
 .lit .face.black { fill: #109488; }
-.fn.dim { fill: #9a978f; font-weight: 400; }
-.fn { fill: #12998d; font: 600 13px system-ui, sans-serif; letter-spacing: .04em; }
+.fn.dim { fill: #8a8a90; font-weight: 400; }
+.fn { fill: #5fd0c3; font: 600 13px system-ui, sans-serif; letter-spacing: .04em; }
 .fn.bfn { font-size: 10.5px; letter-spacing: 0; }
 .fn.hold { font-weight: 400; }
-.cap { fill: #3b3a37; font: 600 15px system-ui, sans-serif; letter-spacing: .05em; pointer-events: none; }
+.cap { fill: #d4d4d7; font: 600 15px system-ui, sans-serif; letter-spacing: .05em; pointer-events: none; }
 .start { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(10, 24, 22, .45); border-radius: 4.4% / 6.9%; }
 .start[hidden] { display: none; }
 .start button { font: 600 1.25rem system-ui, sans-serif; padding: .7em 1.7em; border: 0; border-radius: 999px; background: #19b0a2; color: #04201d; cursor: pointer; }
@@ -94,9 +94,9 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
       <li><b>HOME · PLAY</b>: TONE, PITCH (semitones), ATTACK, RELEASE: each sound keeps its own (or one for all: SETUP's second page). Already on PLAY, HOME steps to the next sound.</li>
       <li><b>SEL · LAYER</b>: a second sound over the one PRESETS chose, on another track of the same tape: SOUND (OFF, A, B, C, D, E), MIX (between the two), OCTAVE, DETUNE. On LAYER, SEL again changes the SOUND.</li>
       <li><b>LFO · LOFI</b>: TAPE (WOW, FLUTTER, DRIVE: from clean to fat saturation, as a JHS 424 cassette preamp, HISS) and WEAR (AGE: a copy of a copy, the band narrows and the copying deck adds its hiss and flutter; DROPOUT; DRIFT: every key its own tuning, up to ±25 ct; CRUSH: bits and rate).</li>
-      <li><b>FX</b>: VIBRATO (RATE, DEPTH, TONE, MIX: half way it is a chorus), ECHO (TIME, REPEATS, TONE, MIX), REVERB (SIZE, TONE, PRE, MIX).</li>
+      <li><b>FX</b>: VIBRATO (RATE, DEPTH, TONE, MIX: half way it is a chorus), ECHO (TIME, REPEATS, TONE, MIX), REVERB (SIZE, TONE, TYPE: HALL, after Felucca's, or PLATE, Dattorro's, MIX).</li>
       <li><b>EDIT · EQ</b>: LOW (150 Hz), MID, FREQ (the mid's), HIGH (2.5 kHz). <b>Hold EDIT</b> (0.6 s): the EQ back to flat.</li>
-      <li><b>GLO · SETUP</b>: TEMPO (ARP and SEQ follow it), TUNE (fine tuning, to play with others), LENGTH (a note lasts as long as you hold it, or 8 s as on an M400), SCREEN (the old-tape look, or clean). The screen explains each one as you turn it. GLO again: SOUNDS, PLAY OWN (each sound its own PLAY, as it comes) or SHARED (one for all), and every sound's PLAY in a table.</li>
+      <li><b>GLO · SETUP</b>: LENGTH (a note lasts as long as you hold it, or 8 s as on an M400), SCREEN (the old-tape look, or clean). The screen explains each one as you turn it. GLO again: SOUNDS, PLAY OWN (each sound its own PLAY, as it comes) or SHARED (one for all), and every sound's PLAY in a table; KNOB 4, COLOUR: the screen's colour, after your FM-1's buttons (MINT, BLUE, PURPLE, ORANGE, GREY, BLACK).</li>
       <li><b>ARP</b>: switches it on and opens its page: MODE, RATE, OCTAVES, GATE. <b>SEQ</b>: 16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING.</li>
       <li><b>PLAY</b> starts and stops the sequencer; <b>REC</b> records (stopped: step by step, where <b>SEL</b> is a rest and SEL held clears the pattern; running: what you play goes into its step).</li>
       <li><b>Hold LFO</b> (0.6 s): LOFI out / in. <b>Hold FX</b>: the effects out / in (the echo and the reverb ring out). Each on its own, the EQ stays; the button is lit while its section is in, dark while out, and blinks while you are in its section.</li>
@@ -136,9 +136,9 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
       <li><b>HOME · PLAY</b>: TONE, PITCH (semitonos), ATTACK, RELEASE: cada sonido guarda los suyos (o unos para todos: segunda página de SETUP). Si ya estás en PLAY, HOME pasa al siguiente sonido.</li>
       <li><b>SEL · LAYER</b>: un segundo sonido encima del de PRESETS, en otra pista de la misma cinta: SOUND (OFF, A, B, C, D, E), MIX (entre los dos), OCTAVE, DETUNE. Ya en LAYER, SEL otra vez cambia el SOUND.</li>
       <li><b>LFO · LOFI</b>: TAPE (WOW, FLUTTER, DRIVE: de limpio a saturación gorda, como un JHS 424 / preamplificador de cassette, HISS) y WEAR (AGE: copia de copia, se estrecha la banda y la copiadora añade su siseo y flutter; DROPOUT; DRIFT: cada tecla con su afinación, hasta ±25 ct; CRUSH: bits y frecuencia).</li>
-      <li><b>FX</b>: VIBRATO (RATE, DEPTH, TONE, MIX: a mitad es un chorus), ECHO (TIME, REPEATS, TONE, MIX), REVERB (SIZE, TONE, PRE, MIX).</li>
+      <li><b>FX</b>: VIBRATO (RATE, DEPTH, TONE, MIX: a mitad es un chorus), ECHO (TIME, REPEATS, TONE, MIX), REVERB (SIZE, TONE, TYPE: HALL, after Felucca's, or PLATE, Dattorro's, MIX).</li>
       <li><b>EDIT · EQ</b>: LOW (150 Hz), MID, FREQ (la del MID), HIGH (2,5 kHz). <b>Mantén EDIT</b> (0,6 s): el EQ vuelve a plano.</li>
-      <li><b>GLO · SETUP</b>: TEMPO (lo siguen ARP y SEQ), TUNE (afinación fina, para tocar con otros), LENGTH (la nota dura lo que la mantienes, o 8 s como en un M400), SCREEN (pantalla de cinta vieja o limpia). La pantalla explica cada uno al girarlo. GLO otra vez: SOUNDS, PLAY OWN (cada sonido su PLAY, así viene) o SHARED (uno para todos), y el PLAY de cada sonido en una tabla.</li>
+      <li><b>GLO · SETUP</b>: LENGTH (la nota dura lo que la mantienes, o 8 s como en un M400), SCREEN (pantalla de cinta vieja o limpia). La pantalla explica cada uno al girarlo. GLO otra vez: SOUNDS, PLAY OWN (cada sonido su PLAY, así viene) o SHARED (uno para todos), y el PLAY de cada sonido en una tabla; KNOB 4, COLOUR: el color de la pantalla, a juego con los botones de tu FM-1 (MINT, BLUE, PURPLE, ORANGE, GREY, BLACK).</li>
       <li><b>ARP</b>: lo enciende y abre su página: MODE, RATE, OCTAVES, GATE. <b>SEQ</b>: 16 pasos de hasta 4 notas: LENGTH, GATE, STEP, SWING.</li>
       <li><b>PLAY</b> arranca y para el secuenciador; <b>REC</b> graba (parado: paso a paso, ahí <b>SEL</b> es un silencio y SEL mantenido borra el patrón; en marcha: lo que tocas entra en su paso).</li>
       <li><b>Mantén LFO</b> (0,6 s): fuera / dentro el LOFI. <b>Mantén FX</b>: fuera / dentro los efectos (el eco y la reverb se apagan solos). Son independientes y el EQ no se toca; el botón está encendido mientras su sección está dentro, apagado cuando está fuera, y parpadea cuando estás en su sección.</li>
@@ -214,11 +214,11 @@ function textLabel(parent, x, y, key, line, cls, yAlone = y) {
 }
 
 // ---------------------------------------------------------------- the panel
-el("rect", { x: 4, y: 4, width: 992, height: 632, rx: 44, fill: "#f3f0e9", stroke: "#d9d4c8", "stroke-width": 3 });   // the FM-1 in white: cream, mint silicone
+el("rect", { x: 4, y: 4, width: 992, height: 632, rx: 44, fill: "#1e1e20", stroke: "#323236", "stroke-width": 3 });   // the FM-1 Black: all black, black silicone
 const knobs = {};
 function knob(x, y, r, name) {
   const g = el("g", { class: "ctl knob", role: "slider", "aria-label": name });
-  el("circle", { cx: x, cy: y, r: r + 6, fill: "#dcd8ce" }, g);
+  el("circle", { cx: x, cy: y, r: r + 6, fill: "#2c2c2f" }, g);
   el("circle", { cx: x, cy: y, r, fill: "#1c1c1e", stroke: "#4a4a4d", "stroke-width": 2, class: "face" }, g);
   const ind = el("line", { x1: x, y1: y - r + 5, x2: x, y2: y - r + 15, stroke: "#e8e6ee", "stroke-width": 3, "stroke-linecap": "round" }, g);
   label(g, x, y - r - 13, name === "KNOB1" ? "KNOB 1" : name === "KNOB2" ? "KNOB 2" : name === "KNOB3" ? "KNOB 3" : name === "KNOB4" ? "KNOB 4" : name, "cap", 14);
@@ -237,7 +237,7 @@ for (let i = 0; i < 4; i++) knob(612 + i * 104, 95, 23, `KNOB${i + 1}`);
 const buttons = {};
 function button(x, y, w, h, name) {
   const g = el("g", { class: "ctl", role: "button", "aria-label": name });
-  el("rect", { x, y, width: w, height: h, rx: 9, fill: "#72cdc0", stroke: "#58ada1", "stroke-width": 1.5, class: "face btn" }, g);
+  el("rect", { x, y, width: w, height: h, rx: 9, fill: "#2c2c2f", stroke: "#3e3e43", "stroke-width": 1.5, class: "face btn" }, g);
   label(g, x + w / 2, y + h / 2 + 5, name, "cap bcap", 14);
   if (TEXT.en[name]) {                          // two short lines over it: what it is, what holding it does
     textLabel(g, x + w / 2, y - 18, name, 0, "fn bfn", y - 6);   // (alone: just over the button)
@@ -245,36 +245,36 @@ function button(x, y, w, h, name) {
   }
   buttons[name] = { g, id: BTN[name] };
 }
-el("rect", { x: 58, y: 262, width: 210, height: 58, rx: 14, fill: "#79d1c4" });
+el("rect", { x: 58, y: 262, width: 210, height: 58, rx: 14, fill: "#262628" });
 button(72, 272, 82, 38, "OCT-");
 button(172, 272, 82, 38, "OCT+");
 el("rect", { x: 288, y: 34, width: 260, height: 256, rx: 30, fill: "#080909" });
-el("rect", { x: 568, y: 150, width: 400, height: 172, rx: 18, fill: "#79d1c4" });
+el("rect", { x: 568, y: 150, width: 400, height: 172, rx: 18, fill: "#262628" });
 const ROW1 = ["FX", "SEL", "ENV", "LFO", "EDIT", "GLO"], ROW2 = ["HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"];
 for (let i = 0; i < 6; i++) { button(582 + i * 63, 186, 54, 44, ROW1[i]); button(582 + i * 63, 268, 54, 44, ROW2[i]); }
 
 const keys = [];
 function slit(g, cx, y, h) {                    // the dark groove down the middle of every key, as on the real one
-  el("rect", { x: cx - 2.5, y: y + h * 0.3, width: 5, height: h * 0.4, rx: 2.5, fill: "#354148", "pointer-events": "none" }, g);
+  el("rect", { x: cx - 2.5, y: y + h * 0.3, width: 5, height: h * 0.4, rx: 2.5, fill: "#121214", "pointer-events": "none" }, g);
 }
 (function keybed(x0, y0, w, h) {
-  el("rect", { x: x0, y: y0, width: w, height: h, rx: 30, fill: "#72cec1" });
+  el("rect", { x: x0, y: y0, width: w, height: h, rx: 30, fill: "#262628" });
   const pitch = (w - 24) / 16, kw = pitch * 0.8;
   WHITE_K.forEach((k, i) => {
     const g = el("g", { class: "ctl", role: "button", "aria-label": `key ${k}` });
-    el("rect", { x: x0 + 12 + i * pitch + (pitch - kw) / 2, y: y0 + h * 0.43, width: kw, height: h * 0.52, rx: kw / 2, fill: "#78d0c3", stroke: "#5fb3a7", "stroke-width": 1.5, class: "face white" }, g);
+    el("rect", { x: x0 + 12 + i * pitch + (pitch - kw) / 2, y: y0 + h * 0.43, width: kw, height: h * 0.52, rx: kw / 2, fill: "#2f2f32", stroke: "#434348", "stroke-width": 1.5, class: "face white" }, g);
     slit(g, x0 + 12 + i * pitch + pitch / 2, y0 + h * 0.43, h * 0.52);
     g.dataset.key = k;
     keys[k] = g;
   });
   BLACK_AFTER.forEach((a, j) => {
     const g = el("g", { class: "ctl", role: "button", "aria-label": `key ${BLACK_K[j]}` });
-    el("rect", { x: x0 + 12 + (a + 1) * pitch - kw / 2, y: y0 + h * 0.06, width: kw, height: h * 0.33, rx: kw / 2, fill: "#78d0c3", stroke: "#5fb3a7", "stroke-width": 1.5, class: "face black" }, g);
+    el("rect", { x: x0 + 12 + (a + 1) * pitch - kw / 2, y: y0 + h * 0.06, width: kw, height: h * 0.33, rx: kw / 2, fill: "#2f2f32", stroke: "#434348", "stroke-width": 1.5, class: "face black" }, g);
     slit(g, x0 + 12 + (a + 1) * pitch, y0 + h * 0.06, h * 0.33);
     g.dataset.key = BLACK_K[j];
     keys[BLACK_K[j]] = g;
   });
-  [4, 7, 11, 14].forEach((i) => el("circle", { cx: x0 + 12 + i * pitch, cy: y0 + h * 0.405, r: 3, fill: "#0a221f" }));   // the octave dots (B|C, E|F)
+  [4, 7, 11, 14].forEach((i) => el("circle", { cx: x0 + 12 + i * pitch, cy: y0 + h * 0.405, r: 3, fill: "#8a8a90" }));   // the octave dots (B|C, E|F)
 })(36, 342, 928, 270);
 
 // ---------------------------------------------------------------- the language
