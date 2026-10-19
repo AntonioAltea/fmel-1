@@ -14,10 +14,9 @@ download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/la
 
 ## Disclaimer
 
-FMEL-1 is unofficial firmware, not made or supported by M-VAVE. You install it at your own risk: I am not responsible
-if your FM-1, or anything else, stops working or gets damaged. It comes with no warranty (GPL-3.0, sections 15 and 16).
-If an install goes wrong, the installer's "If something goes wrong" section explains how to get back to the official
-firmware.
+This is a hobby project, not an official M-VAVE thing. If your FM-1 ends up as a very expensive paperweight, that's on
+you, not me. Install at your own risk, no warranty. If something goes wrong, the installer's "If something goes wrong"
+section shows how to get back to the official firmware.
 
 ## The tapes
 
