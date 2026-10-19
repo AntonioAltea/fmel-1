@@ -10,13 +10,14 @@
  *                        WOW and FLUTTER are the motor: irregular, in the tapes' speed (fx_pitch16), not a vibrato;
  *                        flutter shakes the level a little too (that roughness is what makes it heard); at HALF SPEED
  *                        they come at half the rate (the capstan and the pinch roller turn half as fast)
- *   EQ                   a low shelf (150 Hz), a bell (200 Hz .. 5 kHz), a high shelf (2.5 kHz), +-12 dB; a shelf
- *                        is half way (in dB) at its frequency whatever its gain (MEL_EQ_KLS / KHS: at a fixed 5 kHz
- *                        HIGH was over all there is of the tapes, and -12 dB of it took 1 dB off them)
  *   VIBRATO      (FX)    a delay swept by a sine: RATE, DEPTH, TONE (its colour), MIX (half way: a chorus)
  *   ECHO                 a tape echo: TIME 60 ms .. 1 s, REPEATS darker and dirtier each time, TONE, MIX
  *   REVERB               two models in one memory (TYPE): HALL, after Felucca's, and PLATE, Dattorro's: SIZE,
  *                        TONE, TYPE, MIX
+ *   EQ                   Felucca's SPEAKER EQ, last: FLAT, LOWCUT (12 dB/oct ~110 Hz) or BASS+ (12 dB/oct ~220 Hz,
+ *                        and the bass the small speaker cannot play heard through its harmonics); and HIGHCUT, MEL's,
+ *                        LOWCUT turned over: 12 dB/oct ~5 kHz (the tapes end at 5.5 kHz: above, the hiss and the
+ *                        steps of CRUSH and of the tapes' own 11 kHz)
  *   and last a soft limiter, so nothing ever clips hard.
  * Two bypasses, each on its own (a long press of the section's button): LFO takes the tape (LOFI) out, leaving the
  * M400's TONE, a steady motor and keys in tune; FX takes the pedals out, the echo and the reverb ringing out
@@ -28,7 +29,7 @@ static volatile int32_t f_vinc, f_vdep, f_vtone, f_vmix;
 static volatile int32_t f_etime, f_efb, f_etone, f_emix;
 static volatile int32_t f_rfb, f_rdamp, f_rtype, f_rmix;
 static volatile int16_t f_hg[8];                /* HALL: its lines' gains (Q14), for SIZE (rv_hall_gains) */
-static volatile int32_t f_glo, f_gmid, f_ghi, f_svf, f_by_lofi, f_by_fx, f_kls, f_khs;
+static volatile int32_t f_spk, f_by_lofi, f_by_fx;   /* f_spk: the EQ, 0 FLAT, 1 LOWCUT, 2 BASS+, 3 HIGHCUT */
 static int32_t lofi_bp, fx_bp;                  /* ISR: how bypassed, 0 (all in) .. 32767 (all out), ramped */
 static volatile int32_t fxv_wow, fxv_drop;      /* ISR -> screen: the wow now (1/16 cent), how deep a dropout is (0..32768) */
 static volatile int32_t fxv_flut;               /* ISR -> screen: the flutter now (flut_am: +-1200 at 100) */
@@ -266,11 +267,46 @@ static void rv_plate(int32_t x, int32_t kd, int32_t dec, int32_t *ol, int32_t *o
            rv_tap(&rvl[R_D2R], DS(121))) * 13 >> 5;
 }
 
+/* ---- the EQ: Felucca's SPEAKER EQ (hugelton/Felucca, fx.c: lowcut1, spk_bass, as they are there) */
+static int32_t lc_s[8], hc_s[8];                /* the high-passes' (HIGHCUT: low-passes') states and remainders */
+static inline int32_t lowcut1(int32_t x, int32_t *lc, int32_t *err, uint32_t sh)   /* x minus its one-pole low-pass
+                                                 * (error feedback: a rounded step would stop short, an offset) */
+{
+    int32_t e = x - *lc + *err, d = e >> sh;
+    *err = e - (d << sh);
+    *lc += d;
+    return x - *lc;
+}
+/* BASS+: what the speaker cannot play, heard through its harmonics. The bass below ~150 Hz is clipped at its own
+ * envelope (a level-following trapezoid: odd harmonics), then band-passed ~220 Hz..1 kHz and added */
+static int32_t sb_lp1, sb_lp2, sb_lp3, sb_lp4, sb_env, sb_h1, sb_h2, sb_hl;
+static inline int32_t spk_bass(int32_t m)
+{
+    int32_t a, t, u;
+    sb_lp1 += ((m - sb_lp1) * 692) >> 15;
+    sb_lp2 += ((sb_lp1 - sb_lp2) * 692) >> 15;
+    sb_lp3 += ((sb_lp2 - sb_lp3) * 692) >> 15;
+    sb_lp4 += ((sb_lp3 - sb_lp4) * 692) >> 15;
+    a = sb_lp4 < 0 ? -sb_lp4 : sb_lp4;
+    if (a > sb_env)
+        sb_env += (a - sb_env) >> 2;
+    else if (sb_env > 0)
+        sb_env -= (sb_env >> 11) + 1;
+    t = sb_lp4 * 8;
+    t = t > sb_env ? sb_env : t < -sb_env ? -sb_env : t;
+    sb_h1 += (t - sb_h1) >> 5;
+    u = t - sb_h1;
+    sb_h2 += (u - sb_h2) >> 5;
+    u -= sb_h2;
+    sb_hl += (u - sb_hl) >> 3;
+    return sb_hl + (sb_hl >> 1);                /* x1.5 */
+}
+
 /* ---- the chain, per frame: mix (mono, the voices) -> out (stereo) */
 static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
 {
     static int32_t lg, lg2, hg, hg2, lp1, lp2, hiss, hiss2, drop_g = 32768, held, lc, am, dc_x, dc_y, dlp, d1, d2;
-    static int32_t ls, hs, sv_lp, sv_bp, vt, e_lp, e_d = 8000 << 8, r_hp;
+    static int32_t vt, e_lp, e_d = 8000 << 8, r_hp;
     static uint32_t rnd2 = 0x9E3779B9u, vw, ew, rv_odd;
     static int32_t rv_x, rv_ol, rv_or, rv_type = -1;
     int32_t age = f_age, kg = MEL_GENLP[age] >> 1, kh = MEL_GENHP[age] >> 1, kt = f_tone >> 1, rl = reel16;
@@ -283,7 +319,7 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     int32_t blt = f_by_lofi ? 32767 : 0, bl = lofi_bp, bft = f_by_fx ? 32767 : 0, bf = fx_bp;
     int32_t amt = flut_am, agl = 4096 + age * 14;   /* (AGE: the level the narrowing takes, given back) */
     int32_t crush = f_crush, hold_n = 1 + crush * 7 / 100, mask = ~((1 << (crush * 9 / 100)) - 1);
-    int32_t glo = f_glo - 4096, gmid = f_gmid - 4096, ghi = f_ghi - 4096, svf = f_svf, kls = f_kls, khs = f_khs;
+    int32_t spk = f_spk;
     int32_t vmix = f_vmix, vdep = f_vdep, vtk = f_vtone >> 1, emix = f_emix, efb = f_efb, etk = f_etone >> 1;
     int32_t rfb = f_rfb, rdamp = f_rdamp, rmix = f_rmix, rtype = f_rtype, e_tgt = f_etime, k;
     uint32_t i, vinc = (uint32_t)f_vinc;
@@ -339,15 +375,6 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
             }
             if (bl)                             /* on its way in or out: the dry and the tape, crossfaded */
                 y = dry + (((y - dry) * (wetl >> 1)) >> 14);
-        }
-        /* EQ (always) */
-        if (glo) { ls += ((y - ls) * (kls >> 1)) >> 14; y += (ls * glo) >> 12; }
-        if (ghi) { hs += ((y - hs) * (khs >> 1)) >> 14; y += ((y - hs) * ghi) >> 12; }
-        if (gmid) {                             /* the bell: a state-variable band-pass (Q 1), added or taken away */
-            int32_t sv = y >> 1, hp = sv - sv_lp - sv_bp;
-            sv_bp += (hp * svf) >> 14;
-            sv_lp += (sv_bp * svf) >> 14;
-            y += ((sv_bp << 1) * gmid) >> 12;
         }
         y = y > 65535 ? 65535 : y < -65535 ? -65535 : y;
         /* the pedals (FX) */
@@ -407,6 +434,18 @@ trails:
                                                  * FX bypassed: all of it, the tail ringing out over it) */
             l = (((l >> 1) * (k >> 1)) >> 13) + ((wl * (rmix >> 4)) >> 11) * RV_OUT;
             r = (((r >> 1) * (k >> 1)) >> 13) + ((wr * (rmix >> 4)) >> 11) * RV_OUT;
+        }
+        if (spk == 3) {                         /* HIGHCUT: two one-pole low-passes (what lowcut1 takes away) */
+            l -= lowcut1(l, &hc_s[0], &hc_s[1], 1u);
+            l -= lowcut1(l, &hc_s[2], &hc_s[3], 1u);
+            r -= lowcut1(r, &hc_s[4], &hc_s[5], 1u);
+            r -= lowcut1(r, &hc_s[6], &hc_s[7], 1u);
+        } else if (spk) {                       /* the EQ (Felucca's master_out): two one-pole high-passes */
+            int32_t b = spk == 2 ? spk_bass((l + r) >> 1) : 0;
+            l = lowcut1(l, &lc_s[0], &lc_s[1], spk == 2 ? 5u : 6u);
+            l = lowcut1(l, &lc_s[2], &lc_s[3], spk == 2 ? 5u : 6u) + b;
+            r = lowcut1(r, &lc_s[4], &lc_s[5], spk == 2 ? 5u : 6u);
+            r = lowcut1(r, &lc_s[6], &lc_s[7], spk == 2 ? 5u : 6u) + b;
         }
         out[2u * i] += sat(l);                  /* the limiter: untouched up to 0.6 of full scale, then round */
         out[2u * i + 1u] += sat(r);

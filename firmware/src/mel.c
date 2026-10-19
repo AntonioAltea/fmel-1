@@ -14,7 +14,7 @@
  *                  the band narrows, and the copying deck adds its hiss, flutter, drive), DROPOUT, DRIFT, CRUSH
  *   FX     FX      VIBRATO: RATE DEPTH TONE MIX - ECHO: TIME REPEATS TONE MIX - REVERB: SIZE TONE PRE MIX
  *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; lit: in, dark: out)
- *   EDIT   EQ      LOW, MID, FREQ (the mid's), HIGH; held 0.6 s: back to flat
+ *   EDIT   EQ      SPEAKER: Felucca's SPEAKER EQ, FLAT, LOWCUT, BASS+, and HIGHCUT; held 0.6 s: FLAT (again, soon: as it was)
  *   GLO    SETUP   TEMPO (ARP, SEQ), TUNE (fine: to play along with others), LENGTH (a note: as long as held / 8 s,
  *                  as on the M400), SCREEN (the old-tape look / clean); the screen says what each one does.
  *          SOUNDS  GLO again: PLAY OWN (each sound its own PLAY) / SHARED (one for all); every sound's PLAY, a table
@@ -479,7 +479,7 @@ enum {
     P_VRATE, P_VDEPTH, P_VTONE, P_VMIX,         /* FX: VIBRATO */
     P_ETIME, P_EFB, P_ETONE, P_EMIX,            /*     ECHO */
     P_RSIZE, P_RTONE, P_RTYPE, P_RMIX,          /*     REVERB */
-    P_EQLO, P_EQMID, P_EQFREQ, P_EQHI,          /* EQ */
+    P_SPK, P_RSV1, P_RSV2, P_RSV3,              /* EQ (the three after it: the old EQ's places, unused) */
     P_BPM, P_TUNE, P_LEN, P_LOOK,               /* SETUP */
     P_AMODE, P_ARATE, P_AOCT, P_AGATE,          /* ARP */
     P_SLEN, P_SGATE, P_STEP, P_SWING,           /* SEQ */
@@ -496,7 +496,7 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 100, 60, 1}, {0, 100, 50, 1}, {0, 100, 70, 1}, {0, 100, 100, 1},   /* (VIBRATO: 3 Hz, on) */
     {0, 100, 38, 1}, {0, 100, 35, 1}, {0, 100, 45, 1}, {0, 100, 0, 1},
     {0, 100, 55, 1}, {0, 100, 45, 1}, {0, 1, 1, 1}, {0, 100, 34, 1},
-    {-12, 12, 0, 1}, {-12, 12, 0, 1}, {0, 15, 8, 1}, {-12, 12, 0, 1},
+    {0, 3, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1},
     {40, 240, 90, 1}, {-50, 50, 0, 1}, {0, 1, 0, 1}, {0, 1, 1, 1},
     {0, 4, 0, 1}, {0, 5, 3, 1}, {1, 3, 1, 1}, {10, 100, 60, 5},
     {1, 16, 16, 1}, {10, 100, 80, 5}, {0, 15, 0, 1}, {0, 100, 0, 5},
@@ -504,7 +504,7 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 5, 0, 1},
 };
 
-#define SET_VER 11u                             /* (10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
+#define SET_VER 12u                             /* (11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
                                                  * tapes', 8, 9: an earlier piano's) starts again from its own) */
 #define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
 typedef struct {
@@ -538,8 +538,6 @@ static const uint16_t COLOR_PAL[6][3] = {      /* COLOUR: the screen's lamps, th
     {RGB(112, 112, 120), RGB(40, 40, 44), RGB(156, 156, 162)}};
 static uint16_t c_pal[3];                       /* (the one chosen: mel_ui.c's C_LAMP, C_LAMPT, C_OXIDE2) */
 
-static const int16_t EQ_G[25] = {1029, 1154, 1295, 1453, 1631, 1830, 2053, 2303, 2584, 2900, 3254, 3651, 4096,   /* dB -> Q12 */
-                                  4596, 5157, 5786, 6492, 7284, 8173, 9170, 10289, 11544, 12953, 14533, 16306};
 static uint8_t by_lofi, by_fx;                  /* LFO / FX held: LOFI / FX out (not saved: a power-on has them in) */
 static int32_t echo_ms(int32_t v) { return 60 + v * v * 940 / 10000; }   /* TIME: finer where it is short */
 static void apply(void)                         /* the parameters -> the sound */
@@ -581,12 +579,7 @@ static void apply(void)                         /* the parameters -> the sound *
     f_rfb = 11469 + PV(P_RSIZE) * 180;
     f_rdamp = PV(P_RTYPE) ? 13000 + PV(P_RTONE) * 197 : 32767 - (100 - PV(P_RTONE)) * 127 / 100 * 180;
     f_rmix = PV(P_RMIX) * PV(P_RMIX) * 32767 / 10000;   /* (squared: fine where it is little, all wet at 100) */
-    f_glo = EQ_G[PV(P_EQLO) + 12];
-    f_gmid = EQ_G[PV(P_EQMID) + 12];
-    f_ghi = EQ_G[PV(P_EQHI) + 12];
-    f_kls = MEL_EQ_KLS[PV(P_EQLO) + 12];
-    f_khs = MEL_EQ_KHS[PV(P_EQHI) + 12];
-    f_svf = MEL_SVF[PV(P_EQFREQ)];
+    f_spk = PV(P_SPK);
     f_by_lofi = by_lofi;
     f_by_fx = by_fx;
 }
@@ -617,7 +610,7 @@ static const uint8_t G_COUNT[NG] = {1, 1, 2, 3, 1, 2, 1, 1};
 static const char *const G_NAME[NG] = {"PLAY", "LAYER", "LOFI", "FX", "EQ", "SETUP", "ARP", "SEQ"};
 static const char *const PG_NAME[NPG] = {"PLAY", "LAYER", "TAPE", "WEAR", "VIBRATO", "ECHO", "REVERB", "EQ", "SETUP",
                                          "SOUNDS", "ARP", "SEQ"};
-enum { F_NUM, F_ST, F_DB, F_CT, F_PCT, F_EMS, F_VHZ, F_EQHZ, F_X, F_STEP, F_BPM, F_SND, F_OCT, F_ENUM };
+enum { F_NUM, F_ST, F_DB, F_CT, F_PCT, F_EMS, F_VHZ, F_X, F_STEP, F_BPM, F_SND, F_OCT, F_ENUM };
 typedef struct {
     uint8_t pid, fmt;
     const char *name;                           /* 0: no knob there */
@@ -626,6 +619,7 @@ typedef struct {
 static const char *const N_LEN[2] = {"HELD", "8 SEC"};
 static const char *const N_LOOK[2] = {"CLEAN", "TAPE"};
 static const char *const N_PMODE[2] = {"SHARED", "OWN"};
+static const char *const N_SPK[4] = {"FLAT", "LOWCUT", "BASS+", "HIGHCUT"};   /* (Felucca's, and HIGHCUT) */
 static const char *const N_RTYPE[2] = {"HALL", "PLATE"};
 static const char *const ARP_MODE[5] = {"UP", "DOWN", "UP+DN", "RANDOM", "PLAYED"};
 static const char *const ARP_RATE[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
@@ -637,7 +631,7 @@ static const ctl_t CTL[NPG][4] = {
     {{P_VRATE, F_VHZ, "RATE", 0}, {P_VDEPTH, F_NUM, "DEPTH", 0}, {P_VTONE, F_NUM, "TONE", 0}, {P_VMIX, F_PCT, "MIX", 0}},
     {{P_ETIME, F_EMS, "TIME", 0}, {P_EFB, F_NUM, "REPEATS", 0}, {P_ETONE, F_NUM, "TONE", 0}, {P_EMIX, F_PCT, "MIX", 0}},
     {{P_RSIZE, F_NUM, "SIZE", 0}, {P_RTONE, F_NUM, "TONE", 0}, {P_RTYPE, F_ENUM, "TYPE", N_RTYPE}, {P_RMIX, F_PCT, "MIX", 0}},
-    {{P_EQLO, F_DB, "LOW", 0}, {P_EQMID, F_DB, "MID", 0}, {P_EQFREQ, F_EQHZ, "FREQ", 0}, {P_EQHI, F_DB, "HIGH", 0}},
+    {{P_SPK, F_ENUM, "SPEAKER", N_SPK}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{P_LEN, F_ENUM, "LENGTH", N_LEN}, {P_LOOK, F_ENUM, "SCREEN", N_LOOK}, {P_COLOR, F_ENUM, "COLOUR", N_COLOR},
      {0, 0, 0, 0}},
     {{P_PMODE, F_ENUM, "PLAY", N_PMODE}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
@@ -660,17 +654,6 @@ static void fmt_val(const ctl_t *c, int32_t v, char *s)   /* a parameter as the 
         put(p, " Hz");
         break;
     }
-    case F_EQHZ: {
-        uint32_t hz = MEL_EQ_HZ[v];
-        if (hz < 1000u) put(put_int(s, (int32_t)hz, 0), " Hz");
-        else {
-            char *p = put_int(s, (int32_t)(hz / 1000u), 0);
-            *p++ = '.';
-            *p++ = (char)('0' + hz / 100u % 10u);
-            put(p, " kHz");
-        }
-        break;
-    }
     case F_X: put_int(put(s, "x"), v, 0); break;
     case F_STEP: put_int(s, v + 1, 0); break;
     case F_SND: put(s, v ? MEL_SET_NAME[v - 1] : "OFF"); break;
@@ -687,6 +670,30 @@ static uint32_t t_change, dirty, save_req;
 static uint8_t hold, pedal, g_last[NG];
 static char msg[32];
 static uint32_t t_msg;
+static const char *pend_what;                   /* a button held for what holding it does: that, in the header, */
+static uint32_t pend_t0, pend_len;              /* and how far along (from pend_t0, done at pend_len ms) */
+/* the battery (the header's right end): read once a second, smoothed (~8 s), its level by the stock firmware's
+ * thresholds (531, 561, 591, as Felucca and GR!MM have them) with a little hysteresis: 0..3 (1..4 bars; 0 blinks),
+ * 4 a USB host powers it, -1 no reading (no icon) */
+static int32_t bat_lvl = -1;
+static void batt_poll(void)
+{
+    static const int32_t TH[3] = {531, 561, 591};
+    static uint32_t t;
+    static int32_t sm, lv = -1;
+    int32_t b, was = bat_lvl;
+    if (t && fm1_ms - t < 1000u) return;
+    t = fm1_ms ? fm1_ms : 1u;
+    if ((b = batt_raw()) > 0) {
+        sm = sm ? sm + (b * 16 - sm) / 8 : b * 16;
+        b = sm / 16;
+        if (lv < 0) for (lv = 0; lv < 3 && b >= TH[lv]; lv++);
+        while (lv < 3 && b >= TH[lv] + 3) lv++;
+        while (lv > 0 && b < TH[lv - 1] - 3) lv--;
+    }
+    bat_lvl = usb_powered() ? 4 : lv;
+    if (bat_lvl != was || bat_lvl == 0) redraw |= 1u;   /* (0: it blinks, once a second) */
+}
 static void say(const char *s) { put(msg, s); t_msg = fm1_ms ? fm1_ms : 1; redraw |= 1u; }
 static void changed(uint32_t what)              /* a parameter changed: to the sound, saved soon; what = the knob (99: none) */
 {
@@ -791,7 +798,7 @@ static void app_init(void)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && s.ver == SET_VER && s.np == NP) {   /* (else: the defaults) */
+    if (!settings_load(&s, sizeof s) && (s.ver == SET_VER || s.ver == 11u) && s.np == NP) {   /* (else: the defaults) */
         n = NP; p = s.p; st = &s.steps[0][0]; pl = s.play;
     } else if (!settings_load(q, sizeof *q) && q->ver >= 7u && q->ver <= 10u && q->np == NP - 1u) {
         n = NP - 1u; p = q->p; st = &q->steps[0][0]; pl = q->play;
@@ -815,6 +822,8 @@ static void app_init(void)
     if (PV(P_PMODE) || !n)                      /* (OWN: the knobs are the sound playing's) */
         for (k = 0; k < NPLAY; k++)
             set.p[P_TONE + k] = set.play[PV(P_SOUND)][k];
+    if (n && s.ver < 12u)                       /* (the old EQ's LOW was where SPEAKER is: FLAT) */
+        set.p[P_SPK] = set.p[P_RSV1] = set.p[P_RSV2] = set.p[P_RSV3] = 0;
     set.p[P_STEP] = 0;
     set.p[P_TUNE] = 0;                          /* (TUNE is gone from SETUP: none left from before) */
     apply();
@@ -851,12 +860,44 @@ static void to_sound(int32_t v)                 /* the sound v (A = 0), with its
     put(s + 3, MEL_SET_NAME[PV(P_SOUND)]);
     say(s);
 }
+static void pend(uint32_t btn, uint32_t t0, uint32_t fired, uint32_t len, const char *what)   /* held a moment
+                                                 * (not a tap), and what holding it does not done yet: the header says it */
+{
+    if (!fired && fm1_in.buttons & (1u << btn) && fm1_ms - t0 >= 150u) {
+        pend_what = what;
+        pend_t0 = t0;
+        pend_len = len;
+    }
+}
+/* EQ FLAT and PATTERN CLEARED can be undone: the same hold again within UNDO_MS, while what they left is untouched */
+#define UNDO_MS 5000u
+static int16_t eq_undo;
+static uint8_t pat_pre[16][4], pat_undo[16][4]; /* (pat_pre: as it was before SELECT's press put a rest in) */
+static uint32_t t_eq_undo, t_pat_undo, cur_pre, cur_undo;
+static int eq_undoable(void) { return !PV(P_SPK) && t_eq_undo && fm1_ms - t_eq_undo < UNDO_MS; }
+static int pat_undoable(void)
+{
+    uint32_t k;
+    for (k = 0; k < 64u; k++)
+        if (set.steps[k / 4u][k % 4u]) return 0;
+    return t_pat_undo && fm1_ms - t_pat_undo < UNDO_MS;
+}
+static void octave(int32_t d)
+{
+    char s[16];
+    if (!set_param(P_OCT, PV(P_OCT) + d)) return;
+    changed(99);
+    put_int(put(s, "OCTAVE "), PV(P_OCT), 1);
+    say(s);
+}
 static void buttons(void)
 {
     uint32_t rel, b = fm1_input_edges(&rel);    /* pressed / released since the last call */
     static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_env, env_long;
-    if (b & (1u << BTN_OCT_DOWN) && set_param(P_OCT, PV(P_OCT) - 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE -" : "OCTAVE 0"); }
-    if (b & (1u << BTN_OCT_UP) && set_param(P_OCT, PV(P_OCT) + 1)) { changed(99); say(PV(P_OCT) ? "OCTAVE +" : "OCTAVE 0"); }
+    const char *was = pend_what;
+    pend_what = 0;
+    if (b & (1u << BTN_OCT_DOWN)) octave(-1);
+    if (b & (1u << BTN_OCT_UP)) octave(1);
     if (b & (1u << BTN_HOME)) {                 /* HOME: to PLAY; there, the next sound */
         if (PG_GROUP[page] == G_PLAY) to_sound((PV(P_SOUND) + 1) % (int32_t)MEL_NSETS);   /* (round and round) */
         else go_group(G_PLAY);
@@ -880,14 +921,19 @@ static void buttons(void)
         redraw |= 3u;
     }
     if (rel & (1u << BTN_FX) && !fx_long) go_group(G_FX);
-    if (b & (1u << BTN_EDIT)) { t_edit = fm1_ms; edit_long = 0; }   /* EDIT the same; held, the EQ flat again */
+    if (b & (1u << BTN_EDIT)) { t_edit = fm1_ms; edit_long = 0; }   /* EDIT the same; held, the EQ FLAT */
     if (fm1_in.buttons & (1u << BTN_EDIT) && !edit_long && fm1_ms - t_edit > 600u) {
-        uint32_t k;
         edit_long = 1;
-        for (k = P_EQLO; k <= P_EQHI; k++)
-            set_param(k, PINFO[k][2]);
+        if (eq_undoable()) {                    /* (again, soon: as it was) */
+            set_param(P_SPK, eq_undo);
+            t_eq_undo = 0;
+            say("EQ BACK");
+        } else {
+            eq_undo = (int16_t)PV(P_SPK);
+            t_eq_undo = set_param(P_SPK, 0) ? (fm1_ms ? fm1_ms : 1u) : 0u;
+            say("EQ FLAT");
+        }
         changed(99);
-        say("EQ RESET");
         redraw |= 8u;
     }
     if (rel & (1u << BTN_EDIT) && !edit_long) go_group(G_EQ);
@@ -914,6 +960,9 @@ static void buttons(void)
         sel_long = 0;
         if (seq_rec && !seq_play) {             /* step recording: a rest (held: the pattern cleared) */
             uint32_t k;
+            for (k = 0; k < 64u; k++)
+                pat_pre[k / 4u][k % 4u] = set.steps[k / 4u][k % 4u];
+            cur_pre = seq_cur;
             for (k = 0; k < 4u; k++) set.steps[seq_cur][k] = 0;
             seq_cur = (seq_cur + 1u) % (uint32_t)PV(P_SLEN);
             chord_open = 0;
@@ -926,13 +975,25 @@ static void buttons(void)
             go_group(G_LAYER);
     }
     if (seq_rec && !seq_play && fm1_in.buttons & (1u << BTN_SEL) && !sel_long && fm1_ms - t_sel > 1000u) {
-        uint32_t k;
-        for (k = 0; k < 64u; k++)
-            set.steps[k / 4u][k % 4u] = 0;
-        seq_cur = 0;
+        uint32_t k, had = 0;
         sel_long = 1;
+        if (pat_undoable()) {                   /* (again, soon: as it was) */
+            for (k = 0; k < 64u; k++)
+                set.steps[k / 4u][k % 4u] = pat_undo[k / 4u][k % 4u];
+            seq_cur = cur_undo;
+            t_pat_undo = 0;
+            say("PATTERN BACK");
+        } else {
+            for (k = 0; k < 64u; k++) {
+                had |= pat_undo[k / 4u][k % 4u] = pat_pre[k / 4u][k % 4u];
+                set.steps[k / 4u][k % 4u] = 0;
+            }
+            cur_undo = cur_pre;
+            seq_cur = 0;
+            t_pat_undo = had ? (fm1_ms ? fm1_ms : 1u) : 0u;
+            say("PATTERN CLEARED");
+        }
         changed(99);
-        say("PATTERN CLEARED");
         redraw |= 8u;
     }
     if (b & (1u << BTN_ENV)) { t_env = fm1_ms; env_long = 0; }   /* ENV: HOLD when let go; held, HALF SPEED on / off */
@@ -952,6 +1013,13 @@ static void buttons(void)
         save_req = 1;
         say(quiet() ? "SAVED" : "SAVES WHEN SILENT");
     }
+    pend(BTN_LFO, t_lfo, lfo_long, 600u, by_lofi ? "LOFI IN" : "LOFI OUT");
+    pend(BTN_FX, t_fx, fx_long, 600u, by_fx ? "FX IN" : "FX OUT");
+    pend(BTN_EDIT, t_edit, edit_long, 600u, eq_undoable() ? "EQ BACK" : "EQ FLAT");
+    pend(BTN_ENV, t_env, env_long, 600u, set.half ? "FULL SPEED" : "HALF SPEED");
+    if (seq_rec && !seq_play)
+        pend(BTN_SEL, t_sel, sel_long, 1000u, pat_undoable() ? "PATTERN BACK" : "CLEAR PATTERN");
+    if (pend_what != was) redraw |= 1u;
 }
 
 static void knobs(void)
@@ -1089,11 +1157,13 @@ static void app_loop(void)
         touched = 99;
         redraw |= 8u;
     }
+    batt_poll();
     if (t_msg && fm1_ms - t_msg > 1400u) {
         t_msg = 0;
         redraw |= 1u;
     }
-    if ((redraw & 1u) || ((ui_lv || reel16) && fm1_ms - t_head >= 100u) || (!ui_lv && head_lv)) {
+    if ((redraw & 1u) || ((ui_lv || reel16) && fm1_ms - t_head >= 100u) || (!ui_lv && head_lv)
+        || (pend_what && fm1_ms - t_head >= 40u)) {     /* (a hold's bar fills) */
         draw_header(ui_lv > 0);                 /* (the reel turns while something sounds) */
         t_head = fm1_ms;
         head_lv = (uint32_t)ui_lv;

@@ -194,6 +194,8 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)   /* from the main 
 {
     midi_out_event((st >> 4) | st << 8 | (d1 & 0x7Fu) << 16 | (d2 & 0x7Fu) << 24);
 }
+static int32_t batt_raw(void) { return fm1_adc_read(FM1_ADC_BATT); }   /* the battery divider, raw 0..1023 (-1: none) */
+static int usb_powered(void) { return usb.config && !usb.suspended; }   /* a USB host powers it (no charger line) */
 
 /* ---- the timer: 10 kHz key scan, milliseconds, USB at 2 kHz. It outranks the audio ISR; nested in a
  * render it only scans, counts and feeds the USB audio stream (as sloopDX main.c) */

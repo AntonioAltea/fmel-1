@@ -45,6 +45,7 @@ Machine) and run the packer:
   wrong
 - The Mellotron M400S tapes by Bernie Kornowicz (Taijiguy), from his site <http://leisureland.us> (see above)
 - The browser version follows the emulators of X0X, Felucca and FoMni
+- The EQ: Felucca's SPEAKER EQ (FLAT, LOWCUT, BASS+), as it is there
 - The reverbs: HALL after Felucca's, PLATE Jon Dattorro's after FoMni's (Charles Vestal)
 - SELECT as the hand on the tape's reel: the idea is GHOULBOX's crank (jasonpersinger, [ghoulbox-fm1-dungeon-synth](https://github.com/jasonpersinger/ghoulbox-fm1-dungeon-synth))
 - [Terminus](https://terminus-font.sourceforge.net) by Dimitar Zhekov: the screen's font (SIL OFL 1.1)

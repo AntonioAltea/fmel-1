@@ -335,10 +335,6 @@ def sloop_env_exp(v):
     return max(1, min(65535, int(65536 * (1 - np.exp(-32 / (tau * SRC_RATE))))))
 
 
-def onepole_(fc):
-    return round(32768 * (1 - np.exp(-2 * np.pi * fc / SRC_RATE)))
-
-
 def tables():
     """the firmware has no float: its curves, computed here"""
     def arr(decl, vals, per_line=10):
@@ -347,6 +343,15 @@ def tables():
             L.append("    " + " ".join(f"{v}u," for v in vals[i:i + per_line]))
         return L + ["};"]
     pow2 = [round(2 ** 30 * 2 ** (c / 1200)) for c in range(1201)]
+    # EQ's screen: how the SPEAKER settings' filters (mel_fx.c, as they run: one-poles y += a (x - y)) answer, across
+    # the screen (224 px, 20 Hz .. 20 kHz), dB x 4 down (0 .. 96: -24 dB); and BASS+'s harmonics' band, its shape
+    zx = np.exp(-2j * np.pi * (20 * 10 ** (3 * np.arange(224) / 224)) / SRC_RATE)
+    lp1 = lambda a: a / (1 - (1 - a) * zx)
+    spk = []
+    for h in (np.ones(224), (1 - lp1(1 / 64)) ** 2, (1 - lp1(1 / 32)) ** 2, lp1(1 / 2) ** 2):
+        spk += [int(min(96, round(-4 * 20 * np.log10(max(1e-9, v))))) for v in np.abs(h)]
+    harm = np.abs((1 - lp1(1 / 32)) ** 2 * lp1(1 / 8))
+    harm = [round(255 * v / harm.max()) for v in harm]
     tone = []                                    # TONE 0..100: a one-pole's coefficient, 350 Hz .. 16 kHz
     for v in range(101):
         fc = 350 * (16000 / 350) ** (v / 100)
@@ -362,12 +367,6 @@ def tables():
         atk.append(min(1 << 24, round((1 << 24) * 32 / (t * SRC_RATE))))
     lfo = [round(0.5 * 20 ** (v / 100) * 2 ** 32 / SRC_RATE) for v in range(101)]   # VIBRATO RATE: 0.5 .. 10 Hz
     lfo10 = [round(0.5 * 20 ** (v / 100) * 10) for v in range(101)]
-    eq_hz = [int(round(200 * 25 ** (i / 15), -1 if i < 9 else -2)) for i in range(16)]   # EQ FREQ: 200 Hz .. 5 kHz
-    svf = [round(16384 * 2 * np.sin(np.pi * f / SRC_RATE)) for f in eq_hz]
-    # EQ LOW / HIGH, -12..+12 dB: one-pole shelves whose half-way point (in dB) stays at 150 Hz / 2.5 kHz whatever the
-    # gain (a first-order shelf has it at fc / sqrt(G) for HIGH, fc sqrt(G) for LOW: a fixed fc cut far from it)
-    kls = [onepole_(150 / np.sqrt(10 ** ((i - 12) / 20))) for i in range(25)]
-    khs = [onepole_(2500 * np.sqrt(10 ** ((i - 12) / 20))) for i in range(25)]
     rel = []                                     # REL 0..100: 20 ms .. 6 s to -60 dB, per 32 frames, Q16
     for v in range(101):
         t = 0.02 * 300 ** (v / 100)
@@ -404,13 +403,11 @@ def tables():
             arr("static const uint32_t MEL_ATK[101]     /* ATTACK -> the rise per 32 frames, Q24 */", atk) +
             arr("static const uint32_t MEL_LFO[101]     /* VIBRATO RATE -> phase per frame */", lfo, 6) +
             arr("static const uint8_t MEL_LFO_HZ10[101] /* (its Hz x 10, shown) */", lfo10) +
-            arr("static const uint16_t MEL_EQ_HZ[16]    /* EQ FREQ, Hz */", eq_hz) +
-            arr("static const uint16_t MEL_SVF[16]      /* its state-variable filter's f = 2 sin(pi fc / fs), Q14 */", svf) +
-            arr("static const uint16_t MEL_EQ_KLS[25]   /* LOW -12..+12 dB -> its shelf's one-pole, Q15 (150 Hz half way) */", kls) +
-            arr("static const uint16_t MEL_EQ_KHS[25]   /* HIGH -> its shelf's one-pole, Q15 (2.5 kHz half way) */", khs) +
             arr("static const uint16_t MEL_GENLP[101]   /* AGE -> the tape's top end, 9 kHz .. 1.1 kHz, Q15 */", genlp) +
             arr("static const uint16_t MEL_GENHP[101]   /* AGE -> its bottom end, 20 .. 380 Hz, Q15 */", genhp) +
             arr("static const uint16_t MEL_REL[101]     /* REL -> decay per 32 frames, Q16 */", rel) +
+            arr("static const uint8_t MEL_SPK_DB[4 * 224]   /* EQ SPEAKER: its curve, per pixel, dB x 4 down */", spk, 16) +
+            arr("static const uint8_t MEL_SPK_HARM[224]     /* BASS+: its harmonics' band, per pixel, 0..255 */", harm, 16) +
             arr("static const uint16_t MEL_TONE[101]    /* TONE -> one-pole coefficient, Q15 */", tone) +
             arr("static const uint16_t MEL_SAT[257]     /* saturation: |x| / 2^8 of 2 x full scale -> Q15 */", sat) +
             arr("static const uint16_t MEL_TANH[257]    /* tanh(x / 32768) x 32767, x = i x 256 (SLOOP's TANH_Q15) */",
