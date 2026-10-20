@@ -20,7 +20,7 @@ the installer's "If something goes wrong" section shows how to get back to the o
 ## The tapes
 
 FMEL-1 plays real Mellotron tapes: the samples Bernie Kornowicz (Taijiguy) recorded from his 1973 Mellotron M400S,
-serial #500, with new tapes and frames, and shared on his site [leisureland.us](http://leisureland.us).
+serial #500, with new tapes and frames, and shared on his site [leisureland.us](https://web.archive.org/web/2023/http://leisureland.us/) (via the Wayback Machine).
 
 They are his work, not mine, and not under this repository's GPL licence. His terms, in his own words
 ([KVR, 4 May 2021](https://www.kvraudio.com/forum/viewtopic.php?t=561309)): "they are free to use, but cannot be used
@@ -51,7 +51,7 @@ Machine) and run the packer:
 - [SLOOP](https://github.com/isod89/sloop-fm1) by isod89: its changes to that platform
 - [FM-1-transporter](https://github.com/kurogedelic/FM-1-transporter) by Leo Kuroshita: the rescue, if an update goes
   wrong
-- The Mellotron M400S tapes by Bernie Kornowicz (Taijiguy), from his site <http://leisureland.us> (see above)
+- The Mellotron M400S tapes by Bernie Kornowicz (Taijiguy), from his site [leisureland.us](https://web.archive.org/web/2023/http://leisureland.us/) (via the Wayback Machine) (see above)
 - The browser version follows the emulators of X0X, Felucca and FoMni
 - The EQ: Felucca's SPEAKER EQ (FLAT, LOWCUT, BASS+), as it is there
 - The reverbs: HALL after Felucca's, PLATE Jon Dattorro's after FoMni's (Charles Vestal)
