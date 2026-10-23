@@ -40,6 +40,8 @@ SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano"]  # A B C (the M400's
 DECAYS = {"Vibes": 0.6}                           # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
+STEP = {"Cello": 4, "MkII_Flute": 6, "Vibes": 8}   # sets with their own semitones between roots (else --step):
+                                                   # the voices keep theirs, the plainer sounds bear more pitching
 SLOOP_PIANO = {"Piano"}                            # sets made as SLOOP makes its piano (sloop_piano): every file a
                                                    # root, outside the budget, played by mel.c as SLOOP's SAMPLE engine
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
@@ -257,8 +259,9 @@ def build(src, budget, step, rate, which):
     for d, name in sets:
         files = {midi_of(p.stem): p for p in (src / d).glob("*.wav") if midi_of(p.stem) is not None}
         lo, hi = min(files), max(files)
-        roots = [r for r in range(lo + step // 2, hi + 1, step)]
-        if roots[-1] + step // 2 < hi:
+        st = STEP.get(d, step)
+        roots = [r for r in range(lo + st // 2, hi + 1, st)]
+        if roots[-1] + st // 2 < hi:
             roots.append(hi)
         if d in SLOOP_PIANO:
             roots = sorted(files)
@@ -460,8 +463,8 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--src", default=str(Path(__file__).resolve().parents[1] / "tapes" / "wav"))
     ap.add_argument("--sets", default=",".join(SETS), help="the tapes, in order (A, B, C, ...): folders of --src")
-    ap.add_argument("--budget", type=int, default=425_000, help="bytes of tape data (ADPCM + checkpoints) in all")
-    ap.add_argument("--step", type=int, default=3, help="semitones between roots")
+    ap.add_argument("--budget", type=int, default=295_000, help="bytes of tape data (ADPCM + checkpoints) in all")
+    ap.add_argument("--step", type=int, default=3, help="semitones between roots (but STEP's sets)")
     ap.add_argument("--rate", type=int, default=22050, help="the firmware's rate (MEL_RATE): a set's is it >> SHIFT")
     a = ap.parse_args()
     out, per = build(Path(a.src), a.budget, a.step, a.rate, a.sets.split(","))
