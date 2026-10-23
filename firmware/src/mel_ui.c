@@ -251,7 +251,7 @@ static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32
     else if (nm[0] == 'V' && nm[2] == 'B') spr_vibes(cx, cy, sc, t, lv);
     else if (nm[0] == 'V') spr_violins(cx, cy + 10, 230 * sc >> 8, t, lv);
     else if (nm[0] == 'P') spr_piano(cx, cy, sc, t, lv);
-    else spr_cello(cx, cy, sc, t, lv);
+    else if (nm[0] == 'C') spr_cello(cx, cy, sc, t, lv);   /* (the SAX: no drawing yet) */
 }
 
 /* ---- the body's top */

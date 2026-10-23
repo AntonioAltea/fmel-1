@@ -21,7 +21,7 @@
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
  *   SEQ    SEQ     16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING; PLAY start / stop, REC record
  *                  (step recording: SEL is a rest, SEL held 1 s clears the pattern)
- *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO (a track selector: it stops at A and E; HOME goes
+ *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO, F SAX (a track selector: it stops at A and F; HOME goes
  *          round)   ALGORITHM the tempo, anywhere
  *   ENV    HOLD    the notes stay after you let go; the next chord replaces them
  *          held    ENV held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
@@ -504,20 +504,27 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 5, 0, 1},
 };
 
-#define SET_VER 12u                             /* (11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
+#define SET_VER 13u                             /* (11, 12: five sounds, before the SAX; 11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
                                                  * tapes', 8, 9: an earlier piano's) starts again from its own) */
 #define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
+#define NSETS12 5u                              /* the sounds in settings before 13 */
 typedef struct {
     uint8_t ver, np, half, rsv;                 /* half: HALF SPEED (a reserved byte before: older settings load, off) */
     int16_t p[NP];
     uint8_t steps[16][4];                       /* the pattern: up to 4 notes a step, 0 = none */
     int16_t play[MEL_NSETS][NPLAY];             /* every sound's PLAY (the one playing: in p, here when it changes) */
 } mel_set_t;
+typedef struct {                                /* versions 11, 12, five sounds: they load */
+    uint8_t ver, np, half, rsv;
+    int16_t p[NP];
+    uint8_t steps[16][4];
+    int16_t play[NSETS12][NPLAY];
+} mel_set12_t;
 typedef struct {                                /* versions 7 .. 10, before COLOUR: they load */
     uint8_t ver, np, half, rsv;
     int16_t p[NP - 1u];
     uint8_t steps[16][4];
-    int16_t play[MEL_NSETS][NPLAY];
+    int16_t play[NSETS12][NPLAY];
 } mel_set10_t;
 typedef struct {                                /* version 6, before SOUNDS: it loads, its PLAY every sound's */
     uint8_t ver, np, half, rsv;
@@ -789,19 +796,23 @@ static void app_init(void)
 {
     uint32_t k, n = 0;
     static mel_set_t s;                         /* (an older version loads into its start) */
+    mel_set12_t *r = (mel_set12_t *)(void *)&s;
     mel_set10_t *q = (mel_set10_t *)(void *)&s;
     mel_set6_t *o = (mel_set6_t *)(void *)&s;
     const int16_t *p = 0;
     const uint8_t *st = 0;
     const int16_t (*pl)[NPLAY] = 0;
+    uint32_t npl = MEL_NSETS;                   /* the sounds whose PLAY was stored */
     for (k = 0; k < NP; k++)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && (s.ver == SET_VER || s.ver == 11u) && s.np == NP) {   /* (else: the defaults) */
+    if (!settings_load(&s, sizeof s) && s.ver == SET_VER && s.np == NP) {   /* (else: the defaults) */
         n = NP; p = s.p; st = &s.steps[0][0]; pl = s.play;
+    } else if (!settings_load(r, sizeof *r) && (r->ver == 11u || r->ver == 12u) && r->np == NP) {
+        n = NP; p = r->p; st = &r->steps[0][0]; pl = r->play; npl = NSETS12;
     } else if (!settings_load(q, sizeof *q) && q->ver >= 7u && q->ver <= 10u && q->np == NP - 1u) {
-        n = NP - 1u; p = q->p; st = &q->steps[0][0]; pl = q->play;
+        n = NP - 1u; p = q->p; st = &q->steps[0][0]; pl = q->play; npl = NSETS12;
     } else if (!settings_load(o, sizeof *o) && o->ver == 6u && o->np == NP - 2u) {
         n = NP - 2u; p = o->p; st = &o->steps[0][0];
     }
@@ -816,7 +827,7 @@ static void app_init(void)
     for (k = 0; k < MEL_NSETS * NPLAY; k++) {   /* every sound's PLAY: its own, or (new) as PLAY was; the piano's
                                                  * from its own (before 8 it had the tapes') */
         uint32_t st = k / NPLAY, i = k % NPLAY;
-        set.play[st][i] = pl && (s.ver >= 10u || !MEL_SET_STRUCK[st]) ? play_ok(i, pl[st][i])
+        set.play[st][i] = pl && st < npl && (s.ver >= 10u || !MEL_SET_STRUCK[st]) ? play_ok(i, pl[st][i])
                         : n && !MEL_SET_STRUCK[st] ? set.p[P_TONE + i] : (int16_t)MEL_SET_PLAY[st][i];
     }
     if (PV(P_PMODE) || !n)                      /* (OWN: the knobs are the sound playing's) */
