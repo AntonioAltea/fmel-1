@@ -77,6 +77,8 @@ summary { cursor: pointer; font-weight: 600; }
 .shots figure { margin: 0; flex: 0 1 240px; }
 .shots img { display: block; width: 100%; height: auto; border-radius: 6px; }
 html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: none !important; }
+footer.credits { margin-top: 2rem; padding-top: .8rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .8rem; }
+footer.credits a { color: inherit; }
 html[data-board="fm1"] [data-board="smk37"], html[data-board="smk37"] [data-board="fm1"] { display: none !important; }
 .pick { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
 .pick label { margin: 0; font-weight: 600; border: 1px solid var(--rule); border-radius: 9px; padding: .45rem .8rem; cursor: pointer; align-items: center; }
@@ -209,7 +211,9 @@ html[data-board="fm1"] [data-board="smk37"], html[data-board="smk37"] [data-boar
     </details>
   </section>
 
-  <p class="muted"><a href="https://github.com/hugelton/Felucca" rel="noopener"><span data-lang="en">Felucca's installer</span><span data-lang="es">Instalador de Felucca</span></a></p>
+  <footer class="credits"><span data-lang="en">Credits</span><span data-lang="es">Créditos</span> ·
+    <span data-lang="en">Felucca's installer</span><span data-lang="es">Instalador de Felucca</span>
+    (<a href="https://github.com/hugelton/Felucca" rel="noopener">Leo Kuroshita</a>, GPL-3.0)</footer>
 </main>
 <script type="module" src="install.js"></script>
 </body>
