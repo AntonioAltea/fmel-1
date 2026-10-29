@@ -331,6 +331,9 @@ def build(src, budget, step, rate, which):
             pk, dbs = decs[i]
             dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
             lp, li = cks[ls // CK] if cks else (0, 0)   # (its loop's state: the checkpoint at ls, on the CK grid)
+            if d in PCM8:                         # (8-bit PCM has no decoder state: lpred is its brightness floor, the
+                fc = min(5000.0, max(500.0, 3 * 440 * 2 ** ((r - 69) / 12)))   # one-pole the note darkens to, Q15,
+                lp, li = round(32767 * (1 - np.exp(-2 * np.pi * fc / SRC_RATE))), 0   # ~3 x its fundamental)
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r - up, lo=lo, hi=hi,
                                      sh=sh, kind=2 if d in PCM8 else 0, gain=round(32 / sc8), lpred=lp, lidx=li, dk=dk,
                                      d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
