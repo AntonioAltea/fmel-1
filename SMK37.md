@@ -32,8 +32,8 @@ Every control on the surface does one thing, always. A light means something is 
 | Pads, top row 1-6 | the SOUND: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO, F SAX |
 | Pads, bottom row 9-14 | the LAYER's sound, the same columns (the lit one again: no layer) |
 | Pad 7 / 15, held | only the top row / only the bottom row heard |
-| Pad 8 | HOLD |
-| Pad 16 | HALF SPEED |
+| Pad 8 | HOLD: a tap switches it; held, it is on (or off) only while held |
+| Pad 16 | HALF SPEED, the same way |
 | Fader 1 | MIX: up the top row, down the bottom one |
 | Fader 2 / 3 | how much LOFI / how much FX |
 | Fader 4 | VOLUME |

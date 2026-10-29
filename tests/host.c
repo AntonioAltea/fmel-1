@@ -52,6 +52,7 @@ static void host_qput(int i, int32_t v) { host_q[i][host_qw[i]++ % 64u] = v; }
 static int32_t host_qtake(int i) { return host_qr[i] == host_qw[i] ? -1 : host_q[i][host_qr[i]++ % 64u]; }
 static int32_t smk_pad_take(void) { return host_qtake(0); }
 static int32_t smk_extkey_take(void) { return host_qtake(1); }
+static uint8_t host_dump_req;                   /* a shot: the app may print its state (mel_smk.h) */
 static uint32_t padled_rgb[16];                 /* as lcd.c: g << 16 | r << 8 | b */
 static void padled_set(uint32_t pad, uint8_t r, uint8_t g, uint8_t b) { if (pad < 16u) padled_rgb[pad] = (uint32_t)g << 16 | (uint32_t)r << 8 | b; }
 static void padled_flush(void) {}
@@ -318,6 +319,7 @@ static void platform_poll(void)                 /* one call = one millisecond */
                     printf("%s%02X%02X%02X", p == 8u ? " | " : " ", padled_rgb[p] >> 8 & 0xFFu, padled_rgb[p] >> 16 & 0xFFu,
                            padled_rgb[p] & 0xFFu);
                 printf("\n");
+                host_dump_req = 1;
             }
 #endif
         } else if (script[step].smk) {

@@ -6,7 +6,8 @@
  *
  *   keys      all 37, C3..C6 at OCTAVE 0 (keybed 5..31 are the FM-1's F3..G5); velocity = the tape's level
  *   pads      a column is a sound, a row its part: top 1-6 the SOUND A..F, bottom 9-14 the LAYER's (the lit one
- *             again: no layer). 7 / 15 held: only the top / the bottom row heard. 8 HOLD, 16 HALF SPEED (lit: on).
+ *             again: no layer). 7 / 15 held: only the top / the bottom row heard. 8 HOLD, 16 HALF SPEED (lit: on):
+ *             a tap switches it, held it is the other way only while held
  *             A sound's pad is dark until chosen, then its colour, brighter with what it plays
  *   faders    as the signal runs: MIX (up: the top row, down: the bottom), LOFI and FX (how much), VOLUME. Where a
  *             fader is, is the value (the four are not saved)
@@ -17,18 +18,19 @@
  *   KNOB BANK   held at power-on: the panel check */
 #include "smk_wheel.h"
 
-static const uint8_t SMK_COL[6][3] = {          /* each sound's colour, its column's */
-    {60, 170, 255},                             /* A FLUTE */
-    {170, 90, 255},                             /* B CHOIR */
-    {255, 110, 20},                             /* C CELLO */
-    {40, 230, 110},                             /* D VIBES */
-    {255, 235, 200},                            /* E PIANO */
-    {255, 190, 0}};                             /* F SAX */
+static const uint8_t SMK_COL[6][3] = {          /* each sound's colour, its column's: its drawing's, as an LED shows it */
+    {60, 70, 255},                              /* A FLUTE: the bird's blue */
+    {255, 90, 0},                               /* B CHOIR: the fox's orange */
+    {190, 40, 10},                              /* C CELLO: the cello's brown */
+    {0, 160, 255},                              /* D VIBES: the vibraphone's blue */
+    {40, 220, 20},                              /* E PIANO: the frog's green */
+    {255, 170, 0}};                             /* F SAX: brass (its S) */
 enum { SP_SOLO_A = 6, SP_HOLD = 7, SP_SOLO_B = 14, SP_HALF = 15 };
 
 static uint8_t smk_fad_last[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 static uint8_t smk_ext_note[FM1_NKEY];          /* the note an outer key started (+1 = none: 0) */
 static uint32_t smk_pad_t[16];                  /* when each pad last switched (a press counts once) */
+#define SMK_MOMENT_MS 400u                      /* HOLD, HALF SPEED: held longer than this, back when let go */
 static uint8_t smk_check_on;                    /* the panel check is up */
 static int32_t undo_pid = -1, undo_old;         /* UNDO: the parameter last changed and its value before */
 static uint32_t undo_t;
@@ -112,6 +114,20 @@ static void smk_outer(uint32_t base)
     }
 }
 
+static void smk_hold(void)
+{
+    hold = !hold;
+    if (!hold) in_clear(S_LATCH);
+    say(hold ? "HOLD ON" : "HOLD OFF");
+}
+static void smk_half(void)
+{
+    set.half = !set.half;
+    changed(99);
+    say(set.half ? "HALF SPEED" : "FULL SPEED");
+    redraw |= 3u;
+}
+
 /* ---- the pads: a column a sound, the top row the SOUND, the bottom the LAYER's */
 static void smk_pads(void)
 {
@@ -121,6 +137,19 @@ static void smk_pads(void)
         if (p == SP_SOLO_A || p == SP_SOLO_B) { /* held: one row only (let go: both again) */
             smk_solo = vel ? (p == SP_SOLO_A ? 1u : 2u) : smk_solo == (p == SP_SOLO_A ? 1u : 2u) ? 0u : smk_solo;
             apply();
+            continue;
+        }
+        if (p == SP_HOLD || p == SP_HALF) {     /* a tap switches it; held, it switches back when let go */
+            static uint8_t down[2];
+            uint32_t i = p == SP_HALF;
+            if (vel && !down[i] && fm1_ms - smk_pad_t[p] >= 180u) {
+                down[i] = 1;
+                smk_pad_t[p] = fm1_ms;
+                if (i) smk_half(); else smk_hold();
+            } else if (!vel && down[i]) {
+                down[i] = 0;
+                if (fm1_ms - smk_pad_t[p] >= SMK_MOMENT_MS) { if (i) smk_half(); else smk_hold(); }
+            }
             continue;
         }
         if (!vel || fm1_ms - smk_pad_t[p] < 180u) continue;   /* (a press counts once; let go does nothing) */
@@ -139,15 +168,6 @@ static void smk_pads(void)
             redraw |= 0xFu;
             put(put(s, "LAYER "), ly ? MEL_SET_NAME[ly - 1u] : "OFF");
             say(s);
-        } else if (p == SP_HOLD) {
-            hold = !hold;
-            if (!hold) in_clear(S_LATCH);
-            say(hold ? "HOLD ON" : "HOLD OFF");
-        } else if (p == SP_HALF) {
-            set.half = !set.half;
-            changed(99);
-            say(set.half ? "HALF SPEED" : "FULL SPEED");
-            redraw |= 3u;
         }
     }
 }
@@ -242,6 +262,16 @@ static void smk_leds(void)
     fm1_led_key(BTN_LEFT, G_COUNT[PG_GROUP[page]] > 1u);   /* (lit: the section has more pages) */
     fm1_led_key(BTN_RIGHT, G_COUNT[PG_GROUP[page]] > 1u);
     padled_flush();                             /* (only when a colour changed; between LCD transfers) */
+#ifdef DINGHY_HOST
+    if (host_dump_req) {                        /* (tests/host.c: a shot) */
+        host_dump_req = 0;
+        printf("%6u ms  state page=%u sound=%d layer=%d bmix=%d tone=%d pitch=%d atk=%d rel=%d bpm=%d oct=%d hold=%u half=%u solo=%u"
+               " lofi=%d fx=%d vol=%u bend=%d mod=%d pedal=%u undo=%d arp=%u play=%u rec=%u bylofi=%u byfx=%u spk=%d"
+               " leds=%05X\n", fm1_ms, page, PV(P_SOUND), PV(P_BSND), PV(P_BMIX), PV(P_TONE), PV(P_PITCH), PV(P_ATK), PV(P_REL), PV(P_BPM),
+               PV(P_OCT), hold, set.half, smk_solo, f_lofi_amt, f_fx_amt, fm1_in.fader[3], p_bend16, p_mod, pedal, undo_pid,
+               arp_on, seq_play, seq_rec, by_lofi, by_fx, PV(P_SPK), (uint32_t)(host_leds & 0x3FFFFu));
+    }
+#endif
 }
 
 /* ---- the main loop's SMK part, after the middle keys */
