@@ -705,6 +705,10 @@ static int32_t fm1_adc_read(uint32_t ch)
     if (ch == FM1_ADC_BATT)
         return fm1_in.batt ? (int32_t)fm1_in.batt : -1;
     if (ch == FM1_ADC_MASTER) {
+#ifdef SMK_MASTER_FADER                    /* the app's choice: the volume on fader SMK_MASTER_FADER (1..4), K1 free */
+        smk_master = (int32_t)fm1_in.fader[(SMK_MASTER_FADER - 1) & 3] * 1023 / 127;
+        return smk_master;
+#endif
         smk_master += fm1_enc_take(SMK_ENC_MASTER) * 24;
         smk_master = smk_master < 0 ? 0 : smk_master > 1023 ? 1023 : smk_master;
         return smk_master;

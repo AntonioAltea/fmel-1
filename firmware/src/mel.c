@@ -28,12 +28,14 @@
  *                  octave down and twice as long, its wow and flutter slower; it slows down and speeds up in ~0.4 s
  *   OCT- OCT+   SAVE (it also saves itself)
  *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = vibrato, pitch bend = the motor (+-2 semitones)
+ *   SMK-37 (BOARD_SMK37, SMK37.md): the 37 keys with velocity, the pads, faders, wheels and pedal on top: mel_smk.h
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
  * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones
  * (the piano: SLOOP's, at 22050 Hz, MEL_RATE: four keys; a kind 1 zone).
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
+#define SMK_MASTER_FADER 4                      /* (SMK-37: the fourth fader is the volume, not K1: mel_smk.h) */
 #define CV_MAX (240u * 124u)                    /* the stage is the biggest canvas */
 #include "platform.c"
 
@@ -87,6 +89,9 @@ static struct {
     int8_t loct;                                /* ISR: the layer's octave */
     int32_t det, drift;                         /* ISR: this key's own pitch; the voice's slow wander (DRIFT) */
     head_t h, h2;                               /* the sound (PRESETS) and the layer (SEL) */
+#if BOARD_SMK37
+    int32_t velg;                               /* main: the key's velocity, the tape's level (Q15, mel_smk.h) */
+#endif
 } voice[NV];
 static volatile uint32_t tpos[128];             /* ISR: where each key's tape is, tape samples from its start */
 
@@ -201,6 +206,9 @@ static void voice_head(uint32_t vi)             /* the heads on the current soun
     uint32_t st = p_sound % MEL_NSETS, ly = p_layer, note = voice[vi].note, hsh = note * 2654435761u;
     int32_t g = MEL_SET_STRUCK[st] ? G_TAPE                 /* every tape its own level (the piano: SLOOP's, even) */
               : (G_TAPE * (32768 + ((int32_t)((hsh >> 8) & 0xFFu) - 128) * 30)) >> 15;
+#if BOARD_SMK37
+    g = (g * voice[vi].velg) >> 15;             /* (the SMK's velocity: how hard the head meets the tape) */
+#endif
     voice[vi].set = (uint8_t)st;
     voice[vi].layer = (uint8_t)ly;
     voice[vi].loct = (int8_t)p_loct;
@@ -417,6 +425,11 @@ static void app_audio(int32_t *out, uint32_t n)
 /* ---- notes (main loop): a note sounds while anything holds it */
 enum { S_KEY = 1, S_MIDI = 2, S_LATCH = 4, S_PED = 8 };   /* (+ S_ARP, S_SEQ: mel_seq.c) */
 static uint8_t src[128];
+#if BOARD_SMK37
+static uint8_t smk_note_vel[128], smk_vel_last = 100;   /* the velocity each note was struck with (keys, MIDI) */
+static uint8_t smk_solo;                        /* pad 7 / 15 held: only the sound (1) or only the layer (2) heard */
+static void smk_init(void);
+#endif
 static uint32_t ages;
 
 static uint32_t t_hit;                          /* (the screen) when a note last started: the ECHO's and REVERB's graphs */
@@ -439,6 +452,12 @@ static void note_on(uint32_t note)
     }
     voice[pick].note = (uint8_t)note;
     voice[pick].age = ++ages;
+#if BOARD_SMK37
+    {                                           /* a key or MIDI: its velocity; ARP, SEQ: the last one struck */
+        uint32_t vel = src[note] & (S_KEY | S_MIDI) ? smk_note_vel[note] : smk_vel_last;
+        voice[pick].velg = (int32_t)(32767u * (64u + vel) / 191u);   /* 1/3 .. full */
+    }
+#endif
     voice[pick].trig++;
     voice[pick].gate = 1;
 }
@@ -556,8 +575,14 @@ static void apply(void)                         /* the parameters -> the sound *
     c_pal[2] = COLOR_PAL[PV(P_COLOR)][2];
     p_loct = PV(P_BOCT);                        /* (the octave before the layer: a voice reads them together) */
     p_ldet16 = PV(P_BDET) * 16;
-    p_ga = sine(0x40000000u - (uint32_t)PV(P_BMIX) * (0x40000000u / 100u));   /* MIX: the same power all the way */
-    p_gb = sine((uint32_t)PV(P_BMIX) * (0x40000000u / 100u));
+    {
+        uint32_t m = (uint32_t)PV(P_BMIX);
+#if BOARD_SMK37
+        if (smk_solo) m = smk_solo == 1u ? 0u : 100u;   /* (a SOLO pad held) */
+#endif
+        p_ga = sine(0x40000000u - m * (0x40000000u / 100u));   /* MIX: the same power all the way */
+        p_gb = sine(m * (0x40000000u / 100u));
+    }
     p_layer = (uint8_t)PV(P_BSND);
     p_tape8 = (uint8_t)PV(P_LEN);
     p_half = set.half;
@@ -593,6 +618,13 @@ static void apply(void)                         /* the parameters -> the sound *
 
 /* ---- text */
 #define KEY0 53u                                /* key 0 = F3 */
+#if BOARD_SMK37
+#define KEY_VEL(k) (fm1_in.key_vel[SMK_KEY_F3 + (k)])   /* (the SMK's middle keys: keybed 5..31) */
+#define UNDO_NOTE(pid, v) smk_undo_note(pid, v)
+#else
+#define KEY_VEL(k) 100u
+#define UNDO_NOTE(pid, v) ((void)0)
+#endif
 static int black(uint32_t note) { return (0x54Au >> (note % 12u)) & 1u; }
 static char *put(char *p, const char *s) { while (*s) *p++ = *s++; *p = 0; return p; }
 static char *put_int(char *p, int32_t v, int sign)
@@ -720,7 +752,7 @@ static void changed(uint32_t what)              /* a parameter changed: to the s
 /* encoders with a little acceleration: fast turns go further */
 static int32_t turn(uint32_t e)
 {
-    static uint32_t last[7];
+    static uint32_t last[8];
     int32_t d = fm1_enc_take(e);
     if (d) {
         if (fm1_ms - last[e] < 50u) d *= 3;
@@ -845,6 +877,9 @@ static void app_init(void)
     apply();
     for (k = 0; k < 27u; k++)
         held_note[k] = 255;
+#if BOARD_SMK37
+    smk_init();
+#endif
     clk_last = fm1_ms;
     lcd_fill(0, 0, 240, 240, C_BLACK);
     say("v" APP_VER);
@@ -906,12 +941,28 @@ static void octave(int32_t d)
     put_int(put(s, "OCTAVE "), PV(P_OCT), 1);
     say(s);
 }
+static void pedal_set(int on)                   /* the pedal holds what sounds, and what is let go while it is down */
+{
+    uint32_t k;
+    pedal = (uint8_t)(on != 0);
+    if (pedal) {
+        for (k = 0; k < 128u; k++)
+            if (in_get(k)) in_set(k, S_PED, 0);
+    } else
+        in_clear(S_PED);
+}
+#if BOARD_SMK37
+#include "mel_smk.h"
+#endif
 static void buttons(void)
 {
     uint32_t rel, b = fm1_input_edges(&rel);    /* pressed / released since the last call */
     static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_env, env_long;
     const char *was = pend_what;
     pend_what = 0;
+#if BOARD_SMK37
+    smk_buttons(b);
+#endif
     if (b & (1u << BTN_OCT_DOWN)) octave(-1);
     if (b & (1u << BTN_OCT_UP)) octave(1);
     if (b & (1u << BTN_HOME)) {                 /* HOME: to PLAY; there, the next sound */
@@ -1043,15 +1094,32 @@ static void knobs(void)
 {
     uint32_t k;
     int32_t d;
-    if ((d = turn(ENC_PRESETS)) != 0) {         /* the sound, on every page: A .. E, and there it stops */
+#if BOARD_SMK37
+    {                                           /* K1 TONE, K4 PITCH (the pads choose the sound) */
+        static const uint8_t PID[2] = {P_TONE, P_PITCH}, ENC[2] = {ENC_MASTER, ENC_PRESETS};
+        for (k = 0; k < 2u; k++) {
+            int32_t old = PV(PID[k]);
+            if ((d = turn(ENC[k])) != 0 && set_param(PID[k], old + d * PINFO[PID[k]][3])) {
+                char s[24], *p = put(s, k ? "PITCH " : "TONE ");
+                UNDO_NOTE(PID[k], old);
+                changed(PG_GROUP[page] == G_PLAY ? k : 99u);
+                fmt_val(&CTL[PG_PLAY][k], PV(PID[k]), p);
+                say(s);
+            }
+        }
+    }
+#else
+    if ((d = turn(ENC_PRESETS)) != 0) {         /* the sound, on every page: A .. F, and there it stops */
         int32_t v = PV(P_SOUND) + d, hi = (int32_t)MEL_NSETS - 1;
         v = v < 0 ? 0 : v > hi ? hi : v;
         if (v != PV(P_SOUND)) to_sound(v);
     }
+#endif
     if ((d = fm1_enc_take(ENC_SELECT)) != 0)    /* SELECT: the hand on the reel (the pages: the sections' buttons) */
         reel_turn(d);
     reel_idle();
     if ((d = turn(ENC_ALGORITHM)) != 0 && set_param(P_BPM, PV(P_BPM) + d)) {   /* ALGORITHM: the tempo, anywhere */
+        UNDO_NOTE(P_BPM, PV(P_BPM) - d);
         changed(99);
         {
             char s[16];
@@ -1070,6 +1138,7 @@ static void knobs(void)
             }
             continue;
         }
+        if (d && c->name && c->pid != P_STEP) UNDO_NOTE(c->pid, PV(c->pid));
         if (d && c->name && set_param(c->pid, PV(c->pid) + d * PINFO[c->pid][3])) {
             if (c->pid == P_STEP) { seq_cur = (uint32_t)PV(P_STEP); chord_open = 0; touched = k; redraw |= 10u; continue; }
             if (c->pid == P_SLEN) {
@@ -1098,9 +1167,12 @@ static void app_loop(void)
     for (k = 0; k < 27u; k++) {                 /* (a key stops the note it started: octave and pitch may change meanwhile) */
         if (down >> k & 1u) {
             held_note[k] = (uint8_t)(base + k);
+#if BOARD_SMK37
+            smk_note_vel[held_note[k]] = smk_vel_last = KEY_VEL(k);
+#endif
             in_set(held_note[k], S_KEY | (hold ? S_LATCH : 0u), 0);
             rec_note(held_note[k]);
-            midi_send(0x90, held_note[k], 100);
+            midi_send(0x90, held_note[k], KEY_VEL(k));
         }
         if (up >> k & 1u && held_note[k] < 128u) {
             in_set(held_note[k], pedal ? S_PED : 0u, S_KEY);
@@ -1109,6 +1181,9 @@ static void app_loop(void)
         }
     }
     prev_keys = keys;
+#if BOARD_SMK37
+    smk_poll(base);                             /* the outer keys, the pads, the faders, the wheels, the pedal */
+#endif
 
     buttons();
     knobs();
@@ -1119,18 +1194,16 @@ static void app_loop(void)
         if (ty == 0x90u && d2) {
             int32_t nt = (int32_t)d1 + PV(P_PITCH);
             midi_note[d1] = (uint8_t)(nt < 0 ? 0 : nt > 127 ? 127 : nt);
+#if BOARD_SMK37
+            smk_note_vel[midi_note[d1]] = d2 & 127u;
+#endif
             in_set(midi_note[d1], S_MIDI | (hold ? S_LATCH : 0u), 0);
             rec_note(midi_note[d1]);
         } else if (ty == 0x80u || ty == 0x90u)
             in_set(midi_note[d1], pedal && in_get(midi_note[d1]) ? S_PED : 0u, S_MIDI);
-        else if (ty == 0xB0u && d1 == 64u) {     /* the pedal holds what sounds, and what is let go while it is down */
-            pedal = d2 >= 64u;
-            if (pedal) {
-                for (k = 0; k < 128u; k++)
-                    if (in_get(k)) in_set(k, S_PED, 0);
-            } else
-                in_clear(S_PED);
-        } else if (ty == 0xB0u && d1 == 1u)
+        else if (ty == 0xB0u && d1 == 64u)      /* the sustain pedal */
+            pedal_set(d2 >= 64u);
+        else if (ty == 0xB0u && d1 == 1u)
             p_mod = d2;
         else if (ty == 0xB0u && (d1 == 120u || d1 == 123u))
             in_clear(S_MIDI | S_PED | S_LATCH);
@@ -1167,6 +1240,9 @@ static void app_loop(void)
     fm1_led_key(BTN_SEQ, PG_GROUP[page] == G_SEQ);
     fm1_led_key(BTN_SAVE, dirty);
     fm1_led_key(BTN_SEL, PV(P_BSND) != 0 || page == PG_LAYER);   /* lit: a layer sounds (or its page is up) */
+#if BOARD_SMK37
+    smk_leds();
+#endif
 
     ui_lv += ((int32_t)(sum > 256u ? 256u : sum) - ui_lv) / 4;
     if (!sum && ui_lv < 4) ui_lv = 0;           /* (the division alone would leave it at 1..3: never still) */
@@ -1179,6 +1255,10 @@ static void app_loop(void)
         t_msg = 0;
         redraw |= 1u;
     }
+#if BOARD_SMK37
+    if (smk_check())                            /* KNOB BANK held at power-on: the panel check instead */
+        goto smk_drawn;
+#endif
     if ((redraw & 1u) || ((ui_lv || reel16) && fm1_ms - t_head >= 100u) || (!ui_lv && head_lv)
         || (pend_what && fm1_ms - t_head >= 40u)) {     /* (a hold's bar fills) */
         draw_header(ui_lv > 0);                 /* (the reel turns while something sounds) */
@@ -1195,6 +1275,9 @@ static void app_loop(void)
         draw_tapes(base, (redraw & 4u) != 0);
         t_tapes = fm1_ms;
     }
+#if BOARD_SMK37
+smk_drawn:
+#endif
     redraw = 0;
 
     if (((dirty && fm1_ms - t_change > 2000u) || save_req) && quiet()) {

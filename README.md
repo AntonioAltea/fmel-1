@@ -12,6 +12,8 @@ color them with some basic FX and lo-fi tape effects. It also lets you mix two d
 To put it on your FM-1, use the [web installer](https://antonioaltea.github.io/fmel-1/install/) (Chrome or Edge) or
 download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/latest).
 
+It also runs on the M-Vave SMK-37 (Pro, Elite, MKE-P37): see [SMK37.md](SMK37.md).
+
 ## Disclaimer
 
 This is a hobby project, not an official M-VAVE thing. Install at your own risk. If something goes wrong,

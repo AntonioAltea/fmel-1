@@ -26,6 +26,19 @@
 #define STAGE_H 124                             /* (the pages are drawn for 108, centred in it) */
 #define TAPES_Y 148
 #define PLATE_Y 180
+#if BOARD_SMK37
+#define UI_NKEY 37u                             /* the keyboard strip: the SMK's 37 keys (C3 .. C6 at OCTAVE 0) */
+#define UI_K0 5u                                /* (keybed 5 is the FM-1's first key, F3) */
+#define UI_NWHITE 22
+#define UI_BX 3                                 /* a black key: its offset and width */
+#define UI_BW 7
+#else
+#define UI_NKEY 27u
+#define UI_K0 0u
+#define UI_NWHITE 16
+#define UI_BX 5
+#define UI_BW 10
+#endif
 
 /* ---- drawing on the canvas, with the background known (text blended onto it, not onto black) */
 static uint16_t mix565(uint32_t a, uint32_t b, uint32_t t)   /* a .. b, t 0..16 */
@@ -690,7 +703,7 @@ static void draw_stage(void)
     STAGE[page]();
     if ((PG_GROUP[page] == G_LOFI && by_lofi) || (PG_GROUP[page] == G_FX && by_fx)) {   /* this section is out */
         rrect(40, 40, 160, 24, 6, C_INK);
-        tx_c(120, 42, &F20, PG_GROUP[page] == G_FX ? "OUT - HOLD FX" : "OUT - HOLD LFO", C_BODY);
+        tx_c(120, 42, &F20, PG_GROUP[page] == G_FX ? "FX OUT" : "LOFI OUT", C_BODY);
     }
     cv_oy = 0;
     tape_look(STAGE_H);
@@ -698,14 +711,15 @@ static void draw_stage(void)
     lv_drawn = spr_lv();
 }
 
-/* ---- the keyboard: the 27 keys, lit while they sound; with LENGTH 8 S the light drains as the key's tape runs out */
+/* ---- the keyboard: the 27 keys (SMK: 37), lit while they sound; with LENGTH 8 S the light drains as the key's tape runs out */
 static uint32_t tapes_sig = 1;
 static void draw_tapes(uint32_t base, int force)
 {
-    uint8_t lit[27];                            /* how much of the key is lit, 0..24 */
+    uint8_t lit[UI_NKEY];                       /* how much of the key is lit, 0..24 */
     uint32_t k, v, sig = 2166136261u;
-    int32_t wx[27], nw = 0;
-    for (k = 0; k < 27u; k++) {
+    int32_t wx[UI_NKEY], nw = 0;
+    base -= UI_K0;
+    for (k = 0; k < UI_NKEY; k++) {
         uint32_t note = base + k, a = 0, t = note < 128u ? tpos[note] : 0;
         for (v = 0; v < NV; v++)
             if (voice[v].busy && voice[v].note == note && (uint32_t)voice[v].amp > a)
@@ -716,23 +730,23 @@ static void draw_tapes(uint32_t base, int force)
     if (sig == tapes_sig && !force)
         return;
     tapes_sig = sig;
-    for (k = 0; k < 27u; k++)                   /* where each key is: the white ones side by side */
-        wx[k] = black(base + k) ? nw * 240 / 16 : nw++ * 240 / 16;
+    for (k = 0; k < UI_NKEY; k++)               /* where each key is: the white ones side by side */
+        wx[k] = black(base + k) ? nw * 240 / UI_NWHITE : nw++ * 240 / UI_NWHITE;
     cv_begin(240, 32, C_FRAME);
-    for (k = 0; k < 27u; k++)                   /* the white keys */
+    for (k = 0; k < UI_NKEY; k++)               /* the white keys */
         if (!black(base + k)) {
-            int32_t x = wx[k], w = (wx[k] + 240 / 16) - x - 1;
+            int32_t x = wx[k], w = (wx[k] + 240 / UI_NWHITE) - x - 1;
             rrect(x + 1, -4, w, 34, 3, C_BODY);
             cv_rect(x + 1, 2, w, 1, C_BODY2);   /* (the felt's shadow) */
             if (lit[k]) rrect(x + 1, 26 - lit[k] * 28 / 24, w, lit[k] * 28 / 24 + 4, 3, C_LAMP);
         }
-    for (k = 0; k < 27u; k++)                   /* the black ones, over them */
+    for (k = 0; k < UI_NKEY; k++)               /* the black ones, over them */
         if (black(base + k)) {
-            int32_t x = wx[k] - 5;
-            cv_rect(x, 0, 10, 19, C_FRAME);
-            cv_rect(x + 1, 0, 8, 18, lit[k] ? C_LAMPT : C_KNOB);
-            if (lit[k]) cv_rect(x + 1, 18 - lit[k] * 18 / 24, 8, lit[k] * 18 / 24, C_LAMP);
-            cv_rect(x + 2, 14, 6, 2, lit[k] ? C_OXIDE2 : RGB(70, 70, 76));   /* (its front edge, caught by light) */
+            int32_t x = wx[k] - UI_BX;
+            cv_rect(x, 0, UI_BW, 19, C_FRAME);
+            cv_rect(x + 1, 0, UI_BW - 2, 18, lit[k] ? C_LAMPT : C_KNOB);
+            if (lit[k]) cv_rect(x + 1, 18 - lit[k] * 18 / 24, UI_BW - 2, lit[k] * 18 / 24, C_LAMP);
+            cv_rect(x + 2, 14, UI_BW - 4, 2, lit[k] ? C_OXIDE2 : RGB(70, 70, 76));   /* (its front edge, caught by light) */
         }
     cv_rect(0, 0, 240, 2, C_FRAME);             /* the felt */
     cv_rect(0, 1, 240, 1, RGB(120, 30, 34));

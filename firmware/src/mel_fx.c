@@ -30,6 +30,7 @@ static volatile int32_t f_etime, f_efb, f_etone, f_emix;
 static volatile int32_t f_rfb, f_rdamp, f_rtype, f_rmix;
 static volatile int16_t f_hg[8];                /* HALL: its lines' gains (Q14), for SIZE (rv_hall_gains) */
 static volatile int32_t f_spk, f_by_lofi, f_by_fx;   /* f_spk: the EQ, 0 FLAT, 1 LOWCUT, 2 BASS+, 3 HIGHCUT */
+static volatile int32_t f_lofi_amt = 32767, f_fx_amt = 32767;   /* how much LOFI and FX, 0 .. 32767 (the SMK's faders) */
 static int32_t lofi_bp, fx_bp;                  /* ISR: how bypassed, 0 (all in) .. 32767 (all out), ramped */
 static volatile int32_t fxv_wow, fxv_drop;      /* ISR -> screen: the wow now (1/16 cent), how deep a dropout is (0..32768) */
 static volatile int32_t fxv_flut;               /* ISR -> screen: the flutter now (flut_am: +-1200 at 100) */
@@ -316,7 +317,7 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     int32_t sv_ = f_sat + age / 4 > 100 ? 100 : f_sat + age / 4, hv = f_hiss + age * 2 / 5 > 100 ? 100 : f_hiss + age * 2 / 5;
     int32_t dg = MEL_DRV[sv_], dmk = MEL_DRVMK[sv_], dlk = MEL_DRVLP[sv_] >> 1, dbias = sv_ * 49;   /* DRIVE */
     int32_t hl = (hv * hv * 13 / 100 * (8192 + act * 3 / 4)) >> 15;
-    int32_t blt = f_by_lofi ? 32767 : 0, bl = lofi_bp, bft = f_by_fx ? 32767 : 0, bf = fx_bp;
+    int32_t blt = f_by_lofi ? 32767 : 32767 - f_lofi_amt, bl = lofi_bp, bft = f_by_fx ? 32767 : 32767 - f_fx_amt, bf = fx_bp;
     int32_t amt = flut_am, agl = 4096 + age * 14;   /* (AGE: the level the narrowing takes, given back) */
     int32_t crush = f_crush, hold_n = 1 + crush * 7 / 100, mask = ~((1 << (crush * 9 / 100)) - 1);
     int32_t spk = f_spk;

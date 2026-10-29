@@ -41,10 +41,10 @@ static struct {
     uint32_t notes, buttons, frames, adc_ok, adc_miss;
     uint64_t keys;
     uint8_t key_vel[FM1_NKEY], fader[4];
-    uint16_t wheel[2], batt, pad_raw[16], pad_base[16];
-} fm1_in = {.wheel = {535, 620}};               /* (the wheels at rest, as a unit reads them) */
-static uint8_t smk_store_cleared, smk_trim_ok;
-static uint32_t smk_jedec;
+    uint16_t wheel[2], pedal, batt, pad_raw[16], pad_base[16];
+} fm1_in = {.wheel = {535, 620}, .pedal = 1000};   /* (the pedal jack: nothing in, read high) */               /* (the wheels at rest, as a unit reads them) */
+static uint8_t smk_store_cleared, smk_trim_ok __attribute__((unused));
+static uint32_t smk_jedec __attribute__((unused));
 static uint8_t smk_pad_events;
 static int32_t host_q[2][64];                   /* 0: pad events, 1: outer keys (key << 8 | velocity, 0 = release) */
 static uint32_t host_qw[2], host_qr[2];
@@ -152,10 +152,10 @@ static void app_main(void);
  * (held MS ms), "T end" */
 typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int8_t enc, encn; uint8_t smk, sa; uint16_t sb; uint8_t src; } host_ev_t;
 /* SMK-37 builds (BOARD_SMK37) also: "T vel V" (the velocity of the keys pressed from now), "T pad P V" (hardware pad
- * P hit at velocity V, V 0 = let go), "T fader F V" (0..127), "T wheel W RAW" (0 pitch, 1 mod; raw ADC 0..1023),
+ * P hit at velocity V, V 0 = let go), "T fader F V" (0..127), "T wheel W RAW" (0 pitch, 1 mod; raw ADC 0..1023), "T pedal RAW" (the pedal jack, 0..1023),
  * "T xkey K V" (keybed key K 0..36 at V, 0 = let go: the outer keys 0..4, 32..36); any build: "T shot" (the screen
  * at T -> OUT-T.ppm) */
-enum { HS_NONE, HS_VEL, HS_PAD, HS_FADER, HS_WHEEL, HS_XKEY, HS_SHOT };
+enum { HS_NONE, HS_VEL, HS_PAD, HS_FADER, HS_WHEEL, HS_XKEY, HS_SHOT, HS_PEDAL };
 #define K(k) (1u << (k))                                        /* key k: 7 C4, 11 E4, 14 G4, 16 A4, 19 C5 */
 static const host_ev_t SCRIPT0[] = {
     {200, K(7) | K(11) | K(14), -1, 0, 0, 0, -1, 0},            /* A FLUTE: C major */
@@ -205,6 +205,7 @@ static void read_script(const char *path)
         else if (!strcmp(what, "vel")) { sscanf(line, "%*u %*s %u", &a); e.smk = HS_VEL; e.sb = (uint16_t)a; }
         else if (!strcmp(what, "pad")) { sscanf(line, "%*u %*s %u %u", &a, &b); e.smk = HS_PAD; e.sa = (uint8_t)a; e.sb = (uint16_t)b; }
         else if (!strcmp(what, "fader")) { sscanf(line, "%*u %*s %u %u", &a, &b); e.smk = HS_FADER; e.sa = (uint8_t)a; e.sb = (uint16_t)b; }
+        else if (!strcmp(what, "pedal")) { sscanf(line, "%*u %*s %u", &a); e.smk = HS_PEDAL; e.sb = (uint16_t)a; }
         else if (!strcmp(what, "wheel")) { sscanf(line, "%*u %*s %u %u", &a, &b); e.smk = HS_WHEEL; e.sa = (uint8_t)a; e.sb = (uint16_t)b; }
         else if (!strcmp(what, "xkey")) { sscanf(line, "%*u %*s %u %u", &a, &b); e.smk = HS_XKEY; e.sa = (uint8_t)a; e.sb = (uint16_t)b; }
         else if (!strcmp(what, "shot")) e.smk = HS_SHOT;   /* (any board: the screen now -> OUT-<ms>.ppm) */
@@ -309,6 +310,16 @@ static void platform_poll(void)                 /* one call = one millisecond */
     while (step < script_n && script[step].t <= fm1_ms) {
         if (script[step].smk == HS_SHOT) {
             write_ppm(fm1_ms);
+#if BOARD_SMK37
+            {                                   /* and the pads' colours, r g b: top row, then the bottom one */
+                uint32_t p;
+                printf("%6u ms  pads", fm1_ms);
+                for (p = 0; p < 16u; p++)
+                    printf("%s%02X%02X%02X", p == 8u ? " | " : " ", padled_rgb[p] >> 8 & 0xFFu, padled_rgb[p] >> 16 & 0xFFu,
+                           padled_rgb[p] & 0xFFu);
+                printf("\n");
+            }
+#endif
         } else if (script[step].smk) {
 #if BOARD_SMK37
             static uint32_t vel = 100;
@@ -319,6 +330,7 @@ static void platform_poll(void)                 /* one call = one millisecond */
             case HS_PAD: host_qput(0, (int32_t)((e->sa & 15u) << 8 | (e->sb & 0x7Fu))); break;
             case HS_FADER: fm1_in.fader[e->sa & 3u] = (uint8_t)(e->sb > 127u ? 127u : e->sb); break;
             case HS_WHEEL: fm1_in.wheel[e->sa & 1u] = e->sb; break;
+            case HS_PEDAL: fm1_in.pedal = e->sb; break;
             case HS_XKEY: if (e->sb) fm1_in.key_vel[e->sa % FM1_NKEY] = (uint8_t)e->sb; host_qput(1, (int32_t)((e->sa % FM1_NKEY) << 8 | (e->sb & 0x7Fu))); break;
             }
 #else
