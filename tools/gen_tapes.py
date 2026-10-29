@@ -22,10 +22,10 @@ loudness (RMS of its sustain), so a change of tape is not a change of level.
 A set that dies away by itself (DECAYS: the vibraphone) has its decay measured per root (dB/s, after its peak) and
 flattened out of the samples, so its loop is level; the zone carries the decay and the firmware applies it as the
 tape runs: a held note dies as the real one does, and a note restarted mid-tape starts as quiet as the tape is.
-The piano (SLOOP_PIANO; tools/get_piano.sh: SLOOP's four keys of a Steinway B from VCSL, CC0) is not a Mellotron
-tape: it is SLOOP's (isod89/sloop-fm1, tools/gen_samples.py, kind "piano", and its LOFI KEYS preset): 1 s of each
-key at 22050 Hz (RATE), its attack as recorded, then levelled from 0.3 s and looped (0.45-0.65 s .. its end); the
-firmware plays it as SLOOP's SAMPLE engine does (mel.c: kind 1), outside the budget.
+The piano (tools/get_piano.sh: SLOOP's four keys of a Steinway B from VCSL, CC0) is not a Mellotron tape, and is
+played clean: FIXED_LEN of each key at 22050 Hz, outside the budget, its decay measured and put back by the firmware
+as the vibraphone's (DECAYS), struck anew at every press, an octave up from its keys (OCTAVE). (SLOOP_PIANO, empty now, still makes
+SLOOP's LOFI KEYS: its kind "piano", levelled and looped, played by mel.c as SLOOP's SAMPLE engine, kind 1.)
 """
 import argparse
 import re
@@ -37,21 +37,22 @@ import numpy as np
 NAMES = {"MkII_Violins": "VIOLINS", "MkII_Flute": "FLUTE", "8_Choir": "CHOIR", "Cello": "CELLO", "Vibes": "VIBES",
          "Woodwind_2": "WOODWIND", "Piano": "PIANO", "Tenor_Sax": "SAX"}
 SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano", "Tenor_Sax"]  # A B C (the M400's three tracks), D, E, F
-DECAYS = {"Vibes": 0.6}                           # sets that die away by themselves, and their share of the flash:
+DECAYS = {"Vibes": 0.6, "Piano": 0}                           # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
 STEP = {"Cello": 4, "MkII_Flute": 6, "Vibes": 8, "Tenor_Sax": 4}   # sets with their own semitones between roots (else --step):
                                                    # the voices keep theirs, the plainer sounds bear more pitching
-SLOOP_PIANO = {"Piano"}                            # sets made as SLOOP makes its piano (sloop_piano): every file a
+SLOOP_PIANO = set()                                # sets made as SLOOP makes its piano (sloop_piano): every file a
                                                    # root, outside the budget, played by mel.c as SLOOP's SAMPLE engine
+FIXED_LEN = {"Piano": 1.0}                         # sets outside the budget, every file a root, this long (s) a root
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
 SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
                                                    # (a tape's key pressed again goes on where its tape is: the
                                                    # vibraphone as quiet as it has died away to, a piano never)
 PLAY = {"Piano": (100, 0, 0, 31)}                  # a set's own PLAY to start from (TONE PITCH ATTACK RELEASE; else
-PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano as SLOOP's LOFI KEYS: TONE open (its CUT
-                                                   # does it), ATK 0, REL 60 (~78 ms to -40 dB: MEL's 31)
+PLAY_ELSE = (72, 0, 4, 18)                         # the tapes'): the piano TONE open, ATK 0 (its strike as recorded),
+                                                   # REL 31 (the dampers: ~0.1 s)
 # SLOOP's LOFI KEYS (gen_samples.py EXTRA_PRESETS: SAMPLE BITS 45, CUT 78, DRV 30; ENV 0 108 0 60; LFO to pitch 1 at
 # RATE 38, a sine), as mel.c's constants for a kind 1 zone
 PNO_BITS = 45 // 10                                # bits taken off (eng_sample.c: sh = BITS / 10)
@@ -263,10 +264,10 @@ def build(src, budget, step, rate, which):
         roots = [r for r in range(lo + st // 2, hi + 1, st)]
         if roots[-1] + st // 2 < hi:
             roots.append(hi)
-        if d in SLOOP_PIANO:
+        if d in SLOOP_PIANO or d in FIXED_LEN:
             roots = sorted(files)
         plan.append((name, files, roots))
-    shares = [0.0 if d in SLOOP_PIANO else DECAYS.get(d, 1.0) for d, _ in sets]
+    shares = [0.0 if d in SLOOP_PIANO or d in FIXED_LEN else DECAYS.get(d, 1.0) for d, _ in sets]
     nroots = sum(len(r) * w for (_, _, r), w in zip(plan, shares))
     per0 = budget * 2 / nroots                   # 4 bits a sample (+ the checkpoints, ~1.6 %)
     per0 = per0 / (1 + 8 / CK)
@@ -292,7 +293,7 @@ def build(src, budget, step, rate, which):
         segs, decs = [], []
         sh = SHIFT.get(d, SHIFT_ELSE)
         zr = SRC_RATE / (SRC_RATE // rate << sh)    # this set's rate, Hz
-        per = int(per0 * share) // CK * CK
+        per = int(FIXED_LEN[d] * zr) // CK * CK if d in FIXED_LEN else int(per0 * share) // CK * CK
         for r in roots:
             x = resample(read_wav(files[r]), rate, sh)
             o = max(0, onset(x) - int(0.004 * zr))
@@ -317,12 +318,13 @@ def build(src, budget, step, rate, which):
             s, ls = loop(s, zr)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
             data, cks = ima_encode(pcm)
-            lo = roots[i - 1] + (r - roots[i - 1]) // 2 + 1 if i else 0
-            hi = r + (roots[i + 1] - r) // 2 if i + 1 < len(roots) else 127
+            up = 12 * OCTAVE.get(d, 0)          # (an octave up: its zones' roots and ranges moved down)
+            lo = max(0, roots[i - 1] + (r - roots[i - 1]) // 2 + 1 - up) if i else 0
+            hi = r + (roots[i + 1] - r) // 2 - up if i + 1 < len(roots) else 127
             pk, dbs = decs[i]
             dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
             lp, li = cks[ls // CK]                # (its loop's state: the checkpoint at ls, on the CK grid)
-            out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r, lo=lo, hi=hi,
+            out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r - up, lo=lo, hi=hi,
                                      sh=sh, kind=0, gain=32, lpred=lp, lidx=li, dk=dk,
                                      d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
