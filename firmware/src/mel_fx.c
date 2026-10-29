@@ -38,7 +38,9 @@ static int32_t flut_am;                         /* ISR: flutter's level shake no
 static volatile uint32_t fxv_vib;               /* the vibrato's phase */
 
 #define K_RHP 2119                              /* 450 Hz, below which the reverb gets less (no mud) */
-#define RV_OUT 12                               /* the reverb's level out: all wet (MIX 100) as loud as all dry */
+#define RV_OUT 3                                /* the reverb's level out (x 3 / 2): all wet (MIX 100) as loud as all
+                                                 * dry; its input is 8 x what it was (1.0), so a quiet tail keeps
+                                                 * its fine steps instead of 12-LSB ones */
 #define VIB_N 512u
 #define ECHO_N 44100u                           /* 1 s */
 static int32_t vib_buf[VIB_N];
@@ -418,7 +420,7 @@ trails:
         /* REVERB */
         if (rmix) {
             if (rtype != rv_type) { rv_setup(rtype); rv_type = rtype; }
-            in = tz(tz(l + r, 4u) * wetf, 15u); /* (FX bypassed: nothing new goes in, it rings out) */
+            in = tz(tz(l + r, 1u) * wetf, 15u); /* (FX bypassed: nothing new goes in, it rings out) */
             r_hp += tz((in - r_hp) * (K_RHP >> 1), 14u);
             in = tz(in - tz(r_hp, 1u), 1u);
             if ((rv_odd ^= 1u) != 0u) {         /* (every other sample: the two in, one step, the half way out) */
@@ -433,8 +435,8 @@ trails:
             }
             k = 32767 - ((rmix * (wetf >> 1)) >> 14);   /* MIX: the dry less as it goes all wet (MIX 100: no dry;
                                                  * FX bypassed: all of it, the tail ringing out over it) */
-            l = tz(tz(l, 1u) * (k >> 1), 13u) + tz(wl * (rmix >> 4), 11u) * RV_OUT;
-            r = tz(tz(r, 1u) * (k >> 1), 13u) + tz(wr * (rmix >> 4), 11u) * RV_OUT;
+            l = tz(tz(l, 1u) * (k >> 1), 13u) + tz(wl * (rmix >> 4) * RV_OUT, 12u);
+            r = tz(tz(r, 1u) * (k >> 1), 13u) + tz(wr * (rmix >> 4) * RV_OUT, 12u);
         }
         if (spk == 3) {                         /* HIGHCUT: two one-pole low-passes (what lowcut1 takes away) */
             l -= lowcut1(l, &hc_s[0], &hc_s[1], 1u);
