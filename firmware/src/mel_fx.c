@@ -32,6 +32,11 @@ static volatile int16_t f_hg[8];                /* HALL: its lines' gains (Q14),
 static volatile int32_t f_spk, f_by_lofi, f_by_fx;   /* f_spk: the EQ, 0 FLAT, 1 LOWCUT, 2 BASS+, 3 HIGHCUT */
 static volatile int32_t f_lofi_amt = 32767, f_fx_amt = 32767;   /* how much LOFI and FX, 0 .. 32767 (the SMK's faders) */
 static int32_t lofi_bp, fx_bp;                  /* ISR: how bypassed, 0 (all in) .. 32767 (all out), ramped */
+#define GATE_LV 16                              /* the silence gate: nothing plays and the output has stayed within */
+#define GATE_N (FS * 3u / 10u)                  /* +-GATE_LV (-66 dB) for 0.3 s: exactly 0 from then on (a codec turns
+                                                 * a tail's last LSBs or a DC of 2 into noise on the headphones) */
+static uint32_t gate_n;                         /* ISR: how long it has been that quiet, frames */
+static uint8_t gate_on;
 static volatile int32_t fxv_wow, fxv_drop;      /* ISR -> screen: the wow now (1/16 cent), how deep a dropout is (0..32768) */
 static volatile int32_t fxv_flut;               /* ISR -> screen: the flutter now (flut_am: +-1200 at 100) */
 static int32_t flut_am;                         /* ISR: flutter's level shake now, Q15 around 0 */
@@ -450,8 +455,19 @@ trails:
             r = lowcut1(r, &lc_s[4], &lc_s[5], spk == 2 ? 5u : 6u);
             r = lowcut1(r, &lc_s[6], &lc_s[7], spk == 2 ? 5u : 6u) + b;
         }
-        out[2u * i] += sat(l);                  /* the limiter: untouched up to 0.6 of full scale, then round */
-        out[2u * i + 1u] += sat(r);
+        l = sat(l);                             /* the limiter: untouched up to 0.6 of full scale, then round */
+        r = sat(r);
+        if (mix[i] || l > GATE_LV || l < -GATE_LV || r > GATE_LV || r < -GATE_LV) {
+            gate_on = 0;                        /* (open at once: no attack is cut) */
+            gate_n = 0;
+        } else if (gate_n < GATE_N)
+            gate_n++;
+        else if (!act)
+            gate_on = 1;
+        if (!gate_on) {
+            out[2u * i] += l;
+            out[2u * i + 1u] += r;
+        }
     }
     if (!vmix) fxv_vib += vinc * n;             /* (the screen's vibrato keeps its rate) */
     lofi_bp = bl;
