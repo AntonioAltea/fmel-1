@@ -951,6 +951,17 @@ static void pedal_set(int on)                   /* the pedal holds what sounds, 
     } else
         in_clear(S_PED);
 }
+static void hold_switch(void)                   /* HOLD on: what the keys (and MIDI) hold now stays too; off: all goes */
+{
+    uint32_t k;
+    hold = !hold;
+    if (hold) {
+        for (k = 0; k < 128u; k++)
+            if (in_get(k) & (S_KEY | S_MIDI)) in_set(k, S_LATCH, 0);
+    } else
+        in_clear(S_LATCH);
+    say(hold ? "HOLD ON" : "HOLD OFF");
+}
 #if BOARD_SMK37
 #include "mel_smk.h"
 #endif
@@ -1087,11 +1098,8 @@ static void buttons(void)
         say(set.half ? "HALF SPEED" : "FULL SPEED");
         redraw |= 3u;
     }
-    if (rel & (1u << BTN_ENV) && !env_long) {
-        hold = !hold;
-        if (!hold) in_clear(S_LATCH);
-        say(hold ? "HOLD ON" : "HOLD OFF");
-    }
+    if (rel & (1u << BTN_ENV) && !env_long)
+        hold_switch();
     if (b & (1u << BTN_SAVE)) {
         save_req = 1;
         say(quiet() ? "SAVED" : "SAVES WHEN SILENT");

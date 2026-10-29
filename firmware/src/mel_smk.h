@@ -114,12 +114,6 @@ static void smk_outer(uint32_t base)
     }
 }
 
-static void smk_hold(void)
-{
-    hold = !hold;
-    if (!hold) in_clear(S_LATCH);
-    say(hold ? "HOLD ON" : "HOLD OFF");
-}
 static void smk_half(void)
 {
     set.half = !set.half;
@@ -145,10 +139,10 @@ static void smk_pads(void)
             if (vel && !down[i] && fm1_ms - smk_pad_t[p] >= 180u) {
                 down[i] = 1;
                 smk_pad_t[p] = fm1_ms;
-                if (i) smk_half(); else smk_hold();
+                if (i) smk_half(); else hold_switch();
             } else if (!vel && down[i]) {
                 down[i] = 0;
-                if (fm1_ms - smk_pad_t[p] >= SMK_MOMENT_MS) { if (i) smk_half(); else smk_hold(); }
+                if (fm1_ms - smk_pad_t[p] >= SMK_MOMENT_MS) { if (i) smk_half(); else hold_switch(); }
             }
             continue;
         }
