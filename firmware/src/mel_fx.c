@@ -336,32 +336,32 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
         bf += (bft - bf) >> 8;
         /* the tape (LOFI) */
         if (bl) {                               /* its dry: the M400's TONE alone */
-            d1 += ((x - d1) * kt) >> 14;
-            d2 += ((d1 - d2) * kt) >> 14;
+            d1 += tz((x - d1) * kt, 14u);
+            d2 += tz((d1 - d2) * kt, 14u);
             dry = d2;
         }
         if (bl >= 32640 && blt)
             y = dry;
         else {
-            lg += ((x - lg) * kg) >> 14;        /* AGE: two poles down from the top, two up from the bottom */
-            lg2 += ((lg - lg2) * kg) >> 14;
-            hg += ((lg2 - hg) * kh) >> 14;
-            hg2 += ((lg2 - hg - hg2) * kh) >> 14;
+            lg += tz((x - lg) * kg, 14u);        /* AGE: two poles down from the top, two up from the bottom */
+            lg2 += tz((lg - lg2) * kg, 14u);
+            hg += tz((lg2 - hg) * kh, 14u);
+            hg2 += tz((lg2 - hg - hg2) * kh, 14u);
             y = ((lg2 - hg - hg2) * agl) >> 12;
             am += (amt - am) >> 6;              /* FLUTTER's roughness */
             y += (y * am) >> 15;
             drop_g += (drop_t - drop_g) >> 7;   /* DROPOUT */
             y = (y * (drop_g >> 1)) >> 14;
-            lp1 += ((y - lp1) * kt) >> 14;      /* TONE: two poles */
-            lp2 += ((lp1 - lp2) * kt) >> 14;
+            lp1 += tz((y - lp1) * kt, 14u);      /* TONE: two poles */
+            lp2 += tz((lp1 - lp2) * kt, 14u);
             if (rl) lp2 = (lp2 * rg) >> 15;
             {                                   /* DRIVE: gain, bias, the clipper, the DC out, warm, the level back */
                 int32_t u = (lp2 * dg) >> 8;
                 u = u > 4000000 ? 4000000 : u < -4000000 ? -4000000 : u;
                 y = drive_clip(u + dbias);
-                dc_y = y - dc_x + ((dc_y * 32735) >> 15);
+                dc_y = y - dc_x + tz(dc_y * 32735, 15);
                 dc_x = y;
-                dlp += ((dc_y - dlp) * dlk) >> 14;
+                dlp += tz((dc_y - dlp) * dlk, 14u);
                 y = (dlp * dmk) >> 15;
             }
             rnd2 ^= rnd2 << 13;
@@ -408,24 +408,24 @@ trails:
             d = e_d + ((fxv_wow * (e_d >> 8)) >> 11);
             d = d < 256 ? 256 : d > (int32_t)(ECHO_N - 2u) << 8 ? (int32_t)(ECHO_N - 2u) << 8 : d;
             TAP(echo_buf, ECHO_N, ew, d, rd);
-            e_lp += ((rd - e_lp) * etk) >> 14;  /* each repeat darker */
-            echo_buf[ew] = (int16_t)sat((((l + r) >> 2) * (wetf >> 1) >> 13) + ((e_lp * efb) >> 15));   /* and dirtier;
+            e_lp += tz((rd - e_lp) * etk, 14u);  /* each repeat darker */
+            echo_buf[ew] = (int16_t)sat((((l + r) >> 2) * (wetf >> 1) >> 13) + tz(e_lp * efb, 15));   /* and dirtier;
                                                                        * (FX bypassed: nothing new goes in, the repeats go on) */
             if (++ew >= ECHO_N) ew = 0;
-            l += (e_lp * emix) >> 15;
-            r += (e_lp * emix) >> 15;
+            l += tz(e_lp * emix, 15u);
+            r += tz(e_lp * emix, 15u);
         }
         /* REVERB */
         if (rmix) {
             if (rtype != rv_type) { rv_setup(rtype); rv_type = rtype; }
-            in = (((l + r) >> 4) * wetf) >> 15; /* (FX bypassed: nothing new goes in, it rings out) */
-            r_hp += ((in - r_hp) * (K_RHP >> 1)) >> 14;
-            in = (in - (r_hp >> 1)) >> 1;
+            in = tz(tz(l + r, 4u) * wetf, 15u); /* (FX bypassed: nothing new goes in, it rings out) */
+            r_hp += tz((in - r_hp) * (K_RHP >> 1), 14u);
+            in = tz(in - tz(r_hp, 1u), 1u);
             if ((rv_odd ^= 1u) != 0u) {         /* (every other sample: the two in, one step, the half way out) */
                 if (rtype) rv_plate((rv_x + in) >> 1, rdamp, rfb, &wl, &wr);
                 else rv_hall((rv_x + in) >> 1, rdamp, &wl, &wr);
-                y = wl, wl = (rv_ol + wl) >> 1, rv_ol = y;
-                y = wr, wr = (rv_or + wr) >> 1, rv_or = y;
+                y = wl, wl = tz(rv_ol + wl, 1u), rv_ol = y;
+                y = wr, wr = tz(rv_or + wr, 1u), rv_or = y;
             } else {
                 rv_x = in;
                 wl = rv_ol;
@@ -433,8 +433,8 @@ trails:
             }
             k = 32767 - ((rmix * (wetf >> 1)) >> 14);   /* MIX: the dry less as it goes all wet (MIX 100: no dry;
                                                  * FX bypassed: all of it, the tail ringing out over it) */
-            l = (((l >> 1) * (k >> 1)) >> 13) + ((wl * (rmix >> 4)) >> 11) * RV_OUT;
-            r = (((r >> 1) * (k >> 1)) >> 13) + ((wr * (rmix >> 4)) >> 11) * RV_OUT;
+            l = tz(tz(l, 1u) * (k >> 1), 13u) + tz(wl * (rmix >> 4), 11u) * RV_OUT;
+            r = tz(tz(r, 1u) * (k >> 1), 13u) + tz(wr * (rmix >> 4), 11u) * RV_OUT;
         }
         if (spk == 3) {                         /* HIGHCUT: two one-pole low-passes (what lowcut1 takes away) */
             l -= lowcut1(l, &hc_s[0], &hc_s[1], 1u);
