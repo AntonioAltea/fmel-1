@@ -39,13 +39,15 @@ enum { S_FADDR = 0, S_POWER = 1, S_INTRTX1 = 2, S_INTRTX2 = 3, S_INTRRX1 = 4, S_
        S_TXMAXP = 16, S_CSR0 = 17, S_TXCSR1 = 17, S_TXCSR2 = 18, S_RXMAXP = 19, S_RXCSR1 = 20, S_RXCSR2 = 21,
        S_COUNT0 = 22, S_RXCOUNT1 = 22, S_RXCOUNT2 = 23 };
 
-static uint8_t ep0buf[64 + 4] __attribute__((aligned(4)));
-static uint8_t ep1tx[64] __attribute__((aligned(4)));
-static uint8_t ep1rx[64 + 4] __attribute__((aligned(4)));
+/* the endpoint buffers are read / written by the USB DMA: 32-byte aligned (a guess on 2026-10-13 that did not
+ * cure OberVave's MIDI IN babble, kept as harmless; the cure was building the app with -Os: keep -Os, see tools/build.py) */
+static uint8_t ep0buf[64 + 4] __attribute__((aligned(32)));
+static uint8_t ep1tx[64] __attribute__((aligned(32)));
+static uint8_t ep1rx[64 + 4] __attribute__((aligned(32)));
 #if FELUCCA_CDC
-static uint8_t ep2tx[8] __attribute__((aligned(4)));
-static uint8_t ep3tx[64] __attribute__((aligned(4)));
-static uint8_t ep3rx[64 + 4] __attribute__((aligned(4)));
+static uint8_t ep2tx[8] __attribute__((aligned(32)));
+static uint8_t ep3tx[64] __attribute__((aligned(32)));
+static uint8_t ep3rx[64 + 4] __attribute__((aligned(32)));
 /* serial rings: in = host -> console (ISR writes), out = console -> host (ISR reads) */
 #define CI_N 256u
 #define CO_N 2048u
@@ -90,7 +92,7 @@ _Static_assert(UA_HI48 + UA_REND48 + UA_MAXF < UA_N, "the ring holds the band, a
 _Static_assert(UA_HI + HALF_FRAMES + UA_MAXF < UA_N, "the ring holds the band, a render and a packet");
 static uint32_t ua_ring[UA_N];
 static volatile uint32_t ua_w, ua_r;
-static uint32_t ep4tx[UA_MAXF] __attribute__((aligned(4)));
+static uint32_t ep4tx[UA_MAXF] __attribute__((aligned(32)));
 static struct {
     volatile uint8_t alt;        /* streaming interface setting: 1 = the host records */
     volatile uint8_t r48;        /* the host's rate (SET_CUR): 1 = 48 kHz, 0 = 44.1 (bus reset) */

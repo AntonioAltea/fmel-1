@@ -1,0 +1,82 @@
+# Dinghy: build the packages on GitHub, run the host tests, and on a tag vX.Y publish the release with a build
+# attestation (actions/attest-build-provenance): the Firmware Hub shows "Built from source" for exactly these files.
+# The JieLi toolchain comes from pkgman.jieliapp.com (tools/get_toolchain.sh), the AC79 SDK from gitee.com, as in
+# sloopDX's and OberVave's workflows. Run by hand (workflow_dispatch) for a test build without a release.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # the release on a tag
+      id-token: write          # the attestation's signing identity
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Python packages
+        run: python3 -m pip install Pillow
+
+      - name: JieLi toolchain (pkgman.jieliapp.com)
+        run: sh tools/get_toolchain.sh
+
+      - name: JieLi AC79 SDK (three files of it are placed in the package)
+        run: |
+          for i in 1 2 3; do                     # (gitee.com drops a clone now and then: try again)
+            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
+                https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK && break
+            rm -rf ~/fw-AC79_AIoT_SDK
+            sleep 20
+          done
+          test -d ~/fw-AC79_AIoT_SDK
+
+      - name: Build (the SMK-37 first, the FM-1 last, as the tests expect)
+        run: |
+          BOARD=smk37 sh build.sh
+          BOARD=smk37 MODEL=elite sh build.sh
+          BOARD=smk37 MODEL=mke sh build.sh
+          sh build.sh
+
+      - name: Host tests
+        run: sh tests/run_tests.sh
+
+      - name: Release packages (tags only)
+        if: github.ref_type == 'tag'
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          BOARD=smk37 sh build.sh --release "$V"
+          BOARD=smk37 MODEL=elite sh build.sh --release "$V"
+          BOARD=smk37 MODEL=mke sh build.sh --release "$V"
+          sh build.sh --release "$V"
+          ls -l build/dinghy-"$V"*.fwsc
+          (cd build && sha256sum dinghy-"$V"*.fwsc > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dinghy-fwsc
+          path: build/dinghy*.fwsc
+          if-no-files-found: error
+
+      - name: Attest the packages (tags only)
+        if: github.ref_type == 'tag'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: build/dinghy-[0-9]*.fwsc
+
+      - name: Release (tags only)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/dinghy-[0-9]*.fwsc   # (the release builds, not the dev ones: dinghy-smk37.fwsc)
+            build/SHA256SUMS
+          generate_release_notes: true
