@@ -26,6 +26,9 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
 a { color: var(--accent); }
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: 1rem; }
 .top .grow { flex: 1; }
+.board { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; background: var(--card); }
+.board a { font-size: .9rem; padding: .25em .9em; color: var(--ink); text-decoration: none; border: 0; border-radius: 0; background: none; }
+.board a[aria-current="page"] { background: var(--accent); color: #04201d; font-weight: 600; }
 .top a, .lang { font: inherit; font-size: .9rem; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .25em .7em; cursor: pointer; text-decoration: none; }
 h1 { margin: 0; font-size: 2.4rem; line-height: 1.1; letter-spacing: .02em; }
 .intro { color: var(--muted); margin: .4rem 0 1.4rem; max-width: 46rem; }
@@ -52,6 +55,12 @@ h1 { margin: 0; font-size: 2.4rem; line-height: 1.1; letter-spacing: .02em; }
 .bar label { display: inline-flex; gap: .4em; align-items: center; }
 .hint { color: var(--muted); font-size: .92rem; margin: .7rem 0 0; }
 kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); border: 1px solid var(--rule); border-radius: 4px; padding: 0 .3em; color: var(--ink); }
+details.manual { margin-top: 1.4rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
+details.manual summary { cursor: pointer; font-size: 1.1rem; }
+.manual table { border-collapse: collapse; margin: .8rem 0; width: 100%; font-size: .92rem; }
+.manual th, .manual td { text-align: left; vertical-align: top; padding: .3rem .6rem; border-bottom: 1px solid var(--rule); }
+.manual th { width: 32%; color: var(--ink); }
+.manual td { color: var(--muted); }
 footer { margin-top: 2.4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .9rem; }
 footer p { margin: .3rem 0; }
 @media (max-width: 640px) { h1 { font-size: 2rem; } .start button { font-size: 1rem; padding: .55em 1.3em; } }
@@ -60,8 +69,9 @@ footer p { margin: .3rem 0; }
 <body>
 <main>
 <nav class="top">
+  <nav class="board" aria-label="board"><a href="./">FM-1</a><a aria-current="page" href="smk37.html">SMK-37</a></nav>
   <span class="grow"></span>
-  <a href="./"><span data-lang="en">FM-1 simulator</span><span data-lang="es">Simulador del FM-1</span></a>
+  <a href="install/?board=smk37"><span data-lang="en">Install on the SMK-37</span><span data-lang="es">Instalar en el SMK-37</span></a>
   <a href="https://github.com/AntonioAltea/fmel-1/blob/main/SMK37.md">SMK37.md</a>
   <a href="https://github.com/AntonioAltea/fmel-1">GitHub</a>
   <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
@@ -90,6 +100,12 @@ footer p { margin: .3rem 0; }
 <p class="hint" data-lang="en">Keys, pads and buttons: click them, or the computer keyboard (<kbd>Z</kbd>…<kbd>/</kbd>, <kbd>Q</kbd>…<kbd>Y</kbd>: the middle 27 keys). Knobs, faders and wheels: drag up and down, or the mouse wheel; the pitch wheel springs back. The pedal: hold it.</p>
 <p class="hint" data-lang="es">Teclas, pads y botones: haz clic, o el teclado del ordenador (<kbd>Z</kbd>…<kbd>/</kbd>, <kbd>Q</kbd>…<kbd>Y</kbd>: las 27 teclas del medio). Knobs, faders y ruedas: arrastra arriba y abajo, o la rueda del ratón; la rueda de pitch vuelve sola. El pedal: mantenlo.</p>
 
+<details class="manual">
+<summary><span data-lang="en">Manual</span><span data-lang="es">Manual</span></summary>
+<table data-lang="en"><tr><th>Keys</th><td>all 37, C3..C6; how hard you play is how loud the tape</td></tr><tr><th>Pads 1–6 (top)</th><td>the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO, F SAX</td></tr><tr><th>Pads 9–14 (bottom)</th><td>the layer's sound, the same columns (the lit one again: no layer)</td></tr><tr><th>Pad 7 / 15, held</th><td>only the top row / only the bottom row heard</td></tr><tr><th>Pad 8 / 16</th><td>HOLD / HALF SPEED: a tap switches it; held, it is the other way only while held</td></tr><tr><th>Faders 1–4</th><td>MIX (up: the top row, down: the bottom), how much LOFI, how much FX, VOLUME</td></tr><tr><th>K1 K2 K3 K4</th><td>TONE, the hand on the reel, TEMPO, PITCH</td></tr><tr><th>K5–K8</th><td>the page's four knobs (the plate on the screen)</td></tr><tr><th>< ></th><td>the section's pages, back and on</td></tr><tr><th>FADER BANK</th><td>UNDO the last knob or pad change; again: redone (lit while there is one)</td></tr><tr><th>Wheels, pedal</th><td>pitch: the motor (±2 semitones); mod: the vibrato; the pedal: sustain</td></tr><tr><th>PATCH SCALE NOTE REPEAT FX PARA GLOBE CHORD ARP SEQ SEQ PLAY SEQ REC BT</th><td>the FM-1's HOME SEL LFO FX EDIT GLO ENV ARP SEQ PLAY REC SAVE: the FM-1 simulator's manual applies</td></tr><tr><th>KNOB BANK</th><td>held at power-on: the panel check</td></tr></table>
+<table data-lang="es"><tr><th>Teclas</th><td>las 37, C3..C6; cuanto más fuerte tocas, más suena la cinta</td></tr><tr><th>Pads 1–6 (arriba)</th><td>el sonido: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO, F SAX</td></tr><tr><th>Pads 9–14 (abajo)</th><td>el sonido de la capa, en las mismas columnas (el encendido otra vez: sin capa)</td></tr><tr><th>Pad 7 / 15, mantenido</th><td>solo se oye la fila de arriba / la de abajo</td></tr><tr><th>Pad 8 / 16</th><td>HOLD / HALF SPEED: un toque lo cambia; mantenido, cambia solo mientras lo mantienes</td></tr><tr><th>Faders 1–4</th><td>MIX (arriba: la fila de arriba, abajo: la de abajo), cuánto LOFI, cuánto FX, VOLUMEN</td></tr><tr><th>K1 K2 K3 K4</th><td>TONE, la mano en la bobina, TEMPO, PITCH</td></tr><tr><th>K5–K8</th><td>los cuatro knobs de la página (la placa de la pantalla)</td></tr><tr><th>< ></th><td>las páginas del apartado, hacia atrás y hacia delante</td></tr><tr><th>FADER BANK</th><td>DESHACER el último cambio de knob o pad; otra vez: rehecho (encendido mientras hay uno)</td></tr><tr><th>Ruedas, pedal</th><td>pitch: el motor (±2 semitonos); mod: el vibrato; el pedal: sustain</td></tr><tr><th>PATCH SCALE NOTE REPEAT FX PARA GLOBE CHORD ARP SEQ SEQ PLAY SEQ REC BT</th><td>los HOME SEL LFO FX EDIT GLO ENV ARP SEQ PLAY REC SAVE del FM-1: vale el manual del simulador del FM-1</td></tr><tr><th>KNOB BANK</th><td>mantenido al encender: la comprobación del panel</td></tr></table>
+</details>
+
 <footer>
   <p data-lang="en">The tapes: Bernie Kornowicz (Taijiguy)'s Mellotron M400S, from <a href="http://leisureland.us">leisureland.us</a>, free for non-commercial use. Drawings by Javi. The SMK-37 layer is genkigenki's; built on <a href="https://github.com/zvenson/dinghy">Dinghy</a> and <a href="https://github.com/hugelton/Felucca">Felucca</a>.</p>
   <p data-lang="es">Las cintas: el Mellotron M400S de Bernie Kornowicz (Taijiguy), de <a href="http://leisureland.us">leisureland.us</a>, libres para uso no comercial. Dibujos de Javi. La capa del SMK-37 es de genkigenki; hecho sobre <a href="https://github.com/zvenson/dinghy">Dinghy</a> y <a href="https://github.com/hugelton/Felucca">Felucca</a>.</p>
@@ -99,6 +115,7 @@ footer p { margin: .3rem 0; }
 
 <script>
 "use strict";
+try { localStorage.setItem("mel-board", "smk37"); } catch (e) {}   // (the installer opens on this board)
 const NS = "http://www.w3.org/2000/svg";
 // platform.c's SMK-37 ids
 const BTN = { "KNOB BANK": 0, "FADER BANK": 1, "<": 2, ">": 3, "OCT-": 4, "OCT+": 5, ARP: 6, "NOTE REPEAT": 7, SCALE: 8,

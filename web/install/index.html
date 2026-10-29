@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-board="fm1">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Install FMEL-1</title>
-<meta name="description" content="Install FMEL-1, firmware for the M-VAVE FM-1 that plays Mellotron M400S tape samples, over USB from the browser.">
+<meta name="description" content="Install FMEL-1, firmware for the M-VAVE FM-1 and SMK-37 that plays Mellotron M400S tape samples, over USB from the browser.">
 <link rel="icon" href="../img/icon.png">
-<meta property="og:title" content="Install FMEL-1 on the M-VAVE FM-1">
+<meta property="og:title" content="Install FMEL-1 on the M-VAVE FM-1 or SMK-37">
 <meta property="og:image" content="https://antonioaltea.github.io/fmel-1/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <script>   /* the language before anything is drawn: the one chosen, else the browser's (Spanish or English) */
@@ -78,6 +78,12 @@ summary { cursor: pointer; font-weight: 600; }
 .shots img { display: block; width: 100%; height: auto; border-radius: 6px; }
 .shots figcaption { color: var(--muted); font-size: .85rem; margin-top: .3rem; }
 html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: none !important; }
+html[data-board="fm1"] [data-board="smk37"], html[data-board="smk37"] [data-board="fm1"] { display: none !important; }
+.pick { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+.pick label { margin: 0; font-weight: 600; border: 1px solid var(--rule); border-radius: 9px; padding: .45rem .8rem; cursor: pointer; align-items: center; }
+.pick label:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.pick input { margin: 0; accent-color: var(--accent); }
+.pick small { font-weight: 400; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -87,18 +93,35 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
     <a class="gh" href="https://github.com/AntonioAltea/fmel-1">GitHub</a>
     <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
   </div>
-  <p class="muted" data-lang="en">FMEL-1 is firmware for the M-VAVE FM-1. It plays samples of a Mellotron M400S's tapes (flute, choir, cello, vibes) and a piano, with tape effects (wow, flutter, saturation, hiss), echo, reverb, an arpeggiator and a 16-step sequencer. This page installs it on the FM-1 over USB.</p>
-  <p class="muted" data-lang="es">FMEL-1 es un firmware para el M-VAVE FM-1. Toca muestras de las cintas de un Mellotron M400S (flauta, coro, chelo, vibráfono) y un piano, con efectos de cinta (wow, flutter, saturación, soplido), eco, reverb, arpegiador y secuenciador de 16 pasos. Esta página lo instala en el FM-1 por USB.</p>
+  <p class="muted" data-lang="en">FMEL-1 is firmware for the M-VAVE FM-1 and SMK-37. It plays samples of a Mellotron M400S's tapes (flute, choir, cello, vibes) and a piano, with tape effects (wow, flutter, saturation, hiss), echo, reverb, an arpeggiator and a 16-step sequencer. This page installs it on the keyboard over USB.</p>
+  <p class="muted" data-lang="es">FMEL-1 es un firmware para el M-VAVE FM-1 y el SMK-37. Toca muestras de las cintas de un Mellotron M400S (flauta, coro, chelo, vibráfono) y un piano, con efectos de cinta (wow, flutter, saturación, soplido), eco, reverb, arpegiador y secuenciador de 16 pasos. Esta página lo instala en el teclado por USB.</p>
   <div class="shots">
     <figure><img src="../img/choir.png" width="240" height="240" alt="The FM-1's screen on the PLAY page with the choir sound"><figcaption data-lang="en">PLAY page, sound B (choir)</figcaption><figcaption data-lang="es">Página PLAY, sonido B (coro)</figcaption></figure>
     <figure><img src="../img/tape.png" width="240" height="240" alt="The FM-1's screen on the LOFI page"><figcaption data-lang="en">LOFI page (tape effects)</figcaption><figcaption data-lang="es">Página LOFI (efectos de cinta)</figcaption></figure>
   </div>
-  <p><a class="big" href="../"><span data-lang="en">Open the simulator (runs in the browser)</span><span data-lang="es">Abrir el simulador (funciona en el navegador)</span></a></p>
+  <section aria-labelledby="h-board">
+    <h2 id="h-board"><span class="n">·</span><span data-lang="en">Your keyboard</span><span data-lang="es">Tu teclado</span></h2>
+    <div class="pick" role="radiogroup" aria-label="board">
+      <label><input type="radio" name="board" value="fm1"> M-VAVE FM-1</label>
+      <label><input type="radio" name="board" value="smk37"> M-VAVE SMK-37</label>
+    </div>
+    <div data-board="smk37">
+      <p data-lang="en">Which one? Pick your keyboard's own model, as its box or M-UPGRADE names it: M-VAVE's updater later takes back only that model's factory firmware.</p>
+      <p data-lang="es">¿Cuál? Elige el modelo de tu teclado, como lo llama su caja o M-UPGRADE: el instalador de M-VAVE después solo acepta el firmware de fábrica de ese modelo.</p>
+      <div class="pick" role="radiogroup" aria-label="model">
+        <label><input type="radio" name="model" value="pro"> SMK-37 Pro <small>(<span data-lang="en">also</span><span data-lang="es">también</span> Starrykey 37 Play)</small></label>
+        <label><input type="radio" name="model" value="elite"> SMK-37 Elite</label>
+        <label><input type="radio" name="model" value="mke"> MKE-P37</label>
+      </div>
+    </div>
+  </section>
+
+  <p><a class="big" id="sim" href="../"><span data-lang="en">Open the simulator (runs in the browser)</span><span data-lang="es">Abrir el simulador (funciona en el navegador)</span></a></p>
 
   <section aria-labelledby="h-browser">
     <h2 id="h-browser"><span class="n">1</span><span data-lang="en">Your browser</span><span data-lang="es">Tu navegador</span></h2>
-    <p data-lang="en">The install talks to the FM-1 over Web MIDI, which only Chromium browsers on a computer have.</p>
-    <p data-lang="es">La instalación habla con el FM-1 por Web MIDI, que solo tienen los navegadores Chromium de ordenador.</p>
+    <p data-lang="en">The install talks to the <span class="dn">FM-1</span> over Web MIDI, which only Chromium browsers on a computer have.</p>
+    <p data-lang="es">La instalación habla con el <span class="dn">FM-1</span> por Web MIDI, que solo tienen los navegadores Chromium de ordenador.</p>
     <div class="browsers">
       <div class="yes"><b>Chrome</b><span data-lang="en">works</span><span data-lang="es">funciona</span></div>
       <div class="yes"><b>Edge</b><span data-lang="en">works</span><span data-lang="es">funciona</span></div>
@@ -106,22 +129,28 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
       <div><b>Safari / iPhone</b><span data-lang="en">no Web MIDI</span><span data-lang="es">sin Web MIDI</span></div>
     </div>
     <p id="mine" role="status"></p>
-    <p class="muted" data-lang="en">When you look for the FM-1, the browser asks to let this page use MIDI devices: say <b>Allow</b>.</p>
-    <p class="muted" data-lang="es">Al buscar el FM-1, el navegador pide permiso para que esta página use dispositivos MIDI: pulsa <b>Permitir</b>.</p>
+    <p class="muted" data-lang="en">When you look for the <span class="dn">FM-1</span>, the browser asks to let this page use MIDI devices: say <b>Allow</b>.</p>
+    <p class="muted" data-lang="es">Al buscar el <span class="dn">FM-1</span>, el navegador pide permiso para que esta página use dispositivos MIDI: pulsa <b>Permitir</b>.</p>
   </section>
 
   <section aria-labelledby="h-ready">
     <h2 id="h-ready"><span class="n">2</span><span data-lang="en">Get ready</span><span data-lang="es">Prepáralo</span></h2>
     <ul>
-      <li data-lang="en">The FM-1's battery charged.</li><li data-lang="es">La batería del FM-1 cargada.</li>
+      <li data-lang="en">The <span class="dn">FM-1</span>’s battery charged.</li><li data-lang="es">La batería del <span class="dn">FM-1</span> cargada.</li>
       <li data-lang="en">A USB <b>data</b> cable, straight into the computer (no hub).</li>
       <li data-lang="es">Un cable USB <b>de datos</b>, directo al ordenador (sin hub).</li>
-      <li data-lang="en">Nothing else using the FM-1: close the DAW, other MIDI tabs, M-UPGRADE.</li>
-      <li data-lang="es">Nada más usando el FM-1: cierra el DAW, otras pestañas MIDI, M-UPGRADE.</li>
-      <li data-lang="en">The FM-1 runs the official firmware, FMEL-1, or is in the USB rescue. Another unofficial firmware (Felucca, SLOOP,
+      <li data-lang="en">Nothing else using the <span class="dn">FM-1</span>: close the DAW, other MIDI tabs, M-UPGRADE.</li>
+      <li data-lang="es">Nada más usando el <span class="dn">FM-1</span>: cierra el DAW, otras pestañas MIDI, M-UPGRADE.</li>
+      <li data-lang="en" data-board="smk37">The SMK-37 runs M-VAVE's firmware <b>V016</b> (older? update it with M-UPGRADE
+        first, step 5), FMEL-1, or is in the USB rescue. Another unofficial firmware (Snoop37, Vector37, OberVave…)? Go
+        back to M-VAVE's own first (step 5).</li>
+      <li data-lang="es" data-board="smk37">El SMK-37 lleva el firmware de M-VAVE <b>V016</b> (¿uno anterior? actualízalo antes con
+        M-UPGRADE, paso 5), FMEL-1, o está en el rescate USB. ¿Otro firmware no oficial (Snoop37, Vector37, OberVave…)?
+        Vuelve antes al de M-VAVE (paso 5).</li>
+      <li data-lang="en" data-board="fm1">The FM-1 runs the official firmware, FMEL-1, or is in the USB rescue. Another unofficial firmware (Felucca, SLOOP,
         Melodee, Dinghy…)? Go back to the official V15 first (step 5): one unofficial firmware straight over another has
         left FM-1s that no computer saw.</li>
-      <li data-lang="es">El FM-1 lleva el firmware oficial, FMEL-1, o está en el rescate USB. ¿Otro firmware no oficial (Felucca, SLOOP,
+      <li data-lang="es" data-board="fm1">El FM-1 lleva el firmware oficial, FMEL-1, o está en el rescate USB. ¿Otro firmware no oficial (Felucca, SLOOP,
         Melodee, Dinghy…)? Primero vuelve al V15 oficial (paso 5): instalar uno no oficial encima de otro ha dejado FM-1 que
         ningún ordenador veía.</li>
     </ul>
@@ -134,7 +163,7 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
     <h2 id="h-install"><span class="n">3</span><span data-lang="en">Install</span><span data-lang="es">Instalar</span></h2>
     <p id="pkg" role="status"></p>
     <div class="row">
-      <button id="connect"><span data-lang="en">Find my FM-1</span><span data-lang="es">Buscar mi FM-1</span></button>
+      <button id="connect"><span data-lang="en">Find my <span class="dn">FM-1</span></span><span data-lang="es">Buscar mi <span class="dn">FM-1</span></span></button>
       <span id="dev" class="muted" role="status" aria-live="polite"></span>
     </div>
     <div class="row">
@@ -149,18 +178,34 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
   <section aria-labelledby="h-seen">
     <h2 id="h-seen"><span class="n">4</span><span data-lang="en">What you will see</span><span data-lang="es">Qué verás</span></h2>
     <ol class="steps-seen" data-lang="en">
-      <li>The FM-1 checks the package, then restarts into update mode (the page says so).</li>
+      <li>The <span class="dn">FM-1</span> checks the package, then restarts into update mode (the page says so).</li>
       <li>The page writes FMEL-1, with the bar above. Leave the cable alone.</li>
-      <li>The FM-1 restarts into FMEL-1, and the page says <b>Done</b>: now you can unplug it.</li>
+      <li>The <span class="dn">FM-1</span> restarts into FMEL-1, and the page says <b>Done</b>: now you can unplug it.</li>
     </ol>
     <ol class="steps-seen" data-lang="es">
-      <li>El FM-1 comprueba el paquete y se reinicia en modo actualización (la página lo dice).</li>
+      <li>El <span class="dn">FM-1</span> comprueba el paquete y se reinicia en modo actualización (la página lo dice).</li>
       <li>La página escribe FMEL-1, con la barra de arriba. No toques el cable.</li>
-      <li>El FM-1 se reinicia en FMEL-1 y la página dice <b>Hecho</b>: ya puedes desconectarlo.</li>
+      <li>El <span class="dn">FM-1</span> se reinicia en FMEL-1 y la página dice <b>Hecho</b>: ya puedes desconectarlo.</li>
     </ol>
   </section>
 
-  <section aria-labelledby="h-stock">
+  <section aria-labelledby="h-stock" data-board="smk37">
+    <h2><span class="n">5</span><span data-lang="en">Back to M-VAVE's firmware (V016)</span><span data-lang="es">Volver al firmware de M-VAVE (V016)</span></h2>
+    <p data-lang="en">With M-VAVE's own updater, <b>M-UPGRADE</b> (Windows / macOS, from the
+      <a href="https://www.m-vave.com/product?id=smk-37-elite" rel="noopener">model's page on m-vave.com</a>), and the factory
+      file of <b>your</b> model: <a href="https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/SMK-37Pro/SMK-37%20Pro_016.fwsc" rel="noopener">SMK-37 Pro V016</a>,
+      <a href="https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/SMK-37Elite/SMK-37%20Elite_016.fwsc" rel="noopener">SMK-37 Elite V016</a>
+      (MKE-P37: from m-vave.com). It takes it back because FMEL-1's package carries your model's name. The same updater
+      brings an older official firmware up to V016. FMEL-1 never writes the keyboard's calibration, Bluetooth pairing or key mapping.</p>
+    <p data-lang="es">Con el instalador de M-VAVE, <b>M-UPGRADE</b> (Windows / macOS, en la
+      <a href="https://www.m-vave.com/product?id=smk-37-elite" rel="noopener">página del modelo en m-vave.com</a>), y el archivo de
+      fábrica de <b>tu</b> modelo: <a href="https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/SMK-37Pro/SMK-37%20Pro_016.fwsc" rel="noopener">SMK-37 Pro V016</a>,
+      <a href="https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/SMK-37Elite/SMK-37%20Elite_016.fwsc" rel="noopener">SMK-37 Elite V016</a>
+      (MKE-P37: en m-vave.com). Lo acepta porque el paquete de FMEL-1 lleva el nombre de tu modelo. El mismo instalador
+      sube un firmware oficial anterior al V016. FMEL-1 nunca escribe la calibración del teclado, el emparejamiento Bluetooth ni el mapa de teclas.</p>
+  </section>
+
+  <section aria-labelledby="h-stock" data-board="fm1">
     <h2 id="h-stock"><span class="n">5</span><span data-lang="en">Back to the official firmware (V15)</span><span data-lang="es">Volver al firmware oficial (V15)</span></h2>
     <p data-lang="en">Get <code>FM-1.fwsc</code> (PC Firmware, V15) from <a href="https://www.m-vave.com/download" rel="noopener">m-vave.com</a>
       (or <a href="https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/FM-1.fwsc" rel="noopener">straight from M-VAVE's server</a>)
@@ -182,30 +227,34 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
     <div data-lang="en">
       <details><summary>The browser blocked MIDI</summary>
         <p>Click the lock (or the MIDI icon) left of the address, set <b>MIDI devices</b> to <b>Allow</b>, reload, and look again.</p></details>
-      <details><summary>The FM-1 is not found</summary>
+      <details><summary>The <span class="dn">FM-1</span> is not found</summary>
         <p>Use a data cable (many charge only), plug it straight in, close anything else using MIDI, unplug it, plug it in and look again.</p></details>
-      <details><summary>Windows: the browser freezes when the FM-1 restarts</summary>
+      <details><summary>Windows: the browser freezes when the <span class="dn">FM-1</span> restarts</summary>
         <p>Open <code>chrome://flags/#use-winrt-midi-api</code> (Edge: <code>edge://flags/#use-winrt-midi-api</code>), set it to <b>Enabled</b>, restart the browser.</p></details>
       <details><summary>Cut off while writing</summary>
-        <p>Nothing serious. Plug it in again and press «Find my FM-1»: «Finish the install» appears.</p></details>
+        <p>Nothing serious. Plug it in again and press «Find my <span class="dn">FM-1</span>»: «Finish the install» appears.</p></details>
       <details><summary>FMEL-1 does not start (red screen or restarts)</summary>
-        <p>After two tries it goes to the USB rescue by itself; you can also hold <b>OCT−</b> while switching it on. From there, install again or go back to V15.</p></details>
-      <details><summary>Black screen, and the computer sees a disk «WL82 UBOOT1.00»</summary>
+        <p>After two tries it goes to the USB rescue by itself; you can also hold <b>OCT−</b> (SMK-37: <b>OCTAVE−</b>) while switching it on. From there, install again or go back to the official firmware.</p></details>
+      <details data-board="smk37"><summary>Black screen, every key a «C», dead wheels…</summary>
+        <p>genkigenki's <a href="https://genkigenki.github.io/smk37/help.html" rel="noopener">SMK-37 help</a> and its Repair cover these. Ask there before you try anything on a black screen.</p></details>
+      <details data-board="fm1"><summary>Black screen, and the computer sees a disk «WL82 UBOOT1.00»</summary>
         <p><a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> with V15.
           If nothing shows up over USB: <a href="https://github.com/kurogedelic/FM-1-transporter" rel="noopener">FM-1-transporter</a>.</p></details>
     </div>
     <div data-lang="es">
       <details><summary>El navegador ha bloqueado el MIDI</summary>
         <p>Pulsa el candado (o el icono MIDI) a la izquierda de la dirección, pon <b>Dispositivos MIDI</b> en <b>Permitir</b>, recarga y busca otra vez.</p></details>
-      <details><summary>No encuentra el FM-1</summary>
+      <details><summary>No encuentra el <span class="dn">FM-1</span></summary>
         <p>Usa un cable de datos (muchos solo cargan), conéctalo directo, cierra lo que use MIDI, desconecta, vuelve a conectar y busca otra vez.</p></details>
-      <details><summary>Windows: el navegador se congela cuando el FM-1 se reinicia</summary>
+      <details><summary>Windows: el navegador se congela cuando el <span class="dn">FM-1</span> se reinicia</summary>
         <p>Abre <code>chrome://flags/#use-winrt-midi-api</code> (Edge: <code>edge://flags/#use-winrt-midi-api</code>), ponlo en <b>Enabled</b> y reinicia el navegador.</p></details>
       <details><summary>Se corta mientras escribe</summary>
-        <p>No pasa nada grave. Vuelve a conectar y pulsa «Buscar mi FM-1»: aparecerá «Terminar la instalación».</p></details>
+        <p>No pasa nada grave. Vuelve a conectar y pulsa «Buscar mi <span class="dn">FM-1</span>»: aparecerá «Terminar la instalación».</p></details>
       <details><summary>FMEL-1 no arranca (pantalla roja o reinicios)</summary>
-        <p>Tras dos intentos entra solo en el rescate USB; también puedes mantener <b>OCT−</b> al encenderlo. Desde ahí, instala otra vez o vuelve al V15.</p></details>
-      <details><summary>Pantalla negra y el ordenador ve un disco «WL82 UBOOT1.00»</summary>
+        <p>Tras dos intentos entra solo en el rescate USB; también puedes mantener <b>OCT−</b> (SMK-37: <b>OCTAVE−</b>) al encenderlo. Desde ahí, instala otra vez o vuelve al firmware oficial.</p></details>
+      <details data-board="smk37"><summary>Pantalla negra, todas las teclas una «C», ruedas muertas…</summary>
+        <p>La <a href="https://genkigenki.github.io/smk37/help.html" rel="noopener">ayuda del SMK-37</a> de genkigenki y su Repair lo cubren. Pregunta ahí antes de tocar nada con la pantalla negra.</p></details>
+      <details data-board="fm1"><summary>Pantalla negra y el ordenador ve un disco «WL82 UBOOT1.00»</summary>
         <p><a href="https://github.com/Quixotic7/MvaveFM1Unbricker" rel="noopener">MvaveFM1Unbricker</a> con el V15.
           Si no aparece nada por USB: <a href="https://github.com/kurogedelic/FM-1-transporter" rel="noopener">FM-1-transporter</a>.</p></details>
     </div>
@@ -217,9 +266,9 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
   </section>
 
   <p class="muted" data-lang="en">The installer is <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>'s
-    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), with FMEL-1's checks on top. Nothing is sent anywhere: the page only talks to your FM-1.</p>
+    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), with FMEL-1's checks on top. Nothing is sent anywhere: the page only talks to your <span class="dn">FM-1</span>.</p>
   <p class="muted" data-lang="es">El instalador es el de <a href="https://github.com/hugelton/Felucca" rel="noopener">Felucca</a>
-    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), con las comprobaciones de FMEL-1 encima. No se envía nada a ningún sitio: la página solo habla con tu FM-1.</p>
+    (Leo Kuroshita, Hügelton Instruments, GPL-3.0), con las comprobaciones de FMEL-1 encima. No se envía nada a ningún sitio: la página solo habla con tu <span class="dn">FM-1</span>.</p>
 </main>
 <script type="module" src="install.js"></script>
 </body>

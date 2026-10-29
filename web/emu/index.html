@@ -34,6 +34,9 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
 a { color: var(--accent); }
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: 1rem; }
 .top .grow { flex: 1; }
+.board { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; background: var(--card); }
+.board a { font-size: .9rem; padding: .25em .9em; color: var(--ink); text-decoration: none; border: 0; border-radius: 0; background: none; }
+.board a[aria-current="page"] { background: var(--accent); color: #04201d; font-weight: 600; }
 .top a, .lang { font: inherit; font-size: .9rem; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .25em .7em; cursor: pointer; text-decoration: none; }
 h1 { margin: 0; font-size: 2.4rem; line-height: 1.1; letter-spacing: .02em; }
 .intro { color: var(--muted); margin: .4rem 0 1.4rem; max-width: 46rem; }
@@ -85,6 +88,7 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
 <body>
 <main>
 <nav class="top">
+  <nav class="board" aria-label="board"><a aria-current="page" href="./">FM-1</a><a href="smk37.html">SMK-37</a></nav>
   <span class="grow"></span>
   <a href="install/"><span data-lang="en">Install on the FM-1</span><span data-lang="es">Instalar en el FM-1</span></a>
   <a href="https://github.com/AntonioAltea/fmel-1">GitHub</a>
@@ -214,6 +218,7 @@ kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); b
 
 <script>
 "use strict";
+try { localStorage.setItem("mel-board", "fm1"); } catch (e) {}   // (the installer opens on this board)
 const NS = "http://www.w3.org/2000/svg";
 const BTN = { "OCT-": 0, "OCT+": 1, FX: 2, SEL: 3, ENV: 4, LFO: 5, EDIT: 6, GLO: 7, HOME: 8, SAVE: 9, ARP: 10, SEQ: 11, PLAY: 12, REC: 13 };
 const ENC = { SELECT: 0, ALGORITHM: 1, KNOB1: 2, KNOB2: 3, KNOB3: 4, KNOB4: 5, PRESETS: 6 };
