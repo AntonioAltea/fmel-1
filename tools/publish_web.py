@@ -16,6 +16,7 @@ SITE/instalar/   the installer's first address (Spanish): a redirect to install/
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -65,9 +66,11 @@ def main():
     shutil.copytree(emu / "img", site / "img", dirs_exist_ok=True)
     for f in ("index.html", "smk37.html"):
         (site / f).write_text(head((emu / f).read_text(), "style/mel.css"))
-    (inst / "index.html").write_text(head((a.install_from / "index.html").read_text(), "../style/mel.css"))
-    for f in ("install.js", "fm1ota.js", "fm1pkg.js"):
-        shutil.copy2(a.install_from / f, inst / f)
+    tag = hashlib.sha256(b"".join((a.install_from / f).read_bytes() for f in ("install.js", "fm1ota.js", "fm1pkg.js"))).hexdigest()[:10]
+    (inst / "index.html").write_text(head((a.install_from / "index.html").read_text(), "../style/mel.css")
+                                     .replace('src="install.js"', f'src="install.js?v={tag}"'))
+    for f in ("install.js", "fm1ota.js", "fm1pkg.js"):   # (?v=: a browser's old copy of a module is never used with a new page)
+        (inst / f).write_text(re.sub(r'from "\./(fm1\w+\.js)"', rf'from "./\1?v={tag}"', (a.install_from / f).read_text()))
     ver = a.version or subprocess.run(["git", "-C", str(SRC), "describe", "--tags", "--always", "--dirty"],
                                       capture_output=True, text=True).stdout.strip() or "dev"
     meta = {"version": ver, "packages": {}}
