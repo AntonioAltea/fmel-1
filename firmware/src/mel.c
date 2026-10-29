@@ -965,6 +965,21 @@ static void buttons(void)
 #endif
     if (b & (1u << BTN_OCT_DOWN)) octave(-1);
     if (b & (1u << BTN_OCT_UP)) octave(1);
+    {                                           /* OCT- and OCT+ held 5 s: the USB rescue (the update mode the SMK-37's
+                                                 * other firmwares open the same way), as if it had failed to start */
+        static uint32_t t_both;
+        uint32_t both = (1u << BTN_OCT_DOWN) | (1u << BTN_OCT_UP);
+        if ((fm1_in.buttons & both) != both) t_both = 0;
+        else if (!t_both) t_both = fm1_ms ? fm1_ms : 1u;
+        else if (fm1_ms - t_both >= 5000u) {
+#if !defined(DINGHY_HOST) && !defined(DINGHY_WEB)
+            bootguard.failed = 1u;              /* (bootguard_begin: a second failed start -> the rescue) */
+            bootguard.pending = 1u;
+            fm1_reboot();
+#endif
+            t_both = 0;
+        }
+    }
     if (b & (1u << BTN_HOME)) {                 /* HOME: to PLAY; there, the next sound */
         if (PG_GROUP[page] == G_PLAY) to_sound((PV(P_SOUND) + 1) % (int32_t)MEL_NSETS);   /* (round and round) */
         else go_group(G_PLAY);
