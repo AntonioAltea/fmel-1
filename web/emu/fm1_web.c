@@ -6,7 +6,8 @@
  * encoders, MASTER, MIDI) and reads back the screen, the LEDs and the saved settings.
  * The idea (the device clock driven by the audio the worklet asks for) is X0X's / Felucca's / FoMni's
  * web/emu (GPL-3.0). Not here: USB, the updater, the flash (but for the settings, kept by the page).
- *   web/emu/build.sh  ->  build/emu/{mel.wasm, index.html, worklet.js} */
+ * With BOARD_SMK37 it is a fake SMK-37 (smk37.html): the 37 keys with velocity, the pads, faders, wheels and pedal.
+ *   web/emu/build.sh  ->  build/emu/{mel.wasm, mel-smk37.wasm, index.html, smk37.html, worklet.js} */
 #include <stdint.h>
 
 #ifndef APP_NAME
@@ -22,7 +23,36 @@
 #include "libc.c"                               /* memset / memcpy: there is no libc here either */
 
 static volatile uint32_t fm1_ms;
+#if BOARD_SMK37
+/* the SMK-37 (hal/smk_input.h's API, as tests/host.c fakes it) */
+#define FM1_NKEY 37u
+#define SMK_KEY_F3 5u
+#define WEB_NENC 8u
+static struct {
+    uint32_t notes, buttons, frames, adc_ok, adc_miss;
+    uint64_t keys;
+    uint8_t key_vel[FM1_NKEY], fader[4];
+    uint16_t wheel[2], pedal, batt, pad_raw[16], pad_base[16];
+} fm1_in = {.wheel = {535, 620}, .pedal = 1000, .fader = {127, 127, 127, 100}};
+static uint8_t smk_store_cleared, smk_trim_ok __attribute__((unused));
+static uint32_t smk_jedec __attribute__((unused));
+static uint8_t smk_pad_events;
+static int32_t web_q[2][64];                    /* 0: pad events, 1: outer keys (key << 8 | velocity, 0 = let go) */
+static uint32_t web_qw[2], web_qr[2];
+static void web_qput(int i, int32_t v) { if (web_qw[i] - web_qr[i] < 64u) web_q[i][web_qw[i]++ % 64u] = v; }
+static int32_t web_qtake(int i) { return web_qr[i] == web_qw[i] ? -1 : web_q[i][web_qr[i]++ % 64u]; }
+static int32_t smk_pad_take(void) { return web_qtake(0); }
+static int32_t smk_extkey_take(void) { return web_qtake(1); }
+static uint32_t padled_rgb[16];                 /* r << 16 | g << 8 | b */
+static void padled_set(uint32_t pad, uint8_t r, uint8_t g, uint8_t b) { if (pad < 16u) padled_rgb[pad] = (uint32_t)r << 16 | (uint32_t)g << 8 | b; }
+static void padled_flush(void) {}
+static void fm1_irq_off(void) {}
+static void fm1_irq_on(void) {}
+static void fm1_led_key_glow(uint32_t id, int on) { (void)id; (void)on; }
+#else
+#define WEB_NENC 7u
 static struct { uint32_t notes, buttons; } fm1_in;
+#endif
 static uint32_t web_pressed, web_released;
 static uint32_t fm1_input_edges(uint32_t *released)
 {
@@ -32,8 +62,8 @@ static uint32_t fm1_input_edges(uint32_t *released)
     return p;
 }
 static uint32_t fm1_input_note_edges(void) { return 0; }
-static int32_t web_enc_acc[7];
-static int32_t fm1_enc_take(uint32_t e) { int32_t d = web_enc_acc[e % 7u]; web_enc_acc[e % 7u] = 0; return d; }
+static int32_t web_enc_acc[WEB_NENC];
+static int32_t fm1_enc_take(uint32_t e) { int32_t d = web_enc_acc[e % WEB_NENC]; web_enc_acc[e % WEB_NENC] = 0; return d; }
 static uint32_t web_led[2];                     /* bit id: buttons 0..13, keys 14..40 */
 static void fm1_led_key(uint32_t id, int on)
 {
@@ -121,6 +151,13 @@ static void run_ms(void)
     static int32_t blk[2u * HALF_FRAMES];
     uint32_t i;
     fm1_ms++;
+#if BOARD_SMK37
+    fm1_in.frames++;
+    {                                           /* the volume: the fourth fader (SMK_MASTER_FADER), as platform.c's curve */
+        uint32_t k = (uint32_t)fm1_in.fader[3] * 1023u / 127u;
+        master_q12 = (int32_t)((k * k) >> 8);
+    }
+#endif
     app_loop();
     owed += FS;                                 /* the frames this millisecond is worth, in blocks as the ISR renders */
     while (owed >= 1000u * HALF_FRAMES) {
@@ -152,13 +189,34 @@ EXPORT void web_render(uint32_t n)              /* n frames (<= 1024) into out_l
     }
 }
 EXPORT void web_keys(uint32_t mask) { fm1_in.notes = mask & 0x7FFFFFFu; }
+#if BOARD_SMK37
+EXPORT void web_keys37(uint32_t lo, uint32_t hi, uint32_t vel)   /* the 37 keys (bit 0 = C3); new ones at vel */
+{
+    uint64_t now = ((uint64_t)hi << 32 | lo) & ((1ull << FM1_NKEY) - 1u), was = fm1_in.keys;
+    uint32_t k;
+    vel = vel < 1u ? 1u : vel > 127u ? 127u : vel;
+    for (k = 0; k < FM1_NKEY; k++) {
+        uint32_t on = (uint32_t)(now >> k & 1u);
+        if (on == (uint32_t)(was >> k & 1u)) continue;
+        if (on) fm1_in.key_vel[k] = (uint8_t)vel;
+        if (k < SMK_KEY_F3 || k >= SMK_KEY_F3 + 27u) web_qput(1, (int32_t)(k << 8 | (on ? vel : 0u)));
+    }
+    fm1_in.keys = now;
+    fm1_in.notes = (uint32_t)(now >> SMK_KEY_F3) & 0x7FFFFFFu;
+}
+EXPORT void web_pad(uint32_t p, uint32_t vel) { web_qput(0, (int32_t)((p & 15u) << 8 | (vel & 0xFFu))); }
+EXPORT void web_fader(uint32_t f, uint32_t v) { fm1_in.fader[f & 3u] = (uint8_t)(v > 127u ? 127u : v); }
+EXPORT void web_wheel(uint32_t w, uint32_t raw) { fm1_in.wheel[w & 1u] = (uint16_t)(raw > 1023u ? 1023u : raw); }
+EXPORT void web_pedal(uint32_t raw) { fm1_in.pedal = (uint16_t)(raw > 1023u ? 1023u : raw); }
+EXPORT uint32_t *web_pads(void) { return padled_rgb; }
+#endif
 EXPORT void web_button(uint32_t id, uint32_t down)
 {
-    uint32_t bit = 1u << (id & 15u);
+    uint32_t bit = 1u << (id & 31u);
     if (down) { fm1_in.buttons |= bit; web_pressed |= bit; }
     else { fm1_in.buttons &= ~bit; web_released |= bit; }
 }
-EXPORT void web_enc(uint32_t id, int32_t n) { web_enc_acc[id % 7u] += n; }
+EXPORT void web_enc(uint32_t id, int32_t n) { web_enc_acc[id % WEB_NENC] += n; }
 EXPORT void web_battery(uint32_t v) { web_batt = v; }
 EXPORT void web_master(uint32_t v)              /* 0..1023 as the ADC reads it; the curve as platform.c's */
 {
