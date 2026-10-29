@@ -141,6 +141,7 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
       <button id="install" disabled><span data-lang="en">Install FMEL-1</span><span data-lang="es">Instalar FMEL-1</span></button>
       <button id="resume" class="secondary" hidden><span data-lang="en">Finish the install</span><span data-lang="es">Terminar la instalación</span></button>
     </div>
+    <p id="installwhy" class="muted" role="status"></p>
     <progress id="bar" max="100" value="0" hidden aria-label="Install progress"></progress>
     <p id="status" role="status" aria-live="polite"></p>
   </section>
@@ -169,6 +170,7 @@ html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: no
       y elígelo aquí. Solo se acepta el archivo oficial sin modificar.</p>
     <div class="row"><input type="file" id="stockfile" accept=".fwsc" aria-label="FM-1.fwsc">
       <button id="stock" class="secondary" disabled><span data-lang="en">Install the official V15</span><span data-lang="es">Instalar el V15 oficial</span></button></div>
+    <p id="stockwhy" class="muted" role="status"></p>
     <p class="muted" data-lang="en">Coming from another unofficial firmware, some of their installers offer
       <a href="https://quixotic7.github.io/TransitFM1/" rel="noopener">TransitFM1</a> as a safer stop than V15; FMEL-1 installs over it as over V15.</p>
     <p class="muted" data-lang="es">Si vienes de otro firmware no oficial, algunos de sus instaladores ofrecen

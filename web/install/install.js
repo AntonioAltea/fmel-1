@@ -41,6 +41,12 @@ const M = {                                     // what the page says, by langua
     askStock: () => "Install the official V15 firmware? Don't unplug the FM-1 until the page says «Done».",
     notReady: () => "The FM-1 is no longer ready to install: look for it again.",
     noResume: () => "Could not finish: unplug it, plug it in again and look for the FM-1 again.",
+    needAck: () => "To enable the button: tick the box in step 2.",
+    needFind: () => "To enable the button: press «Find my FM-1» (step 3).",
+    needFile: () => "To enable the button: choose FM-1.fwsc.",
+    needPkg: () => "The FMEL-1 package is not ready (step 3).",
+    inLoader: () => "The FM-1 is in update mode: finish that first (step 3).",
+    cantHere: () => "Not over what the FM-1 runs now (step 3 says why).",
   },
   es: {
     pkgChecking: () => "Comprobando el paquete…",
@@ -74,6 +80,12 @@ const M = {                                     // what the page says, by langua
     askStock: () => "¿Instalar el firmware oficial V15? No desconectes el FM-1 hasta que la página diga «Hecho».",
     notReady: () => "El FM-1 ya no está listo para instalar: búscalo otra vez.",
     noResume: () => "No he podido terminar: desconecta, vuelve a conectar y busca el FM-1 otra vez.",
+    needAck: () => "Para activar el botón: marca la casilla del paso 2.",
+    needFind: () => "Para activar el botón: pulsa «Buscar mi FM-1» (paso 3).",
+    needFile: () => "Para activar el botón: elige FM-1.fwsc.",
+    needPkg: () => "El paquete de FMEL-1 no está listo (paso 3).",
+    inLoader: () => "El FM-1 está en modo actualización: termina eso primero (paso 3).",
+    cantHere: () => "No encima de lo que lleva ahora el FM-1 (el paso 3 dice por qué).",
   },
 };
 const tr = (key, ...a) => M[lang][key](...a);
@@ -120,6 +132,12 @@ function refresh() {
   $("resume").disabled = !(mel && device && !busy && prechecked());
   $("connect").disabled = busy;
   $("stock").disabled = busy || !$("stockfile").files.length || !prechecked() || !device || isLoader(device);
+  // what each disabled button still waits for, the first thing missing
+  const why = (el, keys) => { const k = busy ? null : keys.find(Boolean); if (k) say(el, k, "muted"); else { delete shown[el]; $(el).textContent = ""; } };
+  why("installwhy", [!prechecked() && "needAck", !device && "needFind", !mel && "needPkg", device && isLoader(device) && "inLoader",
+                     device && !(isOfficialOrRescue(device) || isMel(device)) && "cantHere"]);
+  why("stockwhy", [!prechecked() && "needAck", !device && "needFind", device && isLoader(device) && "inLoader",
+                   !$("stockfile").files.length && "needFile"]);
 }
 
 // ---- the FM-1: what it runs decides what may happen
