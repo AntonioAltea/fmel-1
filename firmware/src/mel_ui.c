@@ -392,7 +392,6 @@ static void stage_layer(void)                   /* LAYER: the sound and the laye
     } else {
         rrect(140, 10, 76, 50, 6, C_BODY2);
         tx_c(178, 25, &F20, "OFF", C_INK2);
-        tx_c(178, 86, &F16, "SEL: A LAYER", C_INK2);
     }
     tx(8, 100, &F16, "A", C_INK);               /* the MIX: A .. B */
     tx(224, 100, &F16, "B", ly ? C_LAMPT : C_INK2);
@@ -513,13 +512,8 @@ static void stage_verb(void)                    /* REVERB: the sound, then the r
 }
 
 static void stage_eq(void)                      /* EQ: SPEAKER's curve, as its filters answer (MEL_SPK_DB: 20 Hz ..
-                                                 * 20 kHz across, 0 .. -24 dB down), its settings, what the one on does */
+                                                 * 20 kHz across, 0 .. -24 dB down), and its settings */
 {
-    static const char *const HELP[4][2] = {
-        {"As it is: for headphones,", "the line out and USB."},
-        {"The lows the speaker can't", "play out: louder, cleaner."},
-        {"Those lows out too, heard", "as their harmonics instead."},
-        {"The highs over the tapes'", "out: the hiss, CRUSH's grit."}};
     int32_t x, py = 0, k, v = PV(P_SPK), sum = 0;
     const uint8_t *db = MEL_SPK_DB + v * 224;
     for (k = 0; k <= 24; k += 12)
@@ -539,21 +533,12 @@ static void stage_eq(void)                      /* EQ: SPEAKER's curve, as its f
         tx(x + 3, 52, &F16, N_SPK[k], k == v ? RGB(255, 252, 244) : C_INK2);
         x += w + (224 - sum) / 3;
     }
-    tx(12, 74, &F16, HELP[v][0], C_INK);
-    tx(12, 90, &F16, HELP[v][1], C_INK);
 }
 
-static void stage_setup(void)                   /* SETUP: the settings, and what the one you touch does */
+static void stage_setup(void)                   /* SETUP: the settings, the one you touch marked */
 {
     static const char *const NAME[3] = {"LENGTH", "SCREEN", "COLOUR"};
-    static const char *const HELP[6][2] = {
-        {"Settings for the whole MEL.", "Turn a knob: it says here."},
-        {"A note sounds as long as", "you hold it (the tape loops)."},
-        {"As on a real M400: a tape", "runs out after 8 seconds."},
-        {"A clean, steady picture.", ""},
-        {"The screen as an old tape:", "scanlines, sway, tears, grain."},
-        {"The screen's colour, to go", "with your FM-1's buttons."}};
-    int32_t k, h = touched > 2u ? 0 : touched == 0u ? 1 + PV(P_LEN) : touched == 1u ? 3 + PV(P_LOOK) : 5;
+    int32_t k;
     for (k = 0; k < 3; k++) {
         int32_t y = 2 + k * 22;
         if ((uint32_t)k == touched) rrect(2, y + 4, 6, 8, 3, C_LAMP);
@@ -563,9 +548,6 @@ static void stage_setup(void)                   /* SETUP: the settings, and what
     }
     rrect(160, 47, 20, 14, 3, C_LAMP);          /* (the colour: its lamp and what runs) */
     rrect(184, 47, 20, 14, 3, C_OXIDE2);
-    cv_rect(8, 72, 224, 1, C_BODY2);
-    tx(12, 75, &F16, HELP[h][0], C_INK);
-    tx(12, 91, &F16, HELP[h][1], C_INK);
 }
 
 static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, the one playing lit */
@@ -573,7 +555,7 @@ static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, t
     static const char *const HEAD[NPLAY] = {"TONE", "PITCH", "ATK", "REL"};
     uint32_t k, i, own = (uint32_t)PV(P_PMODE), snd = (uint32_t)PV(P_SOUND);
     char s[12];
-    tx(8, 0, &F16, own ? "Each sound its own PLAY:" : "PLAY is one for all:", C_INK);
+    tx(8, 0, &F16, own ? "PLAY OWN" : "PLAY SHARED", C_INK);
     for (i = 0; i < NPLAY; i++)
         tx_c(100 + (int32_t)i * 41, 16, &F16, HEAD[i], C_INK2);
     for (k = 0; k < MEL_NSETS; k++) {
@@ -595,7 +577,7 @@ static void stage_arp(void)                     /* ARP: the mode, the arpeggio (
     uint32_t i, n = arp_n, lo = 127;
     tx_c(120, 4, &F24, ARP_MODE[PV(P_AMODE)], arp_on ? C_INK : C_INK2);
     if (!n) {
-        tx_c(120, 66, &F20, arp_on ? "PLAY A CHORD" : "ARP IS OFF: PRESS ARP", C_INK2);
+        if (!arp_on) tx_c(120, 66, &F20, "OFF", C_INK2);
         return;
     }
     if (n > 24u) n = 24u;

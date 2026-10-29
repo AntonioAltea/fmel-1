@@ -16,7 +16,7 @@
  *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; lit: in, dark: out)
  *   EDIT   EQ      SPEAKER: Felucca's SPEAKER EQ, FLAT, LOWCUT, BASS+, and HIGHCUT; held 0.6 s: FLAT (again, soon: as it was)
  *   GLO    SETUP   TEMPO (ARP, SEQ), TUNE (fine: to play along with others), LENGTH (a note: as long as held / 8 s,
- *                  as on the M400), SCREEN (the old-tape look / clean); the screen says what each one does.
+ *                  as on the M400), SCREEN (the old-tape look / clean), COLOUR.
  *          SOUNDS  GLO again: PLAY OWN (each sound its own PLAY) / SHARED (one for all); every sound's PLAY, a table
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
  *   SEQ    SEQ     16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING; PLAY start / stop, REC record
@@ -776,6 +776,11 @@ static void reel_idle(void)                     /* between clicks: no faster tha
 
 static void go_group(uint32_t g)                /* a section's button: its page, or (in it) its next page */
 {
+    if (g != G_SEQ && seq_rec && !seq_play) {   /* step recording stays on SEQ's page: leaving it, REC goes off (else
+                                                 * SELECT, a rest there, would never reach LAYER) */
+        seq_rec = 0;
+        chord_open = 0;
+    }
     if (PG_GROUP[page] == g)
         page = G_FIRST[g] + (page - G_FIRST[g] + 1u) % G_COUNT[g];
     else
@@ -969,7 +974,7 @@ static void buttons(void)
     if (b & (1u << BTN_SEL)) {
         t_sel = fm1_ms;
         sel_long = 0;
-        if (seq_rec && !seq_play) {             /* step recording: a rest (held: the pattern cleared) */
+        if (seq_rec && !seq_play && page == PG_SEQ) {   /* step recording: a rest (held: the pattern cleared) */
             uint32_t k;
             for (k = 0; k < 64u; k++)
                 pat_pre[k / 4u][k % 4u] = set.steps[k / 4u][k % 4u];
@@ -985,7 +990,8 @@ static void buttons(void)
         } else
             go_group(G_LAYER);
     }
-    if (seq_rec && !seq_play && fm1_in.buttons & (1u << BTN_SEL) && !sel_long && fm1_ms - t_sel > 1000u) {
+    if (seq_rec && !seq_play && page == PG_SEQ && fm1_in.buttons & (1u << BTN_SEL) && !sel_long
+        && fm1_ms - t_sel > 1000u) {
         uint32_t k, had = 0;
         sel_long = 1;
         if (pat_undoable()) {                   /* (again, soon: as it was) */
@@ -1028,7 +1034,7 @@ static void buttons(void)
     pend(BTN_FX, t_fx, fx_long, 600u, by_fx ? "FX IN" : "FX OUT");
     pend(BTN_EDIT, t_edit, edit_long, 600u, eq_undoable() ? "EQ BACK" : "EQ FLAT");
     pend(BTN_ENV, t_env, env_long, 600u, set.half ? "FULL SPEED" : "HALF SPEED");
-    if (seq_rec && !seq_play)
+    if (seq_rec && !seq_play && page == PG_SEQ)
         pend(BTN_SEL, t_sel, sel_long, 1000u, pat_undoable() ? "PATTERN BACK" : "CLEAR PATTERN");
     if (pend_what != was) redraw |= 1u;
 }
