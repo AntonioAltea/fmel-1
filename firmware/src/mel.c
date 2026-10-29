@@ -31,7 +31,7 @@
  *   SMK-37 (BOARD_SMK37, SMK37.md): the 37 keys with velocity, the pads, faders, wheels and pedal on top: mel_smk.h
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
- * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones
+ * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): block ADPCM (Erik37's format) at 11025 Hz, a root every 3-4 semitones
  * (the piano: VCSL's four keys at 22050 Hz, MEL_RATE, as 8-bit PCM: a kind 2 zone).
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
@@ -73,7 +73,8 @@ static const int16_t IMA_STEP[89] = {
     22385, 24623, 27086, 29794, 32767};
 static const int8_t IMA_IDX[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
 
-typedef struct {                                /* a head on a tape: the ADPCM decoder and the interpolator */
+typedef struct {                                /* a head on a tape: the decoder and the interpolator (block ADPCM: pred
+                                                 * and idx are its last two samples) */
     const mel_zone_t *z;
     uint32_t pos, frac;                         /* next sample to decode; where we are between s[1] and s[2], Q16 */
     int32_t pred, idx, gain, s[4];              /* the last four samples (4-point Hermite between the middle two) */
@@ -153,6 +154,11 @@ static const mel_zone_t *zone_of(uint32_t set, uint32_t note)
     return &MEL_ZONE[z0 + i];
 }
 
+/* a tape (kind 0): block ADPCM, the format of genkigenki's Erik37 (erk_codec.h, MPL-2.0): 32 samples in 17 bytes, a
+ * header (filter << 4 | shift), then 4-bit residuals, low nibble first: s = ((c1 s1 + c2 s2 + 32) >> 6) + q 2^shift */
+static const int8_t BLK_FILT[16][2] = {
+    {0, 0}, {60, 0}, {122, -60}, {115, -52}, {126, -63}, {124, -61}, {118, -58}, {108, -52},
+    {98, -55}, {88, -50}, {76, -46}, {60, -40}, {40, -36}, {16, -32}, {30, 0}, {-30, -24}};
 static int32_t adpcm_next(head_t *h)
 {
     const mel_zone_t *z = h->z;
@@ -162,6 +168,23 @@ static int32_t adpcm_next(head_t *h)
         p = (int32_t)(int8_t)MEL_DATA[z->off + h->pos] * 256;
         if (++h->pos >= z->n) h->pos = z->ls;
         return p;
+    }
+    if (z->kind == 0u) {                        /* block ADPCM; pred, idx: the last two samples */
+        const uint8_t *blk = &MEL_DATA[z->off + (h->pos >> 5) * 17u];
+        uint32_t i = h->pos & 31u, hd = blk[0];
+        b = blk[1u + (i >> 1)];
+        code = i & 1u ? b >> 4 : b & 15u;
+        p = ((BLK_FILT[hd >> 4][0] * h->pred + BLK_FILT[hd >> 4][1] * h->idx + 32) >> 6)
+            + ((int32_t)(code ^ 8u) - 8) * (1 << (hd & 15u));
+        h->idx = h->pred;
+        h->pred = p > 32767 ? 32767 : p < -32768 ? -32768 : p;
+        if (++h->pos >= z->n) {                 /* the loop: back to its start, with the checkpoint's state there */
+            uint32_t ck = MEL_CKS[z->ck + z->ls / MEL_CK];
+            h->pos = z->ls;
+            h->pred = (int16_t)(ck & 0xFFFFu);
+            h->idx = (int16_t)(ck >> 16);
+        }
+        return h->pred;
     }
     b = MEL_DATA[z->off + (h->pos >> 1)];
     code = h->pos & 1u ? b >> 4 : b & 15u;
@@ -198,7 +221,7 @@ static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
         ck = MEL_CKS[z->ck + k];
         h->pos = k * MEL_CK;
         h->pred = (int16_t)(ck & 0xFFFFu);
-        h->idx = (int32_t)(ck >> 16);
+        h->idx = z->kind ? (int32_t)(ck >> 16) : (int16_t)(ck >> 16);   /* (IMA: its step index; blocks: s2) */
     }
     h->frac = 0;
     h->gain = gain;
