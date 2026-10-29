@@ -34,8 +34,8 @@ So: share FMEL-1 freely, but don't sell it, nor anything with these tapes in it.
 
 The fifth sound, PIANO, is not a Mellotron tape: it is four keys of a Steinway B from Versilian Studios'
 [VCSL](https://github.com/sgossner/VCSL) (public domain, CC0), as [SLOOP](https://github.com/isod89/sloop-fm1) cut
-them, played clean: an octave up from the keys, 1 s of each at 22050 Hz, each key's own decay going on as it
-rings; about 44 KB.
+them, played clean: an octave up from the keys, 1 s of each at 22050 Hz as 8-bit PCM (cleaner than the tapes' ADPCM), each
+key's own decay going on as it rings; about 88 KB.
 
 To pack the tapes again (another selection, other lengths), fetch his originals (from his old site, via the Wayback
 Machine) and run the packer:

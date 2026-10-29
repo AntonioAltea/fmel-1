@@ -45,6 +45,8 @@ STEP = {"Cello": 4, "MkII_Flute": 6, "Vibes": 8, "Tenor_Sax": 4}   # sets with t
 SLOOP_PIANO = set()                                # sets made as SLOOP makes its piano (sloop_piano): every file a
                                                    # root, outside the budget, played by mel.c as SLOOP's SAMPLE engine
 FIXED_LEN = {"Piano": 1.0}                         # sets outside the budget, every file a root, this long (s) a root
+PCM8 = {"Piano"}                                   # sets stored as 8-bit PCM (kind 2), near full scale, their level in
+                                                   # the zone's gain: a clean sound's grain 45 dB down, not ADPCM's 28
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
 SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
@@ -314,18 +316,23 @@ def build(src, budget, step, rate, which):
         peak = max(np.abs(s).max() for _, s in segs)
         if peak > 0.95:
             raise SystemExit(f"{name}: peaks at {peak:.2f} at the common loudness; lower TARGET_RMS")
+        sc8 = 0.99 / peak if d in PCM8 else 1.0      # (8-bit: as loud as it can be stored, its gain brings it back)
         for i, (r, s) in enumerate(segs):
             s, ls = loop(s, zr)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
-            data, cks = ima_encode(pcm)
+            if d in PCM8:
+                p8 = np.clip(np.round(s * sc8 * 127), -127, 127).astype(np.int8)
+                data, cks = bytearray(p8.tobytes()), []
+            else:
+                data, cks = ima_encode(pcm)
             up = 12 * OCTAVE.get(d, 0)          # (an octave up: its zones' roots and ranges moved down)
             lo = max(0, roots[i - 1] + (r - roots[i - 1]) // 2 + 1 - up) if i else 0
             hi = r + (roots[i + 1] - r) // 2 - up if i + 1 < len(roots) else 127
             pk, dbs = decs[i]
             dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
-            lp, li = cks[ls // CK]                # (its loop's state: the checkpoint at ls, on the CK grid)
+            lp, li = cks[ls // CK] if cks else (0, 0)   # (its loop's state: the checkpoint at ls, on the CK grid)
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r - up, lo=lo, hi=hi,
-                                     sh=sh, kind=0, gain=32, lpred=lp, lidx=li, dk=dk,
+                                     sh=sh, kind=2 if d in PCM8 else 0, gain=round(32 / sc8), lpred=lp, lidx=li, dk=dk,
                                      d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
             out["ck"] += cks
@@ -428,7 +435,7 @@ def write(out, path, rate, per):
          f"#define MEL_CK {CK}u",
          f"#define MEL_NSETS {len(out['sets'])}u",
          f"#define MEL_NZONES {len(z)}u",
-         f"/* {len(z)} zones, the tapes' of {per} samples ({per / (rate >> SHIFT_ELSE):.2f} s), {len(data)} B of ADPCM, "
+         f"/* {len(z)} zones, the tapes' of {per} samples ({per / (rate >> SHIFT_ELSE):.2f} s), {len(data)} B of samples (ADPCM; 8-bit PCM: PCM8), "
          f"{4 * len(out['ck'])} B of checkpoints */",
          "static const char *const MEL_SET_NAME[MEL_NSETS] = {" + ", ".join(f'"{n}"' for n, _, _, _ in out["sets"]) + "};",
          "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _, _ in out["sets"]) + "};",

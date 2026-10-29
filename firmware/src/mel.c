@@ -32,7 +32,7 @@
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
  * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones
- * (the piano: SLOOP's, at 22050 Hz, MEL_RATE: four keys; a kind 1 zone).
+ * (the piano: VCSL's four keys at 22050 Hz, MEL_RATE, as 8-bit PCM: a kind 2 zone).
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
 #define SMK_MASTER_FADER 4                      /* (SMK-37: the fourth fader is the volume, not K1: mel_smk.h) */
@@ -43,7 +43,8 @@ typedef struct {
     uint32_t off, n, ls, ck;                    /* byte offset in MEL_DATA, samples, loop start, first checkpoint */
     uint8_t root, lo, hi;                       /* MIDI notes */
     uint8_t sh;                                 /* its rate: MEL_RATE >> sh (tape time stays in MEL_RATE samples) */
-    uint8_t kind;                               /* 0 a tape; 1 the piano, played as SLOOP's SAMPLE engine (LOFI KEYS) */
+    uint8_t kind;                               /* 0 a tape (ADPCM); 1 SLOOP's SAMPLE engine (LOFI KEYS); 2 a tape as
+                                                 * 8-bit PCM at gain / 32 (the piano: clean, its grain 45 dB down) */
     uint8_t gain;                               /* its level, Q5 */
     uint8_t lidx;                               /* the decoder's step index at the loop start */
     uint16_t dk, d1k, pk;                       /* a sound that dies away (dk 0: it does not): its decay per tape
@@ -151,8 +152,17 @@ static const mel_zone_t *zone_of(uint32_t set, uint32_t note)
 static int32_t adpcm_next(head_t *h)
 {
     const mel_zone_t *z = h->z;
-    uint32_t b = MEL_DATA[z->off + (h->pos >> 1)], code = h->pos & 1u ? b >> 4 : b & 15u;
-    int32_t step = IMA_STEP[h->idx], vd = step >> 3, p;
+    uint32_t b, code;
+    int32_t step, vd, p;
+    if (z->kind == 2u) {                        /* 8-bit PCM: a byte a sample */
+        p = (int32_t)(int8_t)MEL_DATA[z->off + h->pos] * 256;
+        if (++h->pos >= z->n) h->pos = z->ls;
+        return p;
+    }
+    b = MEL_DATA[z->off + (h->pos >> 1)];
+    code = h->pos & 1u ? b >> 4 : b & 15u;
+    step = IMA_STEP[h->idx];
+    vd = step >> 3;
     if (code & 4u) vd += step;
     if (code & 2u) vd += step >> 1;
     if (code & 1u) vd += step >> 2;
@@ -174,12 +184,18 @@ static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
     uint32_t p, k, ck;
     t >>= z->sh;                                /* (in the zone's own samples from here) */
     p = t < z->n ? t : z->ls + (t - z->ls) % (z->n - z->ls);
-    k = p / MEL_CK;
-    ck = MEL_CKS[z->ck + k];
     h->z = z;
-    h->pos = k * MEL_CK;
-    h->pred = (int16_t)(ck & 0xFFFFu);
-    h->idx = (int32_t)(ck >> 16);
+    if (z->kind == 2u) {                        /* (PCM: straight there) */
+        h->pos = p;
+        h->pred = 0;
+        h->idx = 0;
+    } else {
+        k = p / MEL_CK;
+        ck = MEL_CKS[z->ck + k];
+        h->pos = k * MEL_CK;
+        h->pred = (int16_t)(ck & 0xFFFFu);
+        h->idx = (int32_t)(ck >> 16);
+    }
     h->frac = 0;
     h->gain = gain;
     h->dg = ONE;
@@ -253,7 +269,7 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     int32_t a = h->s[0], b = h->s[1], c = h->s[2], d = h->s[3], g = (h->gain * gm) >> 15;
     step >>= sh;                                /* (the zone's own samples from here) */
     t >>= sh;
-    if (h->z->kind) {
+    if (h->z->kind == 1u) {
         int32_t lp = h->lp, gz = h->z->gain;
         g = (g * (h->dg >> 9)) >> 15;
         for (i = 0; i < n; i++) {
@@ -284,6 +300,8 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     }
     if (h->z->dk)
         g = (g * (h->dg >> 9)) >> 15;
+    if (h->z->kind == 2u)
+        g = (g * h->z->gain) >> 5;              /* (PCM: stored near full scale, its level here) */
     for (i = 0; i < n; i++) {
         int32_t t, c1, c2, c3, y;
         frac += step;
@@ -345,12 +363,12 @@ static void voice_sub(uint32_t vi, int32_t *mix, int32_t g16, int32_t drift, int
     if (voice[vi].layer) {                      /* the sound and the layer, MIX between them */
         uint32_t ln = layer_note(note, voice[vi].loct);
         ran = head_run(&voice[vi].h, step_of(((int32_t)note - voice[vi].h.z->root) * 1600 + c16 +
-                                             (voice[vi].h.z->kind ? pno16 : 0)), acc, SUB, p_ga, tpos[note]);
+                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc, SUB, p_ga, tpos[note]);
         head_run(&voice[vi].h2, step_of(((int32_t)ln - voice[vi].h2.z->root) * 1600 + c16 + p_ldet16 +
-                                        (voice[vi].h2.z->kind ? pno16 : 0)), acc, SUB, p_gb, tpos[note]);
+                                        (voice[vi].h2.z->kind == 1u ? pno16 : 0)), acc, SUB, p_gb, tpos[note]);
     } else
         ran = head_run(&voice[vi].h, step_of(((int32_t)note - voice[vi].h.z->root) * 1600 + c16 +
-                                             (voice[vi].h.z->kind ? pno16 : 0)), acc, SUB, 32767, tpos[note]);
+                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc, SUB, 32767, tpos[note]);
     da = (a1 - a0) / (int32_t)SUB;
     for (a = a0, i = 0; i < SUB; i++, a += da)
         mix[i] += (acc[i] * (a >> 9)) >> 15;
