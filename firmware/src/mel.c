@@ -27,7 +27,7 @@
  *          held    ENV held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
  *                  octave down and twice as long, its wow and flutter slower; it slows down and speeds up in ~0.4 s
  *   OCT- OCT+   SAVE (it also saves itself)
- *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = vibrato, pitch bend = the motor (+-2 semitones)
+ *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = the vibrato's DEPTH, pitch bend = the motor (+-2 semitones)
  *   SMK-37 (BOARD_SMK37, SMK37.md): the 37 keys with velocity, the pads, faders, wheels and pedal on top: mel_smk.h
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
@@ -608,7 +608,7 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, MEL_NSETS, 0, 1}, {0, 100, 50, 1}, {-1, 1, 0, 1}, {0, 30, 0, 1},
     {0, 100, 28, 1}, {0, 100, 22, 1}, {0, 100, 22, 1}, {0, 100, 12, 1},
     {0, 100, 18, 1}, {0, 100, 0, 1}, {0, 100, 30, 1}, {0, 100, 0, 1},
-    {0, 100, 60, 1}, {0, 100, 50, 1}, {0, 100, 70, 1}, {0, 100, 100, 1},   /* (VIBRATO: 3 Hz, on) */
+    {0, 100, 80, 1}, {0, 100, 50, 1}, {0, 100, 70, 1}, {0, 100, 100, 1},   /* (VIBRATO: 5.5 Hz, on) */
     {0, 100, 38, 1}, {0, 100, 35, 1}, {0, 100, 45, 1}, {0, 100, 0, 1},
     {0, 100, 55, 1}, {0, 100, 45, 1}, {0, 1, 1, 1}, {0, 100, 34, 1},
     {0, 3, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1},

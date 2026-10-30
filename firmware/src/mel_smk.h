@@ -12,7 +12,7 @@
  *   faders    as the signal runs: MIX (up: the top row, down: the bottom), LOFI and FX (how much), VOLUME. Where a
  *             fader is, is the value (the four are not saved)
  *   knobs     K5..K8 the page's four (the plate); K1 TONE, K2 SELECT (the hand on the reel), K3 TEMPO, K4 PITCH
- *   wheels    pitch = the motor (+-2 semitones), mod = the vibrato; the PEDAL jack = sustain (either polarity)
+ *   wheels    pitch = the motor (+-2 semitones), mod = the vibrato's DEPTH (up to all of it); the PEDAL jack = sustain (either polarity)
  *   < >       the section's pages, back and on
  *   FADER BANK  UNDO: the last knob or pad change back (again: redone); lit while there is one
  *   KNOB BANK   held at power-on: the panel check */

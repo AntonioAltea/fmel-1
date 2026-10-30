@@ -41,7 +41,7 @@ Every control on the surface does one thing, always. A light means something is 
 | K5..K8 | the page's four knobs (the plate on the screen) |
 | < > | the section's pages, back and on |
 | FADER BANK | UNDO: the last knob or pad change back; again: redone (lit while there is one) |
-| Pitch wheel / mod wheel | the motor (+-2 semitones) / the vibrato |
+| Pitch wheel / mod wheel | the motor (+-2 semitones) / the vibrato's DEPTH (up to all of it) |
 | PEDAL jack | sustain (either kind of pedal) |
 | PATCH, SCALE, NOTE REPEAT, FX, PARA, GLOBE, CHORD, ARP, SEQ, SEQ PLAY, SEQ REC, BT, OCTAVE- / + | the FM-1's HOME, SEL, LFO, FX, EDIT, GLO, ENV, ARP, SEQ, PLAY, REC, SAVE, OCT- / + |
 | KNOB BANK held at power-on | the panel check |

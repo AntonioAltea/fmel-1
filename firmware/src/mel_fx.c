@@ -331,10 +331,10 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     int32_t vmix = f_vmix, vdep = f_vdep, vtk = f_vtone >> 1, emix = f_emix, efb = f_efb, etk = f_etone >> 1;
     int32_t rfb = f_rfb, rdamp = f_rdamp, rmix = f_rmix, rtype = f_rtype, e_tgt = f_etime, k;
     uint32_t i, vinc = (uint32_t)f_vinc;
-    if (p_mod) {                                /* the mod wheel: vibrato, whatever the page says */
-        int32_t m = p_mod * 258;
-        if (vmix < m) vmix = m;
-        if (vdep < p_mod / 3) vdep = p_mod / 3;
+    if (p_mod) {                                /* the mod wheel: the vibrato deeper, from the page's DEPTH (down) to all
+                                                 * of it (up), all wet; RATE and TONE the page's */
+        vmix = 32767;
+        vdep += (88 - vdep) * p_mod / 127;
     }
     for (i = 0; i < n; i++) {
         int32_t x = mix[i], y, y0, l, r, in, wl, wr, dry = 0, wetl = 32767 - bl, wetf = 32767 - bf;
