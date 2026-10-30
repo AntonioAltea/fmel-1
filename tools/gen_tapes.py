@@ -52,6 +52,8 @@ PCM8 = {"MkII_Flute", "Tenor_Sax"}                # sets stored as 8-bit PCM (ki
 DARKEN = {"Piano"}                                 # sets that darken as they ring (their zones' brightness floor: lpred)
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
 SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
+PICK_CLEAN = {"MkII_Flute"}                        # sets whose roots may move a semitone to a recording without dropouts
+                                                   # (the flute's A#4 drops out inside its loop; the others as heard)
 UPCUT = {"MkII_Flute"}                             # sets whose notes well above their tape's root play through its band's
                                                    # low-pass (mel.c: the hiss and breath sped up above it; heard on the
                                                    # flute over F5, blind test 2026-10-30)
@@ -119,6 +121,20 @@ def onset(x, rel=0.08):
 
 def rms(x):
     return float(np.sqrt(np.mean(x * x)) + 1e-12)
+
+
+def dropouts(path):
+    """how much a recording drops out where a tape is looped (0.3 .. 1.8 s from its onset): its loudness every 10 ms
+    under 0.8 of its own median over 0.2 s, summed (the Mellotron tapes have them: the flute's A#4 one at 1.27 s,
+    inside its loop, heard once a turn)"""
+    x = read_wav(path)
+    o = onset(x)
+    s = x[o + int(0.3 * SRC_RATE):o + int(1.8 * SRC_RATE)]
+    w = SRC_RATE // 100
+    env = np.sqrt(np.convolve(s * s, np.ones(w) / w, mode="valid"))[::w] + 1e-9
+    k = 10
+    med = np.array([np.median(env[max(0, i - k):i + k + 1]) for i in range(len(env))])
+    return float(np.sum(np.maximum(0, 0.8 - env / med)))
 
 
 def level_tail(x, rate):
@@ -349,6 +365,14 @@ def build(src, budget, step, rate, which):
             roots.append(hi)
         if d in SLOOP_PIANO or d in FIXED_LEN:
             roots = sorted(files)
+        elif d in PICK_CLEAN:                    # each root the cleanest of its key and its two neighbours (dropouts)
+            pick = []
+            for r in roots:                      # (only where the key's own drops out clearly and a neighbour is
+                own = dropouts(files[r]) if r in files else 9.0   # less than half as bad: the rest stays as heard)
+                cand = [c for c in (r - 1, r + 1) if c in files and c not in pick]
+                best = min(cand, key=lambda c: dropouts(files[c]), default=r)
+                pick.append(best if r not in files or (own > 0.15 and dropouts(files[best]) < own / 2) else r)
+            roots = pick
         plan.append((name, files, roots))
     shares = [0.0 if d in SLOOP_PIANO or d in FIXED_LEN else DECAYS.get(d, 1.0) for d, _ in sets]
     bps = [1.0 if d in PCM8 else BLKB / BLK * (1 + 8 / CK) for d, _ in sets]   # bytes a sample (+ the checkpoints)
