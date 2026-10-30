@@ -25,7 +25,7 @@
  * Integers only. The main loop sets the f_ values (apply()); the screen reads the fxv_ values. */
 
 static volatile int32_t f_wow, f_flut, f_sat, f_hiss, f_age, f_drop, f_crush, f_tone;
-static volatile int32_t f_vinc, f_vdep, f_vtone, f_vmix;
+static volatile int32_t f_vinc, f_vdep, f_vtone, f_vmix, f_vdk;   /* (f_vdk: DEPTH as the knob has it, 0..100) */
 static volatile int32_t f_etime, f_efb, f_etone, f_emix;
 static volatile int32_t f_rfb, f_rdamp, f_rtype, f_rmix;
 static volatile int16_t f_hg[8];                /* HALL: its lines' gains (Q14), for SIZE (rv_hall_gains) */
@@ -332,9 +332,12 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     int32_t rfb = f_rfb, rdamp = f_rdamp, rmix = f_rmix, rtype = f_rtype, e_tgt = f_etime, k;
     uint32_t i, vinc = (uint32_t)f_vinc;
     if (p_mod) {                                /* the mod wheel: the vibrato deeper, from the page's DEPTH (down) to all
-                                                 * of it (up), all wet; RATE and TONE the page's */
-        vmix = 32767;
-        vdep += (88 - vdep) * p_mod / 127;
+                                                 * of it (up), and wetter, to all wet; on DEPTH's own law (as the knob:
+                                                 * fine where it is little; straight in samples it was nearly all there
+                                                 * at the first touch); RATE and TONE the page's */
+        int32_t dk = f_vdk + (100 - f_vdk) * p_mod / 127;
+        vdep = dk * dk * 88 / 10000;
+        vmix += (32767 - vmix) * p_mod / 127;
     }
     for (i = 0; i < n; i++) {
         int32_t x = mix[i], y, y0, l, r, in, wl, wr, dry = 0, wetl = 32767 - bl, wetf = 32767 - bf;

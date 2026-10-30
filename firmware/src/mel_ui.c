@@ -436,7 +436,7 @@ static uint32_t tape_run;                       /* the cassette: how far its tap
 static void stage_tape(void)                    /* TAPE: a cassette (drawn), a snake its tape: running with the tapes
                                                  * (wow), quivering (flutter); stopped, its tongue flicking */
 {
-    int32_t fl = ui_lv && !by_lofi ? fxv_flut / 500 : 0;
+    int32_t fl = ui_lv && !by_lofi ? fxv_flut * (f_lofi_amt >> 5) / (500 * 1023) : 0;   /* (as much as LOFI is in: the SMK's fader) */
     uint32_t f = ui_lv ? 2u + tape_run / 16000u % 6u : fm1_ms / 400u % 2u;
     spr_pix(&SPR_TAPE, f, 120, 54 + (fl > 2 ? 2 : fl < -2 ? -2 : fl), 332, 0);
 }
@@ -659,9 +659,13 @@ static void tape_look(uint32_t h)   /* (the wow sways it slowly, the flutter sha
     static uint16_t row[240];
     int32_t y, x, amp = ui_lv ? PV(P_WOW) * 3 / 100 : 0, off = ui_lv ? fxv_wow / 160 : 0, drop = fxv_drop;
     int32_t jit = ui_lv ? (fxv_flut + (fxv_flut < 0 ? -150 : 150)) / 300 : 0;   /* the flutter: a nervous shake */
+    int32_t lf = by_lofi ? 0 : f_lofi_amt;     /* (as much as LOFI is in: the SMK's LOFI fader; out: no sway, no
+                                                 * tears, no grain, a clean tape) */
     uint32_t i;
     if (!PV(P_LOOK)) return;
-    if (by_lofi) amp = off = drop = jit = 0;   /* (LOFI out: no sway, no tears, no grain: a clean tape) */
+    amp = amp * lf / 32767;
+    off = off * lf / 32767;
+    jit = jit * lf / 32767;
     off = off > 4 ? 4 : off < -4 ? -4 : off;
     off += jit > 3 ? 3 : jit < -3 ? -3 : jit;
     for (y = 0; y < (int32_t)h; y++) {
@@ -674,7 +678,7 @@ static void tape_look(uint32_t h)   /* (the wow sways it slowly, the flutter sha
         if (y & 1)                              /* scanlines */
             for (x = 0; x < 240; x++) p[x] = dim(p[x]);
     }
-    if (ui_lv && drop > 2000) {                 /* a dropout: the tracking slips */
+    if (ui_lv && drop > 2000 && (int32_t)(urnd() & 32767u) < lf) {   /* a dropout: the tracking slips */
         int32_t y0 = (int32_t)(urnd() % h), hb = 3 + drop / 3000, s2 = 6 + (int32_t)(urnd() % 14u);
         for (y = y0; y < y0 + hb && y < (int32_t)h; y++) {
             uint16_t *p = &cv_px[(uint32_t)y * 240u];
@@ -682,7 +686,7 @@ static void tape_look(uint32_t h)   /* (the wow sways it slowly, the flutter sha
             for (x = 0; x < 240; x++) p[x] = (x + y) & 3 ? row[x] : swap16(C_WHITE);
         }
     }
-    for (i = 0; !by_lofi && i < (uint32_t)PV(P_AGE) * 3u; i++) {   /* AGE: grain */
+    for (i = 0; i < (uint32_t)(PV(P_AGE) * 3 * lf / 32767); i++) {   /* AGE: grain */
         uint32_t at = (urnd() >> 8) % (240u * h);
         cv_px[at] = dim(dim(cv_px[at]));
     }

@@ -705,6 +705,7 @@ static void apply(void)                         /* the parameters -> the sound *
     f_crush = PV(P_CRUSH);
     f_vinc = (int32_t)MEL_LFO[PV(P_VRATE)];
     f_vdep = d * d * 88 / 10000;
+    f_vdk = d;
     f_vtone = MEL_TONE[PV(P_VTONE)];
     f_vmix = PV(P_VMIX) * 327;
     f_etime = (echo_ms(PV(P_ETIME)) * 441 / 10) << 8;
