@@ -22,12 +22,14 @@
  * sample is a closed key; two in a row keep one stray sample from playing a note), a release after
  * FM1_DEB_RELEASE frames open in a row (~9 ms): a contact bouncing open on the way down, or chattering
  * on the way up, never ends a note early or plays it twice.
- * Encoders: quadrature decoder (2-sample filter, + = clockwise) with detent counting, as
- * Felucca 1.0 reworked it (its #23, "knobs skipping or jumping"): an FM-1 detent is one full
+ * Encoders: quadrature decoder (+ = clockwise) with detent counting, as Felucca reworked it (its #23,
+ * "knobs skipping or jumping", and #126: no 2-sample filter, every frame's state counts; the filter
+ * lost whole clicks past ~60 clicks/s and a flick counted next to nothing): an FM-1 detent is one full
  * quadrature cycle (4 transitions) and the knob rests in one state, the one seen at power-on
  * (relearned only after FM1_REST_FRAMES, ~1 s, parked elsewhere). Steps are emitted on arriving
  * back at it, the net transitions rounded to whole cycles (>= 2 counts one: a lost transition or
- * two is forgiven; a two-state jump counts on in the direction of travel). One click = one step
+ * two is forgiven; a two-state jump counts on in the direction of travel, from the detent the way of
+ * a click in the last FM1_ENC_GO frames). One click = one step
  * at any speed; bounce and back-and-forth cancel out. Never a second rest state: a knob held
  * mid-click taught the complement as a rest and every click counted twice, and short mid-click
  * pauses of a slow turn taught the mid states and the knob went dead (the 0.9 learner).
@@ -60,6 +62,7 @@
 #define FM1_SETTLE_US 10u
 #endif
 #define FM1_REST_FRAMES 900u      /* ~1 s still off the detent state: that is the detent (power-on) */
+#define FM1_ENC_GO 20u            /* a 2-state jump from the detent goes on the way of a click this recent (~22 ms) */
 #define FM1_NCOL 11u
 #define FM1_NKEY 41u              /* ids: 0..13 buttons, 14..40 note keys */
 #define FM1_NENC 7u
@@ -96,6 +99,8 @@ static volatile struct {
     uint8_t enc_rest[FM1_NENC];  /* the detent state (0..3) */
     uint16_t enc_still[FM1_NENC]; /* frames since the last state change */
     int8_t enc_sub[FM1_NENC];    /* net transitions since the last rest state */
+    int8_t enc_dir[FM1_NENC];    /* the last click's way (+1 / -1) .. */
+    uint32_t enc_dfr[FM1_NENC];  /* .. and its frame */
     int16_t enc_steps[FM1_NENC]; /* + = clockwise */
     uint32_t frames;
 } fm1_in;
@@ -245,10 +250,9 @@ static void fm1__frame(void)
         uint32_t cur = ((fm1_in.raw[m[0]] >> m[1]) & 1u) << 1 | ((fm1_in.raw[m[2]] >> m[3]) & 1u);
         uint32_t idx;
         volatile int8_t *sub = &fm1_in.enc_sub[e];
-        if (cur != fm1_in.enc_last[e]) {
+        if (cur != fm1_in.enc_last[e]) {           /* (no 2-sample filter: every frame's state counts) */
             fm1_in.enc_last[e] = (uint8_t)cur;
             fm1_in.enc_still[e] = 0;
-            continue;
         }
         if (fm1_in.enc_prev[e] == 0xFF) {          /* first frame: the knob rests here */
             fm1_in.enc_prev[e] = (uint8_t)cur;
@@ -266,10 +270,11 @@ static void fm1__frame(void)
             (*sub)++;
         else if ((0x2814u >> idx) & 1u)
             (*sub)--;
-        else if (*sub > 0)                         /* two states in one sample: a fast turn, */
-            *sub = (int8_t)(*sub + 2);             /* the way it was going */
-        else if (*sub < 0)
-            *sub = (int8_t)(*sub - 2);
+        else {                                     /* two states in one sample: a fast turn, the way it was */
+            int32_t d = *sub > 0 ? 1 : *sub < 0 ? -1 :   /* going (on the detent: a click of the last FM1_ENC_GO */
+                        fm1_in.frames - fm1_in.enc_dfr[e] <= FM1_ENC_GO ? fm1_in.enc_dir[e] : 0;   /* frames) */
+            *sub = (int8_t)(*sub + 2 * d);
+        }
         fm1_in.enc_prev[e] = (uint8_t)cur;
         if (*sub > 100 || *sub < -100)
             *sub = 0;                              /* (never off the detent that long) */
@@ -277,6 +282,10 @@ static void fm1__frame(void)
             int32_t n = *sub < 0 ? -*sub : *sub;   /* or two forgiven (one click = 4 transitions) */
             n = n >= 2 ? (n + 2) / 4 : 0;
             fm1_in.enc_steps[e] = (int16_t)(fm1_in.enc_steps[e] + (*sub < 0 ? -n : n));
+            if (n) {
+                fm1_in.enc_dir[e] = (int8_t)(*sub < 0 ? -1 : 1);
+                fm1_in.enc_dfr[e] = fm1_in.frames;
+            }
             *sub = 0;
         }
     }

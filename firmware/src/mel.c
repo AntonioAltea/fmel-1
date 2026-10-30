@@ -846,15 +846,34 @@ static void changed(uint32_t what)              /* a parameter changed: to the s
 #include "mel_ui.c"
 
 /* encoders with a little acceleration: fast turns go further */
-static int32_t turn(uint32_t e)
+/* a knob's clicks, a fast turn of a wide value (range > 32 steps, not names) sped up, as Felucca's accel (ui_input.c,
+ * its #52), on sooner (Felucca's from 25 ms a click was slower than MEL's x3 under 50 ms): the speed is the time per
+ * click, ACC_RATE / ms -> 60 ms x2, 40 ms x3, 30 ms x4 .. x8 at most (x4 over a range up to 64). Only the longer of
+ * this read's and the last one's counts, and only while the turn goes on (both under ACC_GAP) one way: a slow turn, a
+ * turn's first two clicks, one quick click alone and a reversal are a step a click */
+#define ACC_GAP 62u
+#define ACC_RATE 120u
+static int32_t turn(uint32_t e, int32_t range)
 {
-    static uint32_t last[8];
-    int32_t d = fm1_enc_take(e);
-    if (d) {
-        if (fm1_ms - last[e] < 50u) d *= 3;
-        last[e] = fm1_ms;
+    static uint32_t t[8], ms[8];
+    static int8_t way[8];
+    int32_t d = fm1_enc_take(e), up = d > 0 ? 1 : -1;
+    uint32_t a, i, m = 1;
+    e &= 7u;
+    if (!d) return 0;
+    a = (uint32_t)(d < 0 ? -d : d);
+    i = (fm1_ms - t[e]) / a;                    /* ms a click, this read */
+    if (way[e] != up || i >= ACC_GAP)
+        i = 127u;                               /* a new turn, or the other way */
+    else if (range > 32 && ms[e] < ACC_GAP) {
+        m = ACC_RATE / (i > ms[e] ? i : ms[e] ? ms[e] : 1u);
+        a = range > 64 ? 8u : 4u;
+        m = m < 1u ? 1u : m > a ? a : m;
     }
-    return d;
+    t[e] = fm1_ms;
+    ms[e] = i ? i : 1u;
+    way[e] = (int8_t)up;
+    return d * (int32_t)m;
 }
 static int set_param(uint32_t pid, int32_t v)   /* clamped to its range: 1 if it moved */
 {
@@ -1218,7 +1237,7 @@ static void knobs(void)
         static const uint8_t PID[2] = {P_TONE, P_PITCH}, ENC[2] = {ENC_MASTER, ENC_PRESETS};
         for (k = 0; k < 2u; k++) {
             int32_t old = PV(PID[k]);
-            if ((d = turn(ENC[k])) != 0 && set_param(PID[k], old + d * PINFO[PID[k]][3])) {
+            if ((d = turn(ENC[k], PINFO[PID[k]][1] - PINFO[PID[k]][0])) != 0 && set_param(PID[k], old + d * PINFO[PID[k]][3])) {
                 char s[24], *p = put(s, k ? "PITCH " : "TONE ");
                 UNDO_NOTE(PID[k], old);
                 changed(PG_GROUP[page] == G_PLAY ? k : 99u);
@@ -1228,7 +1247,7 @@ static void knobs(void)
         }
     }
 #else
-    if ((d = turn(ENC_PRESETS)) != 0) {         /* the sound, on every page: A .. F, and there it stops */
+    if ((d = turn(ENC_PRESETS, 0)) != 0) {         /* the sound, on every page: A .. F, and there it stops */
         int32_t v = PV(P_SOUND) + d, hi = (int32_t)MEL_NSETS - 1;
         v = v < 0 ? 0 : v > hi ? hi : v;
         if (v != PV(P_SOUND)) to_sound(v);
@@ -1237,7 +1256,7 @@ static void knobs(void)
     if ((d = fm1_enc_take(ENC_SELECT)) != 0)    /* SELECT: the hand on the reel (the pages: the sections' buttons) */
         reel_turn(d);
     reel_idle();
-    if ((d = turn(ENC_ALGORITHM)) != 0 && set_param(P_BPM, PV(P_BPM) + d)) {   /* ALGORITHM: the tempo, anywhere */
+    if ((d = turn(ENC_ALGORITHM, PINFO[P_BPM][1] - PINFO[P_BPM][0])) != 0 && set_param(P_BPM, PV(P_BPM) + d)) {   /* ALGORITHM: the tempo, anywhere */
         UNDO_NOTE(P_BPM, PV(P_BPM) - d);
         changed(99);
         {
@@ -1249,7 +1268,8 @@ static void knobs(void)
     set.p[P_STEP] = (int16_t)seq_cur;
     for (k = 0; k < 4u; k++) {                  /* KNOB 1..4: this page's */
         const ctl_t *c = &CTL[page][k];
-        if ((d = turn(ENC_KNOB1 + k)) != 0 && c->pid == P_PMODE && c->name) {   /* SOUNDS: OWN keeps, then takes */
+        int32_t range = c->fmt == F_ENUM || c->fmt == F_SND || c->pid == P_STEP ? 0 : PINFO[c->pid][1] - PINFO[c->pid][0];
+        if ((d = turn(ENC_KNOB1 + k, range)) != 0 && c->pid == P_PMODE && c->name) {   /* SOUNDS: OWN keeps, then takes */
             play_keep();
             if (set_param(P_PMODE, PV(P_PMODE) + d)) {
                 play_take();

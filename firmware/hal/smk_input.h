@@ -57,8 +57,8 @@
 #define SMK_DEB_RELEASE 4u        /* frames open in a row: a button release (~6 ms) */
 #define SMK_DEB_PRESS 2u          /* frames closed in a row: a button press (~3 ms) */
 #define SMK_KEY_REL 3u            /* frames with contact 1 open: a key release (~5 ms) */
-#define SMK_ENC_DIV 4             /* decoder counts a step: a detent is a whole quadrature cycle (the stock's 2
-                                   * gave two UI steps a click, as the FM-1 has one) */
+#define SMK_REST_FRAMES 625u      /* ~1 s still off an encoder's detent state: that is the detent (power-on) */
+#define SMK_ENC_GO 14u            /* a 2-state jump from the detent goes on the way of a click this recent (~22 ms) */
 enum { FM1_BTN_OCT_DOWN = 4, FM1_BTN_OCT_UP = 5 };
 enum { SMK_BTN_KNOB_BANK = 0, SMK_BTN_FADER_BANK = 1, SMK_BTN_LEFT = 2, SMK_BTN_RIGHT = 3 };   /* (main.c: the power-on combo) */
 #define FM1_OCT_BOTH (1u << FM1_BTN_OCT_DOWN | 1u << FM1_BTN_OCT_UP)
@@ -126,8 +126,11 @@ static volatile struct {
     uint8_t cnt[FM1_NBTN];       /* button debounce */
     uint8_t ks_last[FM1_NKEY], ks_stab[FM1_NKEY], ks_rel[FM1_NKEY];
     uint32_t ks_t1[FM1_NKEY];    /* fm1_ticks() when contact 1 closed */
-    uint8_t enc_last[FM1_NENC], enc_hist[FM1_NENC];
-    int16_t enc_cnt[FM1_NENC];   /* transitions, + = B leads */
+    uint8_t enc_prev[FM1_NENC], enc_rest[FM1_NENC];   /* the last state; the detent state (0..3) */
+    uint16_t enc_still[FM1_NENC]; /* frames since the last state change */
+    int8_t enc_sub[FM1_NENC];    /* net transitions since the last rest state, + = B leads */
+    int8_t enc_dir[FM1_NENC];    /* the last click's way (+1 / -1) .. */
+    uint32_t enc_dfr[FM1_NENC];  /* .. and its frame */
     int16_t enc_steps[FM1_NENC];
     uint16_t pad_raw[SMK_NPAD], pad_base[SMK_NPAD], pad_peak[SMK_NPAD];
     uint8_t pad_st[SMK_NPAD];    /* 0 idle, 1..SMK_PAD_PEAKN collecting the peak, 0x80 on */
@@ -293,7 +296,7 @@ static void fm1_input_init(void)
     SMK_SPI2_BAUD = 5u;
     SMK_SPI2_CON |= 1u;
     for (i = 0; i < FM1_NENC; i++)
-        fm1_in.enc_last[i] = 0xFF;
+        fm1_in.enc_prev[i] = 0xFF;
     for (i = 0; i < SMK_NPAD; i++)
         fm1_in.pad_base[i] = 100u;                               /* (stock init) */
     smk_col = 0;
@@ -389,32 +392,53 @@ static void smk__buttons(void)
     }
 }
 
-static void smk__encoders(void)                    /* stock decoder: 3-state window, 4 counts a cycle */
+/* the encoders: fm1_input.h's decoder, as Felucca has it (its #23 and #126). A detent is one whole quadrature cycle
+ * (4 transitions) and the knob rests in one state, the one seen at power-on (relearned only after SMK_REST_FRAMES
+ * parked elsewhere); steps come on arriving back at it, the net transitions rounded to whole cycles (a lost one or
+ * two forgiven; a two-state jump counts on the way the turn goes). No 2-frame filter: every frame's state counts
+ * (the stock's filter and its 3-state window lost whole clicks past ~40 clicks/s, and a flick moved next to
+ * nothing); bounce and back-and-forth cancel out */
+static void smk__encoders(void)
 {
     uint32_t e;
     for (e = 0; e < FM1_NENC; e++) {
-        uint32_t cur = smk__closed(SMK_ENCC[e][0]) | smk__closed(SMK_ENCC[e][1]) << 1, h;
-        if (fm1_in.enc_last[e] == 0xFF) {           /* first frame */
-            fm1_in.enc_last[e] = (uint8_t)cur;
-            fm1_in.enc_hist[e] = (uint8_t)(cur * 0x15u);
+        uint32_t cur = smk__closed(SMK_ENCC[e][0]) | smk__closed(SMK_ENCC[e][1]) << 1, idx;
+        volatile int8_t *sub = &fm1_in.enc_sub[e];
+        if (fm1_in.enc_prev[e] == 0xFF) {           /* first frame: the knob rests here */
+            fm1_in.enc_prev[e] = fm1_in.enc_rest[e] = (uint8_t)cur;
             continue;
         }
-        if (cur != fm1_in.enc_last[e]) {            /* must hold for two frames */
-            fm1_in.enc_last[e] = (uint8_t)cur;
-            continue;
+        if (cur != fm1_in.enc_prev[e])
+            fm1_in.enc_still[e] = 0;
+        if (fm1_in.enc_still[e] < 0xFFFFu && ++fm1_in.enc_still[e] == SMK_REST_FRAMES && cur != fm1_in.enc_rest[e]) {
+            fm1_in.enc_rest[e] = (uint8_t)cur;      /* parked ~1 s off the detent state: that is the detent */
+            *sub = 0;
         }
-        if (cur == (fm1_in.enc_hist[e] & 3u))
+        if (cur == fm1_in.enc_prev[e])
             continue;
-        h = ((uint32_t)fm1_in.enc_hist[e] << 2 | cur) & 0x3Fu;
-        fm1_in.enc_hist[e] = (uint8_t)h;
-        if (h == 0x07u || h == 0x1Eu || h == 0x21u || h == 0x38u)
-            fm1_in.enc_cnt[e]--;                     /* A leads */
-        else if (h == 0x0Bu || h == 0x12u || h == 0x2Du || h == 0x34u)
-            fm1_in.enc_cnt[e]++;                     /* B leads */
-        if (fm1_in.enc_cnt[e] >= SMK_ENC_DIV || fm1_in.enc_cnt[e] <= -SMK_ENC_DIV) {   /* one step a detent */
-            int32_t s = fm1_in.enc_cnt[e] / SMK_ENC_DIV;
-            fm1_in.enc_steps[e] = (int16_t)(fm1_in.enc_steps[e] + s);
-            fm1_in.enc_cnt[e] = (int16_t)(fm1_in.enc_cnt[e] - s * SMK_ENC_DIV);
+        idx = (uint32_t)fm1_in.enc_prev[e] << 2 | cur;
+        if ((0x2814u >> idx) & 1u)
+            (*sub)++;                               /* B leads */
+        else if ((0x4182u >> idx) & 1u)
+            (*sub)--;                               /* A leads */
+        else {                                      /* two states in one frame: a fast turn, the way it was going
+                                                     * (on the detent: a click of the last SMK_ENC_GO frames) */
+            int32_t d = *sub > 0 ? 1 : *sub < 0 ? -1 :
+                        fm1_in.frames - fm1_in.enc_dfr[e] <= SMK_ENC_GO ? fm1_in.enc_dir[e] : 0;
+            *sub = (int8_t)(*sub + 2 * d);
+        }
+        fm1_in.enc_prev[e] = (uint8_t)cur;
+        if (*sub > 100 || *sub < -100)
+            *sub = 0;                               /* (never off the detent that long) */
+        if (cur == fm1_in.enc_rest[e]) {            /* back on the detent: whole cycles */
+            int32_t n = *sub < 0 ? -*sub : *sub;
+            n = n >= 2 ? (n + 2) / 4 : 0;
+            fm1_in.enc_steps[e] = (int16_t)(fm1_in.enc_steps[e] + (*sub < 0 ? -n : n));
+            if (n) {
+                fm1_in.enc_dir[e] = (int8_t)(*sub < 0 ? -1 : 1);
+                fm1_in.enc_dfr[e] = fm1_in.frames;
+            }
+            *sub = 0;
         }
     }
 }
