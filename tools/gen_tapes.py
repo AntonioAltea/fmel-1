@@ -118,20 +118,48 @@ def rms(x):
     return float(np.sqrt(np.mean(x * x)) + 1e-12)
 
 
-def loop(x, rate):
-    """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len)"""
+def level_tail(x, rate):
+    """a sustained tape's loop part evened out: from where its loop may start, its loudness (50 ms windows, smoothed
+    over 0.2 s) brought to its mean there, eased in over 0.1 s; the attack untouched. (A slow attack, the flute's
+    A#2 still swelling at 1.4 s, otherwise jumps back down at every turn of the loop)"""
+    n = len(x)
+    xf = int(0.35 * rate)
+    t0 = max(xf + CK, int(n * 0.3)) - xf
+    w = max(1, int(0.05 * rate))
+    env = np.sqrt(np.convolve(x * x, np.ones(w) / w, mode="same"))
+    sm = max(1, int(0.2 * rate))
+    env = np.convolve(env, np.ones(sm) / sm, mode="same") + 1e-9
+    ref = env[t0:n - sm // 2].mean()
+    g = np.ones(n)
+    g[t0:] = ref / env[t0:]
+    g[n - sm // 2:] = g[n - sm // 2 - 1]                          # (the smoothing's edge: the last value held)
+    ease = min(n - t0, int(0.1 * rate))
+    g[t0:t0 + ease] = 1 + (g[t0:t0 + ease] - 1) * np.linspace(0, 1, ease)
+    return x * g
+
+
+def loop(x, rate, grid=CK):
+    """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len). ls on the grid (ADPCM:
+    the CK grid, its state is a checkpoint; 8-bit PCM: any sample, so a seam in phase can be found). The crossfade
+    keeps the level whatever the two pieces' likeness (an equal-power fade of alike pieces swells: +3 dB at its
+    middle, heard once a loop)"""
     n = len(x)
     xf = int(0.35 * rate)
     target = max(xf + CK, int(n * 0.3))
-    best, ls = -2.0, target - target % CK
-    for cand in range(target - target % CK, int(n * 0.6) - xf, CK):   # ls on the CK grid: its state is a checkpoint
-        a, b = x[n - xf:], x[cand - xf:cand]
-        c = float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
-        if c > best:
-            best, ls = c, cand
+    a = x[n - xf:]
+    na = np.linalg.norm(a) + 1e-12
+    def likeness(cand):
+        b = x[cand - xf:cand]
+        return float(np.dot(a, b) / (na * (np.linalg.norm(b) + 1e-12)))
+    cands = range(target - target % grid, int(n * 0.6) - xf, max(grid, 16))
+    ls = max(cands, key=likeness) if len(cands) else target - target % grid   # (a short tape: where it must)
+    if grid < 16:                                # (then to the sample, round the best)
+        ls = max(range(max(target, ls - 16), min(int(n * 0.6) - xf, ls + 17), grid), key=likeness)
+    c = max(0.0, likeness(ls))
     t = np.linspace(0, np.pi / 2, xf)
+    co, si = np.cos(t), np.sin(t)
     y = x.copy()
-    y[n - xf:] = x[n - xf:] * np.cos(t) + x[ls - xf:ls] * np.sin(t)    # at the end it has become what precedes ls
+    y[n - xf:] = (a * co + x[ls - xf:ls] * si) / np.sqrt(1 + 2 * c * co * si)   # at the end it has become what precedes ls
     return y, ls
 
 
@@ -361,7 +389,9 @@ def build(src, budget, step, rate, which):
             raise SystemExit(f"{name}: peaks at {peak:.2f} at the common loudness; lower TARGET_RMS")
         sc8 = 0.99 / peak if d in PCM8 else 1.0      # (8-bit: as loud as it can be stored, its gain brings it back)
         for i, (r, s) in enumerate(segs):
-            s, ls = loop(s, zr)
+            if d not in DECAYS:                  # (a sustained tape: its loop part as loud all through)
+                s = level_tail(s, zr)
+            s, ls = loop(s, zr, 1 if d in PCM8 else CK)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
             if d in PCM8:
                 p8 = np.clip(np.round(s * sc8 * 127), -127, 127).astype(np.int8)
