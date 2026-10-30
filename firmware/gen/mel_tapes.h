@@ -9,6 +9,7 @@ static const char *const MEL_SET_NAME[MEL_NSETS] = {"FLUTE", "CHOIR", "CELLO", "
 static const uint8_t MEL_SET_Z0[MEL_NSETS] = {0, 6, 18, 27, 32, 36};
 static const uint8_t MEL_SET_NZ[MEL_NSETS] = {6, 12, 9, 5, 4, 9};
 static const uint8_t MEL_SET_STRUCK[MEL_NSETS] = {0, 0, 0, 0, 1, 0};
+static const uint8_t MEL_SET_UPCUT[MEL_NSETS] = {1, 0, 0, 0, 0, 0};   /* well above a root: its band's low-pass */
 static const int8_t MEL_SET_PLAY[MEL_NSETS][4] = {   /* its own PLAY to start from: TONE PITCH ATTACK RELEASE */
     {72, 0, 4, 18}, {72, 0, 4, 18}, {72, 0, 4, 18}, {72, 0, 4, 18}, {100, 0, 0, 31}, {72, 0, 4, 18}};
 /* a kind 1 zone (the piano): SLOOP's SAMPLE engine with LOFI KEYS (gen_tapes.py PNO_) */

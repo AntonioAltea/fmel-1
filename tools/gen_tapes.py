@@ -52,6 +52,9 @@ PCM8 = {"MkII_Flute", "Tenor_Sax"}                # sets stored as 8-bit PCM (ki
 DARKEN = {"Piano"}                                 # sets that darken as they ring (their zones' brightness floor: lpred)
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
 SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
+UPCUT = {"MkII_Flute"}                             # sets whose notes well above their tape's root play through its band's
+                                                   # low-pass (mel.c: the hiss and breath sped up above it; heard on the
+                                                   # flute over F5, blind test 2026-10-30)
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
                                                    # (a tape's key pressed again goes on where its tape is: the
                                                    # vibraphone as quiet as it has died away to, a piano never)
@@ -362,6 +365,7 @@ def build(src, budget, step, rate, which):
                 out["ck"] += cks
             out["sets"].append((name, z0, len(roots), d in STRUCK))
             out.setdefault("play", []).append(PLAY.get(d, PLAY_ELSE))
+            out.setdefault("upcut", []).append(d in UPCUT)
             continue
         segs, decs = [], []
         sh = SHIFT.get(d, SHIFT_ELSE)
@@ -414,6 +418,7 @@ def build(src, budget, step, rate, which):
             out["ck"] += cks
         out["sets"].append((name, z0, len(roots), d in STRUCK))
         out.setdefault("play", []).append(PLAY.get(d, PLAY_ELSE))
+        out.setdefault("upcut", []).append(d in UPCUT)
     return out, int(per0) // CK * CK
 
 
@@ -517,6 +522,7 @@ def write(out, path, rate, per):
          "static const uint8_t MEL_SET_Z0[MEL_NSETS] = {" + ", ".join(str(a) for _, a, _, _ in out["sets"]) + "};",
          "static const uint8_t MEL_SET_NZ[MEL_NSETS] = {" + ", ".join(str(b) for _, _, b, _ in out["sets"]) + "};",
          "static const uint8_t MEL_SET_STRUCK[MEL_NSETS] = {" + ", ".join(str(int(k)) for *_, k in out["sets"]) + "};",
+         "static const uint8_t MEL_SET_UPCUT[MEL_NSETS] = {" + ", ".join(str(int(k)) for k in out["upcut"]) + "};   /* well above a root: its band's low-pass */",
          "static const int8_t MEL_SET_PLAY[MEL_NSETS][4] = {   /* its own PLAY to start from: TONE PITCH ATTACK RELEASE */",
          "    " + ", ".join("{" + ", ".join(str(v) for v in q) + "}" for q in out["play"]) + "};",
          "/* a kind 1 zone (the piano): SLOOP's SAMPLE engine with LOFI KEYS (gen_tapes.py PNO_) */",

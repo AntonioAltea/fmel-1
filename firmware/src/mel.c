@@ -81,9 +81,12 @@ typedef struct {                                /* a head on a tape: the decoder
     int32_t pred, idx, gain, s[4];              /* the last four samples (4-point Hermite between the middle two) */
     int32_t dg;                                 /* a sound that dies away: how far it has, 0..ONE */
     int32_t lp;                                 /* (kind 1) its CUT's one-pole; (a zone that darkens) its brightness one-pole */
-    int32_t bk;                                 /* (a zone that darkens) that one-pole's coefficient now, Q15: open at the strike,
-                                                 * from 0.2 s darkening to the zone's floor (lpred) in ~0.5 s, as Erik37's */
+    int32_t bk;                                 /* (a zone that darkens) that one-pole's coefficient now, Q15: 3 x the floor at the strike,
+                                                 * from 0.1 s darkening to the zone's floor (lpred) in ~0.5 s, as Erik37's */
     uint32_t age;                               /* (a zone that darkens) frames since the strike */
+    int32_t up, u1, u2;                         /* a note well above its tape's root: two one-poles (coefficient up,
+                                                 * Q15; 0: none) at the tape's own band, so the hiss and breath its
+                                                 * speeding up raised above it go (blind test, 2026-10-30) */
 } head_t;
 
 static struct {
@@ -207,7 +210,7 @@ static int32_t adpcm_next(head_t *h)
 }
 
 /* put a head on tape t samples in (MEL_RATE's; past the end of the recording: round its loop) */
-static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
+static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain, uint32_t note, uint32_t upcut)
 {
     uint32_t p, k, ck;
     t >>= z->sh;                                /* (in the zone's own samples from here) */
@@ -238,8 +241,10 @@ static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
     h->s[2] = adpcm_next(h);
     h->s[3] = adpcm_next(h);
     h->lp = 0;
-    h->bk = 32767;
+    h->bk = z->lpred ? (z->lpred * 3 > 32767 ? 32767 : z->lpred * 3) : 32767;   /* (a piano: tempered from the start) */
     h->age = 0;
+    h->up = upcut && note > z->root + 2u ? (z->sh ? 17830 : 25900) : 0;   /* (5.5 kHz: an 11025 Hz tape's band) */
+    h->u1 = h->u2 = 0;
 }
 
 static uint32_t layer_note(uint32_t note, int32_t oct)   /* the layer's note, OCTAVE away */
@@ -258,9 +263,10 @@ static void voice_head(uint32_t vi)             /* the heads on the current soun
     voice[vi].set = (uint8_t)st;
     voice[vi].layer = (uint8_t)ly;
     voice[vi].loct = (int8_t)p_loct;
-    head_start(&voice[vi].h, zone_of(st, note), tpos[note], g);
+    head_start(&voice[vi].h, zone_of(st, note), tpos[note], g, note, MEL_SET_UPCUT[st]);
     if (ly)                                     /* (the same tape, another track: as the M400's A B C) */
-        head_start(&voice[vi].h2, zone_of((ly - 1u) % MEL_NSETS, layer_note(note, p_loct)), tpos[note], g);
+        head_start(&voice[vi].h2, zone_of((ly - 1u) % MEL_NSETS, layer_note(note, p_loct)), tpos[note], g,
+                   layer_note(note, p_loct), MEL_SET_UPCUT[(ly - 1u) % MEL_NSETS]);
 }
 
 static int struck(void)                        /* the piano is on either track: a key strikes anew */
@@ -332,7 +338,7 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
         g = (g * (h->dg >> 9)) >> 15;
     if (h->z->kind == 2u)
         g = (g * h->z->gain) >> 5;              /* (PCM: stored near full scale, its level here) */
-    if (h->z->lpred && (h->age += n) > FS / 5u) /* the brightness: from 0.2 s ~0.5 s to the floor (per 32 frames) */
+    if (h->z->lpred && (h->age += n) > FS / 10u)   /* the brightness: from 0.1 s ~0.5 s to the floor (per 32 frames) */
         h->bk -= ((h->bk - h->z->lpred) * 95) >> 16;
     for (i = 0; i < n; i++) {
         int32_t t, c1, c2, c3, y;
@@ -350,6 +356,13 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
         c2 = a - ((5 * b) >> 1) + 2 * c - (d >> 1);
         c3 = ((d - a) >> 1) + ((3 * (b - c)) >> 1);
         y = ((((((c3 * t) >> 12) + c2) * t >> 12) + c1) * t >> 12) + b;
+        if (h->up) {                            /* (well above its root: the tape's own band) */
+            int32_t e = (y - h->u1) * h->up;
+            h->u1 += (e + ((e >> 31) & 32767)) >> 15;
+            e = (h->u1 - h->u2) * h->up;
+            h->u2 += (e + ((e >> 31) & 32767)) >> 15;
+            y = h->u2;
+        }
         if (h->z->lpred) {                      /* (the piano's brightness one-pole) */
             int32_t e = (y - h->lp) * h->bk;   /* (|y - lp| < 2^16: no overflow; toward zero, as tz) */
             h->lp += (e + ((e >> 31) & 32767)) >> 15;
