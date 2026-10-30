@@ -32,7 +32,7 @@
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
  * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): block ADPCM (Erik37's format) at 11025 Hz, a root every 3-4 semitones
- * (the piano: VCSL's four keys at 22050 Hz, MEL_RATE, as 8-bit PCM: a kind 2 zone).
+ * (the flute and the sax as 8-bit PCM, kind 2; the piano: VCSL's four keys at 22050 Hz, MEL_RATE, darkening as it rings).
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
 #define SMK_MASTER_FADER 4                      /* (SMK-37: the fourth fader is the volume, not K1: mel_smk.h) */
@@ -49,8 +49,9 @@ typedef struct {
     uint8_t lidx;                               /* the decoder's step index at the loop start (kind 2: 0) */
     uint16_t dk, d1k, pk;                       /* a sound that dies away (dk 0: it does not): its decay per tape
                                                  * sample (Q24) and per 1024 (Q15), from its peak (sample pk) */
-    int16_t lpred;                              /* the decoder's predictor at the loop start (kind 2, PCM: none; its
-                                                 * brightness floor instead: the one-pole, Q15, a note darkens to) */
+    int16_t lpred;                              /* the decoder's predictor at the loop start (kind 1, IMA); kinds 0
+                                                 * and 2: its brightness floor, the one-pole (Q15) a note darkens to
+                                                 * (0: it does not darken) */
 } mel_zone_t;
 #include "mel_tapes.h"
 #include "mel_sprites.h"
@@ -79,10 +80,10 @@ typedef struct {                                /* a head on a tape: the decoder
     uint32_t pos, frac;                         /* next sample to decode; where we are between s[1] and s[2], Q16 */
     int32_t pred, idx, gain, s[4];              /* the last four samples (4-point Hermite between the middle two) */
     int32_t dg;                                 /* a sound that dies away: how far it has, 0..ONE */
-    int32_t lp;                                 /* (kind 1) its CUT's one-pole; (kind 2) its brightness one-pole */
-    int32_t bk;                                 /* (kind 2) that one-pole's coefficient now, Q15: open at the strike,
+    int32_t lp;                                 /* (kind 1) its CUT's one-pole; (a zone that darkens) its brightness one-pole */
+    int32_t bk;                                 /* (a zone that darkens) that one-pole's coefficient now, Q15: open at the strike,
                                                  * from 0.2 s darkening to the zone's floor (lpred) in ~0.5 s, as Erik37's */
-    uint32_t age;                               /* (kind 2) frames since the strike */
+    uint32_t age;                               /* (a zone that darkens) frames since the strike */
 } head_t;
 
 static struct {
@@ -329,11 +330,10 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     }
     if (h->z->dk)
         g = (g * (h->dg >> 9)) >> 15;
-    if (h->z->kind == 2u) {
+    if (h->z->kind == 2u)
         g = (g * h->z->gain) >> 5;              /* (PCM: stored near full scale, its level here) */
-        if ((h->age += n) > FS / 5u)            /* the brightness: from 0.2 s ~0.5 s to the floor (per 32 frames) */
-            h->bk -= ((h->bk - h->z->lpred) * 95) >> 16;
-    }
+    if (h->z->lpred && (h->age += n) > FS / 5u) /* the brightness: from 0.2 s ~0.5 s to the floor (per 32 frames) */
+        h->bk -= ((h->bk - h->z->lpred) * 95) >> 16;
     for (i = 0; i < n; i++) {
         int32_t t, c1, c2, c3, y;
         frac += step;
@@ -350,7 +350,7 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
         c2 = a - ((5 * b) >> 1) + 2 * c - (d >> 1);
         c3 = ((d - a) >> 1) + ((3 * (b - c)) >> 1);
         y = ((((((c3 * t) >> 12) + c2) * t >> 12) + c1) * t >> 12) + b;
-        if (h->z->kind == 2u) {                 /* (the piano's brightness one-pole) */
+        if (h->z->lpred) {                      /* (the piano's brightness one-pole) */
             int32_t e = (y - h->lp) * h->bk;   /* (|y - lp| < 2^16: no overflow; toward zero, as tz) */
             h->lp += (e + ((e >> 31) & 32767)) >> 15;
             y = h->lp;

@@ -45,8 +45,11 @@ STEP = {"Cello": 4, "MkII_Flute": 6, "Vibes": 8, "Tenor_Sax": 4}   # sets with t
 SLOOP_PIANO = set()                                # sets made as SLOOP makes its piano (sloop_piano): every file a
                                                    # root, outside the budget, played by mel.c as SLOOP's SAMPLE engine
 FIXED_LEN = {"Piano": 1.0}                         # sets outside the budget, every file a root, this long (s) a root
-PCM8 = {"Piano"}                                   # sets stored as 8-bit PCM (kind 2), near full scale, their level in
-                                                   # the zone's gain: a clean sound's grain 45 dB down, not ADPCM's 28
+PCM8 = {"MkII_Flute", "Tenor_Sax"}                # sets stored as 8-bit PCM (kind 2), near full scale, their level in
+                                                   # the zone's gain: the plainest sounds, where block ADPCM's grain is
+                                                   # heard (blind tests, 2026-10-30: the flute and the sax; the choir, the
+                                                   # cello, the vibraphone and the piano as clean in blocks)
+DARKEN = {"Piano"}                                 # sets that darken as they ring (their zones' brightness floor: lpred)
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
 SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
@@ -311,9 +314,8 @@ def build(src, budget, step, rate, which):
             roots = sorted(files)
         plan.append((name, files, roots))
     shares = [0.0 if d in SLOOP_PIANO or d in FIXED_LEN else DECAYS.get(d, 1.0) for d, _ in sets]
-    nroots = sum(len(r) * w for (_, _, r), w in zip(plan, shares))
-    per0 = budget * BLK / BLKB / nroots          # 4.25 bits a sample (+ the checkpoints, ~1.6 %)
-    per0 = per0 / (1 + 8 / CK)
+    bps = [1.0 if d in PCM8 else BLKB / BLK * (1 + 8 / CK) for d, _ in sets]   # bytes a sample (+ the checkpoints)
+    per0 = budget / sum(len(r) * w * b for (_, _, r), w, b in zip(plan, shares, bps))   # every tape as long
     out = {"sets": [], "zones": [], "data": bytearray(), "ck": []}
     for (d, _), (name, files, roots), share in zip(sets, plan, shares):
         z0 = len(out["zones"])
@@ -372,7 +374,7 @@ def build(src, budget, step, rate, which):
             pk, dbs = decs[i]
             dk = round((1 - 10 ** (-dbs / 20 / zr)) * (1 << 24)) if dbs else 0       # per tape sample, Q24
             lp, li = 0, 0                         # (block ADPCM: the loop's state is the checkpoint at ls, on the CK grid)
-            if d in PCM8:                         # (8-bit PCM has no decoder state: lpred is its brightness floor, the
+            if d in DARKEN:                       # (lpred, no use to these formats: its brightness floor, the
                 fc = min(5000.0, max(500.0, 3 * 440 * 2 ** ((r - 69) / 12)))   # one-pole the note darkens to, Q15,
                 lp, li = round(32767 * (1 - np.exp(-2 * np.pi * fc / SRC_RATE))), 0   # ~3 x its fundamental)
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r - up, lo=lo, hi=hi,
@@ -516,7 +518,7 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--src", default=str(Path(__file__).resolve().parents[1] / "tapes" / "wav"))
     ap.add_argument("--sets", default=",".join(SETS), help="the tapes, in order (A, B, C, ...): folders of --src")
-    ap.add_argument("--budget", type=int, default=383_500, help="bytes of tape data (ADPCM + checkpoints) in all")
+    ap.add_argument("--budget", type=int, default=430_000, help="bytes of tape data (block ADPCM + checkpoints, 8-bit PCM) in all")
     ap.add_argument("--step", type=int, default=3, help="semitones between roots (but STEP's sets)")
     ap.add_argument("--rate", type=int, default=22050, help="the firmware's rate (MEL_RATE): a set's is it >> SHIFT")
     a = ap.parse_args()
