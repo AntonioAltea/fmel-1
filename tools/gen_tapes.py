@@ -17,7 +17,7 @@ semitones off), each:
     ever (MEL's "inf" tape) as well as for the 8 s of a real tape;
   - IMA ADPCM, 4 bit, with the decoder's state every CK samples (MEL_CK): a note can start
     anywhere on its tape (a key pressed again before its tape is back) and the loop jumps exactly.
-The levels of a set are evened out half way (in dB) between its roots; then every set is brought to the same
+The levels of a set are evened out (in dB) between its roots; then every set is brought to the same
 loudness (RMS of its sustain), so a change of tape is not a change of level.
 A set that dies away by itself (DECAYS: the vibraphone) has its decay measured per root (dB/s, after its peak) and
 flattened out of the samples, so its loop is level; the zone carries the decay and the firmware applies it as the
@@ -159,11 +159,11 @@ def level_tail(x, rate):
 
 def loop(x, rate, grid=CK):
     """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len). ADPCM (grid CK, its
-    state a checkpoint): a 0.35 s fade from the likest piece on the grid. 8-bit PCM (grid 1): a short fade (40 ms)
+    state a checkpoint): a 0.35 s fade from the likest piece on the grid. 8-bit PCM (grid 1): a shorter fade (0.12 s)
     from the sample whose piece is likest, in phase: a long fade of a tape with wow drifts out of phase and dips once
     a loop. Either fade keeps the level whatever the two pieces' likeness (an equal-power fade of alike pieces swells)"""
     n = len(x)
-    xf = int((0.35 if grid > 1 else 0.04) * rate)
+    xf = int((0.35 if grid > 1 else 0.12) * rate)
     target = max(int(0.35 * rate) + CK, int(n * 0.3))
     a = x[n - xf:]
     na = np.linalg.norm(a) + 1e-12
@@ -414,7 +414,8 @@ def build(src, budget, step, rate, which):
                 decs.append((0, 0.0))
             segs.append((r, seg))
         lv = np.array([20 * np.log10(rms(s[len(s) // 3:])) for _, s in segs])
-        gains = 10 ** ((lv.mean() - lv) / 2 / 20)                     # half way to the set's mean level
+        gains = 10 ** ((lv.mean() - lv) / 20)                         # all the way to the set's mean level (half way left
+                                                                       # a 1.7 dB step at a root's edge, heard)
         segs = [(r, s * g) for (r, s), g in zip(segs, gains)]
         level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
         segs = [(r, s * TARGET_RMS / level) for r, s in segs]      # every set as loud as the others

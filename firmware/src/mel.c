@@ -256,7 +256,7 @@ static void voice_head(uint32_t vi)             /* the heads on the current soun
 {
     uint32_t st = p_sound % MEL_NSETS, ly = p_layer, note = voice[vi].note, hsh = note * 2654435761u;
     int32_t g = MEL_SET_STRUCK[st] ? G_TAPE                 /* every tape its own level (the piano: SLOOP's, even) */
-              : (G_TAPE * (32768 + ((int32_t)((hsh >> 8) & 0xFFu) - 128) * 30)) >> 15;
+              : (G_TAPE * (32768 + ((int32_t)((hsh >> 8) & 0xFFu) - 128) * 8)) >> 15;   /* (+-0.25 dB: +-1 jumped) */
 #if BOARD_SMK37
     g = (g * voice[vi].velg) >> 15;             /* (the SMK's velocity: how hard the head meets the tape) */
 #endif
