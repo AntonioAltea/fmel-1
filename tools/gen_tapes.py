@@ -142,22 +142,28 @@ def level_tail(x, rate):
 
 
 def loop(x, rate, grid=CK):
-    """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len). ls on the grid (ADPCM:
-    the CK grid, its state is a checkpoint; 8-bit PCM: any sample, so a seam in phase can be found). The crossfade
-    keeps the level whatever the two pieces' likeness (an equal-power fade of alike pieces swells: +3 dB at its
-    middle, heard once a loop)"""
+    """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len). ADPCM (grid CK, its
+    state a checkpoint): a 0.35 s fade from the likest piece on the grid. 8-bit PCM (grid 1): a short fade (40 ms)
+    from the sample whose piece is likest, in phase: a long fade of a tape with wow drifts out of phase and dips once
+    a loop. Either fade keeps the level whatever the two pieces' likeness (an equal-power fade of alike pieces swells)"""
     n = len(x)
-    xf = int(0.35 * rate)
-    target = max(xf + CK, int(n * 0.3))
+    xf = int((0.35 if grid > 1 else 0.04) * rate)
+    target = max(int(0.35 * rate) + CK, int(n * 0.3))
     a = x[n - xf:]
     na = np.linalg.norm(a) + 1e-12
     def likeness(cand):
         b = x[cand - xf:cand]
         return float(np.dot(a, b) / (na * (np.linalg.norm(b) + 1e-12)))
-    cands = range(target - target % grid, int(n * 0.6) - xf, max(grid, 16))
-    ls = max(cands, key=likeness) if len(cands) else target - target % grid   # (a short tape: where it must)
-    if grid < 16:                                # (then to the sample, round the best)
-        ls = max(range(max(target, ls - 16), min(int(n * 0.6) - xf, ls + 17), grid), key=likeness)
+    hi = int(n * (0.6 if grid > 1 else 0.75)) - xf
+    if grid > 1:
+        cands = range(target - target % grid, hi, grid)
+        ls = max(cands, key=likeness) if len(cands) else target - target % grid   # (a short tape: where it must)
+    else:                                        # (every sample: the windows' dot products at once, then their norms)
+        cs = np.arange(target, max(target + 1, hi))
+        dots = np.correlate(x[target - xf:hi], a, mode="valid")[:len(cs)]
+        e2 = np.concatenate([[0.0], np.cumsum(x * x)])
+        norms = np.sqrt(e2[cs] - e2[cs - xf]) + 1e-12
+        ls = int(cs[np.argmax(dots / (na * norms[:len(dots)]))])
     c = max(0.0, likeness(ls))
     t = np.linspace(0, np.pi / 2, xf)
     co, si = np.cos(t), np.sin(t)
