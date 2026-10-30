@@ -565,13 +565,15 @@ static void stage_eq(void)                      /* EQ: SPEAKER's curve, as its f
 
 static void stage_setup(void)                   /* SETUP: the settings, the one you touch marked */
 {
-    static const char *const NAME[3] = {"LENGTH", "SCREEN", "COLOUR"};
+    static const char *const NAME[4] = {"LENGTH", "SCREEN", "COLOUR", "VELOCITY"};
     int32_t k;
-    for (k = 0; k < 3; k++) {
+    char s[8];
+    for (k = 0; k < (BOARD_SMK37 ? 4 : 3); k++) {   /* (VELOCITY: the SMK-37's keys) */
         int32_t y = 2 + k * 22;
         if ((uint32_t)k == touched) rrect(2, y + 4, 6, 8, 3, C_LAMP);
         tx(12, y, &F16, NAME[k], C_INK2);
-        tx(84, y, &F16, k == 2 ? N_COLOR[PV(P_COLOR)] : k ? (PV(P_LOOK) ? "OLD TAPE" : "CLEAN")
+        if (k == 3) put(put_int(s, PV(P_VEL), 0), "%");
+        tx(84, y, &F16, k == 3 ? s : k == 2 ? N_COLOR[PV(P_COLOR)] : k ? (PV(P_LOOK) ? "OLD TAPE" : "CLEAN")
                                 : PV(P_LEN) ? "8 SECONDS" : "AS HELD", C_INK);
     }
     rrect(160, 47, 20, 14, 3, C_LAMP);          /* (the colour: its lamp and what runs) */

@@ -16,7 +16,8 @@
  *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; lit: in, dark: out)
  *   EDIT   EQ      SPEAKER: Felucca's SPEAKER EQ, FLAT, LOWCUT, BASS+, and HIGHCUT; held 0.6 s: FLAT (again, soon: as it was)
  *   GLO    SETUP   TEMPO (ARP, SEQ), TUNE (fine: to play along with others), LENGTH (a note: as long as held / 8 s,
- *                  as on the M400), SCREEN (the old-tape look / clean), COLOUR.
+ *                  as on the M400), SCREEN (the old-tape look / clean), COLOUR; the SMK-37: VELOCITY (how much
+ *                  how hard you play changes the level; 0: none)
  *          SOUNDS  GLO again: PLAY OWN (each sound its own PLAY) / SHARED (one for all); every sound's PLAY, a table
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
  *   SEQ    SEQ     16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING; PLAY start / stop, REC record
@@ -523,6 +524,7 @@ enum { S_KEY = 1, S_MIDI = 2, S_LATCH = 4, S_PED = 8 };   /* (+ S_ARP, S_SEQ: me
 static uint8_t src[128];
 #if BOARD_SMK37
 static uint8_t smk_note_vel[128], smk_vel_last = 100;   /* the velocity each note was struck with (keys, MIDI) */
+static uint32_t smk_vsens;                      /* SETUP's VELOCITY (apply) */
 static uint8_t smk_solo;                        /* pad 7 / 15 held: only the sound (1) or only the layer (2) heard */
 static void smk_init(void);
 #endif
@@ -551,7 +553,10 @@ static void note_on(uint32_t note)
 #if BOARD_SMK37
     {                                           /* a key or MIDI: its velocity; ARP, SEQ: the last one struck */
         uint32_t vel = src[note] & (S_KEY | S_MIDI) ? smk_note_vel[note] : smk_vel_last;
-        voice[pick].velg = (int32_t)(32767u * (64u + vel) / 191u);   /* 1/3 .. full */
+        vel = vel < 1u ? 1u : vel > 127u ? 127u : vel;   /* VELOCITY: how far down the softest goes, even in dB (100%:
+                                                          * 40 dB, 50%: 20; 0: every key as loud, as on the FM-1) */
+        voice[pick].velg = (int32_t)exp2_neg(smk_vsens * (127u - vel) * 4354u / 126u);
+
     }
 #endif
     voice[pick].trig++;
@@ -594,7 +599,8 @@ enum {
     P_VRATE, P_VDEPTH, P_VTONE, P_VMIX,         /* FX: VIBRATO */
     P_ETIME, P_EFB, P_ETONE, P_EMIX,            /*     ECHO */
     P_RSIZE, P_RTONE, P_RTYPE, P_RMIX,          /*     REVERB */
-    P_SPK, P_RSV1, P_RSV2, P_RSV3,              /* EQ (the three after it: the old EQ's places, unused) */
+    P_SPK, P_VEL, P_RSV2, P_RSV3,               /* EQ (the three after it: the old EQ's places; VELOCITY, SETUP's on
+                                                 * the SMK-37, in the first) */
     P_BPM, P_TUNE, P_LEN, P_LOOK,               /* SETUP */
     P_AMODE, P_ARATE, P_AOCT, P_AGATE,          /* ARP */
     P_SLEN, P_SGATE, P_STEP, P_SWING,           /* SEQ */
@@ -611,7 +617,7 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 100, 80, 1}, {0, 100, 50, 1}, {0, 100, 70, 1}, {0, 100, 100, 1},   /* (VIBRATO: 5.5 Hz, on) */
     {0, 100, 38, 1}, {0, 100, 35, 1}, {0, 100, 45, 1}, {0, 100, 0, 1},
     {0, 100, 55, 1}, {0, 100, 45, 1}, {0, 1, 1, 1}, {0, 100, 34, 1},
-    {0, 3, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1},
+    {0, 3, 0, 1}, {0, 100, 50, 1}, {0, 0, 0, 1}, {0, 0, 0, 1},
     {40, 240, 90, 1}, {-50, 50, 0, 1}, {0, 1, 0, 1}, {0, 1, 1, 1},
     {0, 4, 0, 1}, {0, 5, 3, 1}, {1, 3, 1, 1}, {10, 100, 60, 5},
     {1, 16, 16, 1}, {10, 100, 80, 5}, {0, 15, 0, 1}, {0, 100, 0, 5},
@@ -619,7 +625,7 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 5, 0, 1},
 };
 
-#define SET_VER 13u                             /* (11, 12: five sounds, before the SAX; 11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
+#define SET_VER 14u                             /* (13: as 14, VELOCITY's place unused; 11, 12: five sounds, before the SAX; 11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
                                                  * tapes', 8, 9: an earlier piano's) starts again from its own) */
 #define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
 #define NSETS12 5u                              /* the sounds in settings before 13 */
@@ -682,6 +688,9 @@ static void apply(void)                         /* the parameters -> the sound *
     p_layer = (uint8_t)PV(P_BSND);
     p_tape8 = (uint8_t)PV(P_LEN);
     p_half = set.half;
+#if BOARD_SMK37
+    smk_vsens = (uint32_t)PV(P_VEL);
+#endif
     p_tune16 = PV(P_TUNE) * 16;
     p_drift = PV(P_DRIFT);
     p_atk = (int32_t)MEL_ATK[PV(P_ATK)];
@@ -768,7 +777,11 @@ static const ctl_t CTL[NPG][4] = {
     {{P_RSIZE, F_NUM, "SIZE", 0}, {P_RTONE, F_NUM, "TONE", 0}, {P_RTYPE, F_ENUM, "TYPE", N_RTYPE}, {P_RMIX, F_PCT, "MIX", 0}},
     {{P_SPK, F_ENUM, "SPEAKER", N_SPK}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{P_LEN, F_ENUM, "LENGTH", N_LEN}, {P_LOOK, F_ENUM, "SCREEN", N_LOOK}, {P_COLOR, F_ENUM, "COLOUR", N_COLOR},
+#if BOARD_SMK37
+     {P_VEL, F_PCT, "VELOCITY", 0}},
+#else
      {0, 0, 0, 0}},
+#endif
     {{P_PMODE, F_ENUM, "PLAY", N_PMODE}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{P_AMODE, F_ENUM, "MODE", ARP_MODE}, {P_ARATE, F_ENUM, "RATE", ARP_RATE}, {P_AOCT, F_X, "OCTAVES", 0},
      {P_AGATE, F_PCT, "GATE", 0}},
@@ -959,7 +972,7 @@ static void app_init(void)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && s.ver == SET_VER && s.np == NP) {   /* (else: the defaults) */
+    if (!settings_load(&s, sizeof s) && (s.ver == 13u || s.ver == SET_VER) && s.np == NP) {   /* (else: the defaults) */
         n = NP; p = s.p; st = &s.steps[0][0]; pl = s.play;
     } else if (!settings_load(r, sizeof *r) && (r->ver == 11u || r->ver == 12u) && r->np == NP) {
         n = NP; p = r->p; st = &r->steps[0][0]; pl = r->play; npl = NSETS12;
@@ -986,7 +999,9 @@ static void app_init(void)
         for (k = 0; k < NPLAY; k++)
             set.p[P_TONE + k] = set.play[PV(P_SOUND)][k];
     if (n && s.ver < 12u)                       /* (the old EQ's LOW was where SPEAKER is: FLAT) */
-        set.p[P_SPK] = set.p[P_RSV1] = set.p[P_RSV2] = set.p[P_RSV3] = 0;
+        set.p[P_SPK] = set.p[P_RSV2] = set.p[P_RSV3] = 0;
+    if (n && s.ver < 14u)                       /* (VELOCITY: new) */
+        set.p[P_VEL] = PINFO[P_VEL][2];
     set.p[P_STEP] = 0;
     set.p[P_TUNE] = 0;                          /* (TUNE is gone from SETUP: none left from before) */
     apply();

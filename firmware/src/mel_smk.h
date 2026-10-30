@@ -4,7 +4,8 @@
  * by printed name, the four page knobs: platform.c); this file adds what the SMK has more. Included by mel.c; main
  * loop only. Every control on the surface does one thing, always; a light means something is not as it was.
  *
- *   keys      all 37, C3..C6 at OCTAVE 0 (keybed 5..31 are the FM-1's F3..G5); velocity = the tape's level
+ *   keys      all 37, C3..C6 at OCTAVE 0 (keybed 5..31 are the FM-1's F3..G5); velocity = the tape's level,
+ *             SETUP's VELOCITY how much (mel.c note_on)
  *   pads      a column is a sound, a row its part: top 1-6 the SOUND A..F, bottom 9-14 the LAYER's (the lit one
  *             again: no layer). 7 / 15 held: only the top / the bottom row heard. 8 HOLD, 16 HALF SPEED (lit: on):
  *             a tap switches it, held it is the other way only while held

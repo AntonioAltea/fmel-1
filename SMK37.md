@@ -28,7 +28,7 @@ Every control on the surface does one thing, always. A light means something is 
 
 | | |
 | --- | --- |
-| Keys | all 37, C3..C6 at OCTAVE 0; how hard you play is how loud the tape |
+| Keys | all 37, C3..C6 at OCTAVE 0; how hard you play is how loud the tape: SETUP's VELOCITY is how much (0%: every key as loud, 50%: the softest 20 dB down, 100%: 40 dB) |
 | Pads, top row 1-6 | the SOUND: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO, F SAX |
 | Pads, bottom row 9-14 | the LAYER's sound, the same columns (the lit one again: no layer) |
 | Pad 7 / 15, held | only the top row / only the bottom row heard |
