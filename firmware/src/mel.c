@@ -380,9 +380,11 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     return ran << sh;
 }
 
-static void voice_sub(uint32_t vi, int32_t *mix, int32_t g16, int32_t drift, int32_t atk, int32_t relk)
+/* the tapes (11025 Hz) and the 22050 Hz zones go to two buses: the tapes' is low-passed (tape_lp) after the heads'
+ * Hermite, whose images of an 11025 Hz tape (-31 dB above 5.6 kHz) were heard as grain from the first moment */
+static void voice_sub(uint32_t vi, int32_t *mix, int32_t *mixt, int32_t g16, int32_t drift, int32_t atk, int32_t relk)
 {
-    int32_t acc[SUB], a0, a1, a, da, c16;
+    int32_t acc[2][SUB], a0, a1, a, da, c16;
     uint32_t i, ran, note;
     if (voice[vi].trig != voice[vi].seen || (!voice[vi].busy && voice[vi].gate)) {
         voice[vi].seen = voice[vi].trig;
@@ -409,19 +411,24 @@ static void voice_sub(uint32_t vi, int32_t *mix, int32_t g16, int32_t drift, int
     voice[vi].drift -= voice[vi].drift >> 10;
     c16 = g16 + voice[vi].det * drift / 32 + ((voice[vi].drift * drift) >> 6);   /* DRIFT: keys +-25 ct, wander +-9 ct */
     for (i = 0; i < SUB; i++)
-        acc[i] = 0;
+        acc[0][i] = acc[1][i] = 0;
     if (voice[vi].layer) {                      /* the sound and the layer, MIX between them */
         uint32_t ln = layer_note(note, voice[vi].loct);
         ran = head_run(&voice[vi].h, step_of(((int32_t)note - voice[vi].h.z->root) * 1600 + c16 +
-                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc, SUB, p_ga, tpos[note]);
+                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h.z->sh != 0u], SUB,
+                       p_ga, tpos[note]);
         head_run(&voice[vi].h2, step_of(((int32_t)ln - voice[vi].h2.z->root) * 1600 + c16 + p_ldet16 +
-                                        (voice[vi].h2.z->kind == 1u ? pno16 : 0)), acc, SUB, p_gb, tpos[note]);
+                                        (voice[vi].h2.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h2.z->sh != 0u], SUB,
+                 p_gb, tpos[note]);
     } else
         ran = head_run(&voice[vi].h, step_of(((int32_t)note - voice[vi].h.z->root) * 1600 + c16 +
-                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc, SUB, 32767, tpos[note]);
+                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h.z->sh != 0u], SUB,
+                       32767, tpos[note]);
     da = (a1 - a0) / (int32_t)SUB;
-    for (a = a0, i = 0; i < SUB; i++, a += da)
-        mix[i] += (acc[i] * (a >> 9)) >> 15;
+    for (a = a0, i = 0; i < SUB; i++, a += da) {
+        mix[i] += (acc[0][i] * (a >> 9)) >> 15;
+        mixt[i] += (acc[1][i] * (a >> 9)) >> 15;
+    }
     voice[vi].amp = a1;
     if (tpos[note] + ran >= TAPE_LEN) {
         tpos[note] = TAPE_LEN;                  /* (without 8 SEC the tape loops; it rewinds 8 s at most) */
@@ -447,16 +454,34 @@ static int32_t sat(int32_t x)                   /* the tape's saturation, 2 x fu
 
 #include "mel_fx.c"
 
+/* the tapes' bus low-passed: a 4-pole Butterworth at 5 kHz (two biquads, Q12, direct form I, rounded), what the
+ * heads' Hermite leaves above an 11025 Hz tape's band taken out */
+static void tape_lp(int32_t *x, uint32_t n)
+{
+    static const int16_t C[2][5] = {{311, 621, 311, -3865, 1012}, {398, 797, 398, -4959, 2457}};   /* b0 b1 b2 a1 a2 */
+    static int32_t st[2][4];                     /* x1 x2 y1 y2 */
+    uint32_t i, k;
+    for (k = 0; k < 2u; k++) {
+        int32_t x1 = st[k][0], x2 = st[k][1], y1 = st[k][2], y2 = st[k][3];
+        for (i = 0; i < n; i++) {
+            int32_t v = x[i], y = (C[k][0] * v + C[k][1] * x1 + C[k][2] * x2 - C[k][3] * y1 - C[k][4] * y2 + 2048) >> 12;
+            x2 = x1; x1 = v; y2 = y1; y1 = y;
+            x[i] = y;
+        }
+        st[k][0] = x1; st[k][1] = x2; st[k][2] = y1; st[k][3] = y2;
+    }
+}
+
 static void app_audio(int32_t *out, uint32_t n)
 {
-    static int32_t mix[HALF_FRAMES], act;
+    static int32_t mix[HALF_FRAMES], mixt[HALF_FRAMES], act;
     static uint8_t held[128];
     int32_t drift = (p_drift * (32767 - lofi_bp)) >> 15, atk = p_atk, relk = p_relk, sum = 0;   /* (no LOFI: in tune) */
     uint32_t v, i, b;
     if (n > HALF_FRAMES)
         n = HALF_FRAMES;
     for (i = 0; i < n; i++)
-        mix[i] = 0;
+        mix[i] = mixt[i] = 0;
     fx_block();
     for (b = 0; b < n; b += SUB) {              /* the motor (the same for every tape), then every voice */
         int32_t g16;
@@ -473,8 +498,11 @@ static void app_audio(int32_t *out, uint32_t n)
             pno16 = (sine(ph) * MEL_PNO_LFO_C16) >> 15;
         }
         for (v = 0; v < NV; v++)
-            voice_sub(v, mix + b, g16, drift, atk, relk);
+            voice_sub(v, mix + b, mixt + b, g16, drift, atk, relk);
     }
+    tape_lp(mixt, n);                           /* (the tapes' bus, its images gone) */
+    for (i = 0; i < n; i++)
+        mix[i] += mixt[i];
     for (i = 0; i < 128u; i++)                  /* the tapes not held run back */
         held[i] = 0;
     for (v = 0; v < NV; v++) {
