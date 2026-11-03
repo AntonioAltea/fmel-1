@@ -259,10 +259,16 @@ static void spr_piano(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)
     spr_pix(&SPR_PIANO, lv ? F[t / 200u % 4u] : 0u, cx, cy, s, 15);   /* (silent: hands in its lap) */
 }
 static void spr_sax(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* a bear with a saxophone
-                                                                                   * (drawn), swinging it up */
+                                                                                   * (drawn), moving with the notes */
 {
-    static const uint8_t F[4] = {1, 2, 3, 2};   /* playing: the sax up and back (200 ms each) */
-    spr_pix(&SPR_SAX, lv ? F[t / 200u % 4u] : 0u, cx, cy, s, 15);   /* (silent: the sax down) */
+    uint32_t f = n_hit & 1u ? 1u : 2u, v, dt = fm1_ms - t_hit;   /* every other note: the sax low, half up */
+    (void)t;
+    for (v = 0; v < NV && !voice[v].gate; v++)
+        ;
+    if (!lv) f = 0u;                            /* silent: the sax down */
+    else if (v < NV && dt >= (f == 1u ? 250u : 0u))   /* a note held: rising, half up at 250 ms, all of it at 600 */
+        f = dt >= (f == 1u ? 600u : 500u) ? 3u : 2u;
+    spr_pix(&SPR_SAX, f, cx, cy, s, 15);
 }
 #undef S
 static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32_t t, int32_t lv)   /* a sound's

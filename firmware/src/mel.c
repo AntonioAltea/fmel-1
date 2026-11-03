@@ -530,12 +530,14 @@ static void smk_init(void);
 #endif
 static uint32_t ages;
 
-static uint32_t t_hit;                          /* (the screen) when a note last started: the ECHO's and REVERB's graphs */
+static uint32_t t_hit, n_hit;                   /* (the screen) when a note last started: the ECHO's and REVERB's graphs;
+                                                 * how many have (the sax: every other one) */
 static void note_on(uint32_t note)
 {
     uint32_t v, pick = 0, best = 0xFFFFFFFFu;
     int st = struck();
     t_hit = fm1_ms;
+    n_hit++;
     for (v = 0; v < NV && !st; v++)         /* its own voice still sounding: the tape just goes on (the piano: a
                                                  * new strike in a voice of its own, the last one dying away) */
         if ((voice[v].busy || voice[v].gate) && voice[v].note == note) {
