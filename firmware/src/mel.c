@@ -21,7 +21,7 @@
  *          SOUNDS  GLO again: PLAY OWN (each sound its own PLAY) / SHARED (one for all); every sound's PLAY, a table
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
  *   SEQ    SEQ     16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING; PLAY start / stop, REC record
- *                  (step recording: SEL is a rest, SEL held 1 s clears the pattern)
+ *                  (step recording: SEL is a rest); REC held 1 s clears the pattern
  *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX, F PIANO (a track selector: it stops at A and F; HOME goes
  *          round)   ALGORITHM the tempo, anywhere
  *   ENV    HOLD    the notes stay after you let go; the next chord replaces them
@@ -520,7 +520,7 @@ static void app_audio(int32_t *out, uint32_t n)
 }
 
 /* ---- notes (main loop): a note sounds while anything holds it */
-enum { S_KEY = 1, S_MIDI = 2, S_LATCH = 4, S_PED = 8 };   /* (+ S_ARP, S_SEQ: mel_seq.c) */
+enum { S_KEY = 1, S_MIDI = 2, S_LATCH = 4, S_PED = 8, S_ARP = 16, S_SEQ = 32 };   /* (ARP, SEQ: mel_seq.c) */
 static uint8_t src[128];
 #if BOARD_SMK37
 static uint8_t smk_note_vel[128], smk_vel_last = 100;   /* the velocity each note was struck with (keys, MIDI) */
@@ -553,8 +553,9 @@ static void note_on(uint32_t note)
     voice[pick].note = (uint8_t)note;
     voice[pick].age = ++ages;
 #if BOARD_SMK37
-    {                                           /* a key or MIDI: its velocity; ARP, SEQ: the last one struck */
-        uint32_t vel = src[note] & (S_KEY | S_MIDI) ? smk_note_vel[note] : smk_vel_last;
+    {                                           /* a key or MIDI: its velocity; ARP: the last one struck; SEQ: all of
+                                                 * it (what is played now is not the pattern's) */
+        uint32_t vel = src[note] & (S_KEY | S_MIDI) ? smk_note_vel[note] : src[note] & S_SEQ ? 127u : smk_vel_last;
         vel = vel < 1u ? 1u : vel > 127u ? 127u : vel;   /* VELOCITY: how far down the softest goes, even in dB (100%:
                                                           * 40 dB, 50%: 20; 0: every key as loud, as on the FM-1) */
         voice[pick].velg = (int32_t)exp2_neg(smk_vsens * (127u - vel) * 4354u / 126u);
@@ -1064,8 +1065,8 @@ static void pend(uint32_t btn, uint32_t t0, uint32_t fired, uint32_t len, const 
 /* EQ FLAT and PATTERN CLEARED can be undone: the same hold again within UNDO_MS, while what they left is untouched */
 #define UNDO_MS 5000u
 static int16_t eq_undo;
-static uint8_t pat_pre[16][4], pat_undo[16][4]; /* (pat_pre: as it was before SELECT's press put a rest in) */
-static uint32_t t_eq_undo, t_pat_undo, cur_pre, cur_undo;
+static uint8_t pat_undo[16][4];
+static uint32_t t_eq_undo, t_pat_undo, cur_undo;
 static int eq_undoable(void) { return !PV(P_SPK) && t_eq_undo && fm1_ms - t_eq_undo < UNDO_MS; }
 static int pat_undoable(void)
 {
@@ -1109,7 +1110,7 @@ static void hold_switch(void)                   /* HOLD on: what the keys (and M
 static void buttons(void)
 {
     uint32_t rel, b = fm1_input_edges(&rel);    /* pressed / released since the last call */
-    static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_env, env_long;
+    static uint32_t t_rec, rec_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_env, env_long;
     const char *was = pend_what;
     pend_what = 0;
 #if BOARD_SMK37
@@ -1182,7 +1183,9 @@ static void buttons(void)
     }
     if (b & (1u << BTN_PLAY))
         seq_start(!seq_play);
-    if (b & (1u << BTN_REC)) {
+    if (b & (1u << BTN_REC)) { t_rec = fm1_ms; rec_long = 0; }   /* REC: recording on / off when let go; held, the
+                                                 * pattern cleared */
+    if (rel & (1u << BTN_REC) && !rec_long) {
         seq_rec = !seq_rec;
         chord_open = 0;
         if (page != PG_SEQ) go_group(G_SEQ);
@@ -1190,13 +1193,8 @@ static void buttons(void)
         redraw |= 0xFu;
     }
     if (b & (1u << BTN_SEL)) {
-        t_sel = fm1_ms;
-        sel_long = 0;
-        if (seq_rec && !seq_play && page == PG_SEQ) {   /* step recording: a rest (held: the pattern cleared) */
+        if (seq_rec && !seq_play && page == PG_SEQ) {   /* step recording: a rest */
             uint32_t k;
-            for (k = 0; k < 64u; k++)
-                pat_pre[k / 4u][k % 4u] = set.steps[k / 4u][k % 4u];
-            cur_pre = seq_cur;
             for (k = 0; k < 4u; k++) set.steps[seq_cur][k] = 0;
             seq_cur = (seq_cur + 1u) % (uint32_t)PV(P_SLEN);
             chord_open = 0;
@@ -1208,10 +1206,9 @@ static void buttons(void)
         } else
             go_group(G_LAYER);
     }
-    if (seq_rec && !seq_play && page == PG_SEQ && fm1_in.buttons & (1u << BTN_SEL) && !sel_long
-        && fm1_ms - t_sel > 1000u) {
+    if (fm1_in.buttons & (1u << BTN_REC) && !rec_long && fm1_ms - t_rec > 1000u) {
         uint32_t k, had = 0;
-        sel_long = 1;
+        rec_long = 1;
         if (pat_undoable()) {                   /* (again, soon: as it was) */
             for (k = 0; k < 64u; k++)
                 set.steps[k / 4u][k % 4u] = pat_undo[k / 4u][k % 4u];
@@ -1220,10 +1217,10 @@ static void buttons(void)
             say("PATTERN BACK");
         } else {
             for (k = 0; k < 64u; k++) {
-                had |= pat_undo[k / 4u][k % 4u] = pat_pre[k / 4u][k % 4u];
+                had |= pat_undo[k / 4u][k % 4u] = set.steps[k / 4u][k % 4u];
                 set.steps[k / 4u][k % 4u] = 0;
             }
-            cur_undo = cur_pre;
+            cur_undo = seq_cur;
             seq_cur = 0;
             t_pat_undo = had ? (fm1_ms ? fm1_ms : 1u) : 0u;
             say("PATTERN CLEARED");
@@ -1249,8 +1246,7 @@ static void buttons(void)
     pend(BTN_FX, t_fx, fx_long, 600u, by_fx ? "FX IN" : "FX OUT");
     pend(BTN_EDIT, t_edit, edit_long, 600u, eq_undoable() ? "EQ BACK" : "EQ FLAT");
     pend(BTN_ENV, t_env, env_long, 600u, set.half ? "FULL SPEED" : "HALF SPEED");
-    if (seq_rec && !seq_play && page == PG_SEQ)
-        pend(BTN_SEL, t_sel, sel_long, 1000u, pat_undoable() ? "PATTERN BACK" : "CLEAR PATTERN");
+    pend(BTN_REC, t_rec, rec_long, 1000u, pat_undoable() ? "PATTERN BACK" : "CLEAR PATTERN");
     if (pend_what != was) redraw |= 1u;
 }
 

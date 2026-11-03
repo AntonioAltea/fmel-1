@@ -28,6 +28,9 @@ A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX: Mellotron M400S tapes. F PIANO: a Ste
 - OCT- and OCT+ held 5 s: restart into USB rescue mode.
 - Tapes in block ADPCM (genkigenki's Erik37 format). Flute and sax in 8-bit PCM.
 - Installer and simulator: FM-1 / SMK-37 selector.
+- REC held 1 s clears the pattern (was SEL held, in step recording).
+- SEQ steps play at full level (SMK-37); playing over them does not change it.
+- AGE adds no hiss. HISS is the only hiss control.
 
 ## Disclaimer
 

@@ -30,7 +30,7 @@ Every control on the surface does one thing, always. A light means something is 
 
 | | |
 | --- | --- |
-| Keys | all 37, C3..C6 at OCTAVE 0; how hard you play is how loud the tape: SETUP's VELOCITY is how much (0%: every key as loud, 50%: the softest 20 dB down, 100%: 40 dB) |
+| Keys | all 37, C3..C6 at OCTAVE 0; how hard you play is how loud the tape: SETUP's VELOCITY is how much (0%: every key as loud, 50%: the softest 20 dB down, 100%: 40 dB); the SEQ's steps play at full level |
 | Pads, top row 1-6 | the SOUND: A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX, F PIANO |
 | Pads, bottom row 9-14 | the LAYER's sound, the same columns (the lit one again: no layer) |
 | Pad 7 / 15, held | only the top row / only the bottom row heard |
@@ -49,6 +49,7 @@ Every control on the surface does one thing, always. A light means something is 
 | KNOB BANK held at power-on | the panel check |
 | OCTAVE- held at power-on | the USB rescue |
 | OCTAVE- and OCTAVE+ held 5 s | restart into the USB rescue |
+| SEQ REC | recording on / off; held 1 s: the pattern cleared (again within 5 s: back) |
 
 The pads light in each sound's colour, the chosen one brighter while it plays. Where a fader is, is its value: the
 four are read, not saved. The SMK-37's TRS jack is a MIDI output; MIDI comes in over USB only.
