@@ -22,7 +22,7 @@
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
  *   SEQ    SEQ     16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING; PLAY start / stop, REC record
  *                  (step recording: SEL is a rest, SEL held 1 s clears the pattern)
- *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO, F SAX (a track selector: it stops at A and F; HOME goes
+ *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX, F PIANO (a track selector: it stops at A and F; HOME goes
  *          round)   ALGORITHM the tempo, anywhere
  *   ENV    HOLD    the notes stay after you let go; the next chord replaces them
  *          held    ENV held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
@@ -627,7 +627,7 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 5, 0, 1},
 };
 
-#define SET_VER 14u                             /* (13: as 14, VELOCITY's place unused; 11, 12: five sounds, before the SAX; 11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
+#define SET_VER 15u                             /* (14: as 15, E PIANO, F SAX; 13: as 14, VELOCITY's place unused; 11, 12: five sounds, before the SAX; 11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
                                                  * tapes', 8, 9: an earlier piano's) starts again from its own) */
 #define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
 #define NSETS12 5u                              /* the sounds in settings before 13 */
@@ -960,6 +960,10 @@ static int16_t play_ok(uint32_t k, int32_t v)  /* a stored PLAY value, or its de
 {
     return (int16_t)(v >= PINFO[P_TONE + k][0] && v <= PINFO[P_TONE + k][1] ? v : PINFO[P_TONE + k][2]);
 }
+static uint32_t old_set(uint32_t k)            /* settings before 15: E PIANO, F SAX (the same swap both ways) */
+{
+    return k == 4u ? 5u : k == 5u ? 4u : k;
+}
 static void app_init(void)
 {
     uint32_t k, n = 0;
@@ -975,7 +979,7 @@ static void app_init(void)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && (s.ver == 13u || s.ver == SET_VER) && s.np == NP) {   /* (else: the defaults) */
+    if (!settings_load(&s, sizeof s) && s.ver >= 13u && s.ver <= SET_VER && s.np == NP) {   /* (else: the defaults) */
         n = NP; p = s.p; st = &s.steps[0][0]; pl = s.play;
     } else if (!settings_load(r, sizeof *r) && (r->ver == 11u || r->ver == 12u) && r->np == NP) {
         n = NP; p = r->p; st = &r->steps[0][0]; pl = r->play; npl = NSETS12;
@@ -989,13 +993,17 @@ static void app_init(void)
         for (k = 0; k < n; k++)
             if (p[k] >= PINFO[k][0] && p[k] <= PINFO[k][1])
                 set.p[k] = p[k];
+        if (s.ver < 15u) {                      /* (E was the PIANO, F the SAX) */
+            set.p[P_SOUND] = (int16_t)old_set((uint32_t)PV(P_SOUND));
+            if (PV(P_BSND)) set.p[P_BSND] = (int16_t)(old_set((uint32_t)PV(P_BSND) - 1u) + 1u);
+        }
         for (k = 0; k < 64u; k++)
             set.steps[k / 4u][k % 4u] = st[k] < 128u ? st[k] : 0u;
     }
     for (k = 0; k < MEL_NSETS * NPLAY; k++) {   /* every sound's PLAY: its own, or (new) as PLAY was; the piano's
                                                  * from its own (before 8 it had the tapes') */
-        uint32_t st = k / NPLAY, i = k % NPLAY;
-        set.play[st][i] = pl && st < npl && (s.ver >= 10u || !MEL_SET_STRUCK[st]) ? play_ok(i, pl[st][i])
+        uint32_t st = k / NPLAY, i = k % NPLAY, os = n && s.ver < 15u ? old_set(st) : st;   /* (where it was stored) */
+        set.play[st][i] = pl && os < npl && (s.ver >= 10u || !MEL_SET_STRUCK[st]) ? play_ok(i, pl[os][i])
                         : n && !MEL_SET_STRUCK[st] ? set.p[P_TONE + i] : (int16_t)MEL_SET_PLAY[st][i];
     }
     if (PV(P_PMODE) || !n)                      /* (OWN: the knobs are the sound playing's) */

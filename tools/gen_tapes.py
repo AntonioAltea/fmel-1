@@ -36,7 +36,7 @@ import numpy as np
 
 NAMES = {"MkII_Violins": "VIOLINS", "MkII_Flute": "FLUTE", "8_Choir": "CHOIR", "Cello": "CELLO", "Vibes": "VIBES",
          "Woodwind_2": "WOODWIND", "Piano": "PIANO", "Tenor_Sax": "SAX"}
-SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Piano", "Tenor_Sax"]  # A B C (the M400's three tracks), D, E, F
+SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Tenor_Sax", "Piano"]  # A B C (the M400's three tracks), D, E, F
 DECAYS = {"Vibes": 0.6, "Piano": 0}                           # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs

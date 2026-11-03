@@ -7,6 +7,8 @@ pedal jack on top. The FM-1 build is unchanged; everything for the SMK-37 is beh
 genkigenki's (his [fm1-to-smk37](https://github.com/genkigenki/fm1-to-smk37) kit). genkigenki also made the first
 SMK-37 build of FMEL-1.
 
+Try it in the browser: <https://antonioaltea.github.io/fmel-1/smk37.html>.
+
 ## Supported models
 
 - **SMK-37 Pro**: the default build (identity `SMK-37 Pro_45N`, N the minor version, as the FM-1's `FM-1_95N`).
@@ -29,7 +31,7 @@ Every control on the surface does one thing, always. A light means something is 
 | | |
 | --- | --- |
 | Keys | all 37, C3..C6 at OCTAVE 0; how hard you play is how loud the tape: SETUP's VELOCITY is how much (0%: every key as loud, 50%: the softest 20 dB down, 100%: 40 dB) |
-| Pads, top row 1-6 | the SOUND: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO, F SAX |
+| Pads, top row 1-6 | the SOUND: A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX, F PIANO |
 | Pads, bottom row 9-14 | the LAYER's sound, the same columns (the lit one again: no layer) |
 | Pad 7 / 15, held | only the top row / only the bottom row heard |
 | Pad 8 | HOLD: a tap switches it; held, it is on (or off) only while held |
@@ -41,11 +43,12 @@ Every control on the surface does one thing, always. A light means something is 
 | K5..K8 | the page's four knobs (the plate on the screen) |
 | < > | the section's pages, back and on |
 | FADER BANK | UNDO: the last knob or pad change back; again: redone (lit while there is one) |
-| Pitch wheel / mod wheel | the motor (+-2 semitones) / the vibrato's DEPTH (up to all of it) |
+| Pitch wheel / mod wheel | the motor (+-2 semitones) / the vibrato's DEPTH, from the page's value (down) to 100% (up), and its MIX to fully wet |
 | PEDAL jack | sustain (either kind of pedal) |
 | PATCH, SCALE, NOTE REPEAT, FX, PARA, GLOBE, CHORD, ARP, SEQ, SEQ PLAY, SEQ REC, BT, OCTAVE- / + | the FM-1's HOME, SEL, LFO, FX, EDIT, GLO, ENV, ARP, SEQ, PLAY, REC, SAVE, OCT- / + |
 | KNOB BANK held at power-on | the panel check |
 | OCTAVE- held at power-on | the USB rescue |
+| OCTAVE- and OCTAVE+ held 5 s | restart into the USB rescue |
 
 The pads light in each sound's colour, the chosen one brighter while it plays. Where a fader is, is its value: the
 four are read, not saved. The SMK-37's TRS jack is a MIDI output; MIDI comes in over USB only.
@@ -67,8 +70,8 @@ python3 tools/fm1_install.py build/mel-smk37.fwsc
 ```
 
 It checks that the package is for the connected keyboard, and over another custom firmware it stops and asks you to go
-back to the stock firmware first (`--over-custom` installs anyway). The web installer at
-<https://genkigenki.github.io/smk37/> takes the packages too.
+back to the stock firmware first (`--over-custom` installs anyway). Or use the web installer:
+<https://antonioaltea.github.io/fmel-1/install/> (Chrome or Edge), choose SMK-37 and your model.
 
 ## Back to the stock firmware
 
