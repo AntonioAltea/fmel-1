@@ -11,7 +11,7 @@
  *   SEL    LAYER   a second sound on the same tape's other track: SOUND (OFF A B C D E), MIX (between the two), OCTAVE,
  *                  DETUNE; on its page SEL again turns the SOUND (lit: a layer sounds)
  *   LFO    LOFI    TAPE: WOW, FLUTTER, DRIVE (into the tape: saturation), HISS  -  WEAR: AGE (a copy of a copy:
- *                  the band narrows, and the copying deck adds its hiss, flutter, drive), DROPOUT, DRIFT, CRUSH
+ *                  the band narrows, and the copying deck adds its flutter, drive), DROPOUT, DRIFT, CRUSH
  *   FX     FX      VIBRATO: RATE DEPTH TONE MIX - ECHO: TIME REPEATS TONE MIX - REVERB: SIZE TONE PRE MIX
  *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; lit: in, dark: out)
  *   EDIT   EQ      SPEAKER: Felucca's SPEAKER EQ, FLAT, LOWCUT, BASS+, and HIGHCUT; held 0.6 s: FLAT (again, soon: as it was)

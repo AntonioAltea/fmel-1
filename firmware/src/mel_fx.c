@@ -2,7 +2,8 @@
 /* MEL's tape and effects (the audio ISR), in the order the sound goes through them. Included by mel.c.
  *
  *   the tape     (LOFI)  AGE: a copy of a copy: the band narrows, two poles each side (9 kHz .. 1.1 kHz, 20 .. 380 Hz),
- *                        and every copy brings the copying deck's hiss, flutter and drive (added to the knobs')
+ *                        and every copy brings the copying deck's flutter and drive (added to the knobs'; no hiss:
+ *                        HISS is its own)
  *                        DROPOUT: the oxide gone in places, dips of 30..200 ms (past half way the motor drags too)
  *                        the M400's TONE; DRIVE, after the JHS 424 (a Portastudio's cassette preamp): 0 .. +36 dB into
  *                        a soft clipper, a bias for even harmonics, a low-pass closing as it drives, the level kept;
@@ -321,7 +322,7 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     int32_t rg = 32768 + (rl < 0 ? rl * 2 : 0);   /* the reel held back: the tape quieter (to -2 dB) .. */
     kt = (kt * (32768 + rl * 4)) >> 15;         /* .. and darker; pushed on, a little brighter */
     kt = kt > 16000 ? 16000 : kt < 200 ? 200 : kt;
-    int32_t sv_ = f_sat + age / 4 > 100 ? 100 : f_sat + age / 4, hv = f_hiss + age * 2 / 5 > 100 ? 100 : f_hiss + age * 2 / 5;
+    int32_t sv_ = f_sat + age / 4 > 100 ? 100 : f_sat + age / 4, hv = f_hiss;   /* (AGE: no hiss) */
     int32_t dg = MEL_DRV[sv_], dmk = MEL_DRVMK[sv_], dlk = MEL_DRVLP[sv_] >> 1, dbias = sv_ * 49;   /* DRIVE */
     int32_t hl = (hv * hv * 13 / 100 * (8192 + act * 3 / 4)) >> 15;
     int32_t blt = f_by_lofi ? 32767 : 32767 - f_lofi_amt, bl = lofi_bp, bft = f_by_fx ? 32767 : 32767 - f_fx_amt, bf = fx_bp;
