@@ -1,7 +1,7 @@
 # What the web says
 
 Every sentence on the site is yours. Each row is one thing to convey. Write the phrase in `ES` (and `EN` if you want
-it in English too; empty: I leave the row out). Few words: the page shows one thing at a time and lights, ticks and
+it in English too; empty: I leave the row out). Few words: the page shows one thing at a time and lights, advice and
 the live status say the rest.
 
 Principles: a message only when something needs the reader (otherwise nothing: the "dark cockpit"); one action per
@@ -10,7 +10,7 @@ step, the next one appears when it can be done; the verb first; the keyboard's n
 ## Installer: the order of the page
 
 1. Your keyboard (FM-1 / SMK-37, then the model)
-2. Before you start (three ticks)
+2. Before you start (advice, no ticks: Install installs whatever the keyboard runs)
 3. Find it → what it runs → Install → progress → Done
 4. Folded: back to the factory firmware
 5. Folded: if something goes wrong
@@ -29,11 +29,11 @@ live status says each step as it happens.
 | model | under the SMK-37 models | pick the one written on yours: only that model's factory firmware goes back on later | 15 | Modelo de SMK-37 | |
 | starry | next to SMK-37 Pro | the Starrykey 37 Play is this one | 4 | Similar a Starrykey 37 Play | |
 | before | step 2 heading | before you start | 3 | Antes de empezar | |
-| t-cable | tick 1 | a data cable, straight in, no hub | 7 | Conectado directamente por USB | |
-| t-alone | tick 2 | close anything that uses MIDI (DAW, M-UPGRADE, other tabs) | 8 | Cierra otras pestañas o programas que pueden estar usando MIDI (DAW, M-UPGRADE, otras pestañas...) | |
-| t-stock | tick 3, FM-1 | it runs the official firmware (or FMEL-1); another custom one: go back to the official first | 15 | Firmware oficial o FMEL-1 instalado | |
-| t-stock-smk | tick 3, SMK-37 | it runs M-VAVE's V016 (or FMEL-1); older: update with M-UPGRADE; another custom one: back to M-VAVE's first | 18 | Firmware stock o FMEL-1 instalado | |
-| t-plug | tick 4 | don't unplug it until it says Done | 8 | No lo desconectes hasta que diga «Hecho» | |
+| t-cable | advice 1 | a data cable, straight in, no hub | 7 | Conectado directamente por USB | |
+| t-alone | advice 2 | close anything that uses MIDI (DAW, M-UPGRADE, other tabs) | 8 | Cierra otras pestañas o programas que pueden estar usando MIDI (DAW, M-UPGRADE, otras pestañas...) | |
+| t-stock | advice 3, FM-1 | safer over the official firmware (or FMEL-1) | 8 | Más seguro sobre el firmware oficial o FMEL-1 ~ | Safer over the official firmware or FMEL-1 ~ |
+| t-stock-smk | advice 3, SMK-37 | safer over M-VAVE's V016 (or FMEL-1) | 8 | Más seguro sobre el firmware stock o FMEL-1 ~ | Safer over the stock firmware or FMEL-1 ~ |
+| t-plug | advice 4 | don't unplug it until it says Done | 8 | No lo desconectes hasta que diga «Hecho» | |
 | find | button | find my keyboard | 3 | Encontrar teclado | |
 | install | button | install | 2 | Instalar | |
 | resume | button | finish the install that was cut off | 4 | Continuar instalación incompleta | |
@@ -62,7 +62,7 @@ Each appears only in its moment.
 | old-stock | SMK-37 older than V016 | update to V016 with M-UPGRADE first | 8 | | |
 | is-mel | runs FMEL-1 | FMEL-1 (version): it can be updated | 6 | FMEL-1 ({v}): listo para actualizar ~ | |
 | rescue | in the USB rescue | in the rescue: ready | 4 | En rescate: listo ~ | |
-| custom | runs another custom firmware | another custom firmware: back to the factory one first | 10 | | |
+| custom | runs another custom firmware | another custom firmware: safer to go back to the factory one first | 10 | El FM-1 lleva otro firmware no oficial ({v}). Más seguro: vuelve primero al V15 oficial (paso 5). ~ | The FM-1 runs another unofficial firmware ({v}). Safer: go back to the official V15 first (step 5). ~ |
 | cut-off | in FMEL's update mode | an install was cut off: finish it | 7 | Instalación a medias: termínala ~ | |
 | other-loader | in another firmware's update mode | another firmware's update: switch it off and on | 9 | | |
 | ask | confirm before writing | install FMEL-1 for the (model)? don't unplug it | 9 | | |
@@ -73,7 +73,7 @@ Each appears only in its moment.
 | done | done | done: you can unplug it | 5 | Hecho: ya puedes desconectarlo ~ | |
 | lost | the cable came out | cut off: plug it in, find it, finish | 8 | | |
 | no-return | it did not come back | switch it off and on, then find it again | 9 | | |
-| why-* | under a disabled button | what is still missing (tick step 2 / find it / the file) | 6 | Falta: {lo que falte} ~ | |
+| why-* | under a disabled button | what is still missing (find it / the file) | 6 | Falta: {lo que falte} ~ | |
 
 ## Installer: if something goes wrong (folded, one line each)
 

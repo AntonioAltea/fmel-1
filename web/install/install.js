@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // MEL's web installer: Felucca's update protocol (fm1ota.js, fm1pkg.js) with MEL's checks on top, the same as
-// tools/fm1_install.py: the package is whole and is MEL; the keyboard runs M-VAVE's own firmware, the USB rescue or
-// MEL (never straight over another custom firmware); an install cut off is finished, never started over; the
-// official firmware can always go back on. Two boards: the FM-1, and the SMK-37 (Pro, Elite, MKE-P37: one keyboard,
+// tools/fm1_install.py: the package is whole and is MEL, for the keyboard chosen. What the keyboard runs is said,
+// with advice (another custom firmware: the official one first is safer), never a gate: Install installs. An install
+// cut off is finished, never started over; the official firmware can always go back on. Two boards: the FM-1, and the SMK-37 (Pro, Elite, MKE-P37: one keyboard,
 // three names, each with its own package so that M-VAVE's updater still takes the unit's own factory one back).
 import { Updater, sameKeyboard } from "./fm1ota.js";
 import { Package, logicalImage, sha256hex, validateStockPackage } from "./fm1pkg.js";
@@ -42,7 +42,7 @@ const M = {                                     // what the page says, by langua
     rescue: () => "In rescue: ready.",
     official: (t) => `Official firmware (${t}): ready.`,
     oldStock: (t) => `The SMK-37 runs the official firmware ${t}: update it to V016 with M-UPGRADE first (step 5), then install FMEL-1.`,
-    custom: (t) => `The FM-1 runs another unofficial firmware (${t}). Go back to the official V15 first (step 5), then install FMEL-1.`,
+    custom: (t) => `The FM-1 runs another unofficial firmware (${t}). Safer: go back to the official V15 first (step 5).`,
     wrongBoard: (t) => `That is ${t}, not the keyboard chosen at the top: choose the other one there.`,
     error: (m) => `Error: ${m}`,
     start: (t) => `Starting on ${t}…`,
@@ -55,12 +55,10 @@ const M = {                                     // what the page says, by langua
     askStock: () => "Install the official V15 firmware? Don't unplug the FM-1 until the page says «Done».",
     notReady: () => "The FM-1 is no longer ready to install: look for it again.",
     noResume: () => "Could not finish: unplug it, plug it in again and look for the FM-1 again.",
-    needAck: () => "Missing: tick the boxes.",
     needFind: () => "Missing: find the keyboard.",
     needFile: () => "Missing: choose the file.",
     needPkg: () => "Missing: the package.",
     inLoader: () => "Missing: finish the unfinished install.",
-    cantHere: () => "Missing: the official firmware.",
   },
   es: {
     pkgChecking: () => "Comprobando el paquete…",
@@ -83,7 +81,7 @@ const M = {                                     // what the page says, by langua
     rescue: () => "En rescate: listo.",
     official: (t) => `Firmware oficial (${t}): listo.`,
     oldStock: (t) => `El SMK-37 lleva el firmware oficial ${t}: primero actualízalo al V016 con M-UPGRADE (paso 5) y después instala FMEL-1.`,
-    custom: (t) => `El FM-1 lleva otro firmware no oficial (${t}). Primero vuelve al V15 oficial (paso 5) y después instala FMEL-1.`,
+    custom: (t) => `El FM-1 lleva otro firmware no oficial (${t}). Más seguro: vuelve primero al V15 oficial (paso 5).`,
     wrongBoard: (t) => `Eso es un ${t}, no el teclado elegido arriba: elige el otro ahí.`,
     error: (m) => `Error: ${m}`,
     start: (t) => `Empezando en ${t}…`,
@@ -96,12 +94,10 @@ const M = {                                     // what the page says, by langua
     askStock: () => "¿Instalar el firmware oficial V15? No desconectes el FM-1 hasta que la página diga «Hecho».",
     notReady: () => "El FM-1 ya no está listo para instalar: búscalo otra vez.",
     noResume: () => "No he podido terminar: desconecta, vuelve a conectar y busca el FM-1 otra vez.",
-    needAck: () => "Falta: marcar las casillas.",
     needFind: () => "Falta: encontrar el teclado.",
     needFile: () => "Falta: elegir el archivo.",
     needPkg: () => "Falta: el paquete.",
     inLoader: () => "Falta: terminar la instalación a medias.",
-    cantHere: () => "Falta: firmware oficial.",
   },
 };
 const tr = (key, ...a) => {
@@ -129,7 +125,7 @@ const isOfficialOrRescue = (id) => /_0\d\d$/.test(id.text) && !isLoader(id);
 const isLoader = (id) => /^ota-/i.test(id.model);
 const isOurLoader = (id) => /^ota-.+_[49]\d\d$/i.test(id.text);   // Felucca's loader, as MEL's packages carry
 const stockTooOld = (id) => board === "smk37" && /_0\d\d$/.test(id.text) && id.version > 0 && id.version < 16;
-const installable = (id) => onBoard(id) && (isMel(id) || (isOfficialOrRescue(id) && !stockTooOld(id)));
+const installable = (id) => onBoard(id) && !isLoader(id);   // (whatever it runs: the advice is said, the reader decides)
 
 // ---- the package: whole (its CRCs, its SHA-256 as published), and MEL for the chosen keyboard
 async function loadMeta() {
@@ -164,21 +160,18 @@ async function loadPackage() {
   refresh();
 }
 
-function prechecked() { return [...document.querySelectorAll(".pre")].every((c) => c.checked); }
-
 function refresh() {
-  const ready = mel && device && !busy && prechecked();
+  const ready = mel && device && !busy;
   $("install").disabled = !(ready && installable(device));
   $("resume").hidden = !(device && onBoard(device) && isOurLoader(device));
-  $("resume").disabled = !(mel && device && !busy && prechecked());
+  $("resume").disabled = !(mel && device && !busy);
   $("connect").disabled = busy;
-  $("stock").disabled = busy || !$("stockfile").files.length || !prechecked() || !device || isLoader(device) || !isFm1(device);
+  $("stock").disabled = busy || !$("stockfile").files.length || !device || isLoader(device) || !isFm1(device);
   document.querySelectorAll("[name=board], [name=model]").forEach((r) => (r.disabled = busy));
   // what each disabled button still waits for, the first thing missing
   const why = (el, keys) => { const k = busy ? null : keys.find(Boolean); if (k) say(el, k, "muted"); else { delete shown[el]; $(el).textContent = ""; } };
-  why("installwhy", [!prechecked() && "needAck", !device && "needFind", !mel && "needPkg", device && isLoader(device) && "inLoader",
-                     device && !installable(device) && "cantHere"]);
-  why("stockwhy", [!prechecked() && "needAck", !device && "needFind", device && isLoader(device) && "inLoader",
+  why("installwhy", [!device && "needFind", !mel && "needPkg", device && isLoader(device) && "inLoader"]);
+  why("stockwhy", [!device && "needFind", device && isLoader(device) && "inLoader",
                    !$("stockfile").files.length && "needFile"]);
 }
 
@@ -301,5 +294,4 @@ say("dev", "devNone", "muted");
 showBoard();
 $("connect").onclick = connect;
 $("stockfile").onchange = refresh;
-document.querySelectorAll(".pre").forEach((c) => (c.onchange = refresh));
 loadMeta();

@@ -72,7 +72,8 @@ python3 tools/fm1_install.py build/mel-smk37.fwsc
 
 It checks that the package is for the connected keyboard, and over another custom firmware it stops and asks you to go
 back to the stock firmware first (`--over-custom` installs anyway). Or use the web installer:
-<https://antonioaltea.github.io/fmel-1/install/> (Chrome or Edge), choose SMK-37 and your model.
+<https://antonioaltea.github.io/fmel-1/install/> (Chrome or Edge), choose SMK-37 and your model. Over another custom
+firmware it advises the same, and installs when you press Install.
 
 ## Back to the stock firmware
 
