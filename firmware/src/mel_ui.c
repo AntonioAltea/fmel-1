@@ -160,16 +160,19 @@ static void spr_violins(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t l
     spr_fiddle(cx + S(30), cy - S(6), S(170), t + 700u, lv, 0, RGB(176, 94, 40));
     spr_fiddle(cx, cy + S(4), S(220), t, lv, 0, RGB(214, 120, 46));
 }
-static void spr_unpack(const sprite_t *sp, uint32_t f, uint8_t *px)   /* (a frame after the first: only where it
-                                                                     * is not the first; 255, as the first there) */
+static void spr_unpack(const sprite_t *sp, uint32_t f, uint8_t *px)   /* (a delta frame: only where it is not
+                                                                     * the first; 255, as the first there) */
 {
     const uint8_t *r = sp->frame[f];
-    uint32_t i = 0, n, end = (uint32_t)sp->w * sp->h;
-    if (f) spr_unpack(sp, 0u, px);
-    for (; i < end; r += 2)
-        if (r[1] == 255u) i += r[0];
+    uint32_t i = 0, n, v, end = (uint32_t)sp->w * sp->h;
+    if (sp->delta >> f & 1u) spr_unpack(sp, 0u, px);
+    while (i < end) {
+        if (*r >> 4) n = *r >> 4, v = *r++ & 15u;   /* a short run of part 0 */
+        else n = r[1], v = r[2], r += 3;
+        if (v == 255u) i += n;
         else
-            for (n = r[0]; n--; ) px[i++] = r[1];
+            while (n--) px[i++] = (uint8_t)v;
+    }
 }
 static const uint8_t *spr_frame(const sprite_t *sp, uint32_t f)   /* a frame unpacked (the last one kept) */
 {
@@ -255,19 +258,11 @@ static void spr_piano(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)
     static const uint8_t F[4] = {1, 2, 3, 2};   /* playing: the hands up the keys and back (200 ms each) */
     spr_pix(&SPR_PIANO, lv ? F[t / 200u % 4u] : 0u, cx, cy, s, 15);   /* (silent: hands in its lap) */
 }
-static void spr_sax(int32_t cx, int32_t cy, int32_t s)   /* the SAX until it is drawn: a big S, in brass */
+static void spr_sax(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* a bear with a saxophone
+                                                                                   * (drawn), swinging it up */
 {
-    const uint32_t c = (uint32_t)('S' - F24.first), rb = (F24.w + 7u) / 8u;
-    int32_t px = 3 * s >> 8, x, y, x0, y0;
-    if (px < 1) px = 1;
-    x0 = cx - (int32_t)F24.w * px / 2;
-    y0 = cy - (int32_t)F24.h * px / 2;
-    for (y = 0; y < (int32_t)F24.h; y++)
-        for (x = 0; x < (int32_t)F24.w; x++)
-            if (F24.data[(c * F24.h + (uint32_t)y) * rb + (uint32_t)x / 8u] >> (7u - (uint32_t)x % 8u) & 1u) {
-                cv_rect(x0 + x * px + 2, y0 + y * px + 2, px, px, RGB(24, 20, 37));   /* (its shadow) */
-                cv_rect(x0 + x * px, y0 + y * px, px, px, RGB(222, 170, 40));
-            }
+    static const uint8_t F[4] = {1, 2, 3, 2};   /* playing: the sax up and back (200 ms each) */
+    spr_pix(&SPR_SAX, lv ? F[t / 200u % 4u] : 0u, cx, cy, s, 15);   /* (silent: the sax down) */
 }
 #undef S
 static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32_t t, int32_t lv)   /* a sound's
@@ -279,7 +274,7 @@ static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32
     else if (nm[0] == 'V') spr_violins(cx, cy + 10, 230 * sc >> 8, t, lv);
     else if (nm[0] == 'P') spr_piano(cx, cy, sc, t, lv);
     else if (nm[0] == 'C') spr_cello(cx, cy, sc, t, lv);
-    else if (nm[0] == 'S') spr_sax(cx, cy, sc);   /* (no drawing yet) */
+    else if (nm[0] == 'S') spr_sax(cx, cy, sc, t, lv);
 }
 
 /* ---- the body's top */

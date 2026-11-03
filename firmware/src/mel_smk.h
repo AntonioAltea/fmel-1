@@ -25,7 +25,7 @@ static const uint8_t SMK_COL[6][3] = {          /* each sound's colour, its colu
     {190, 40, 10},                              /* C CELLO: the cello's brown */
     {0, 160, 255},                              /* D VIBES: the vibraphone's blue */
     {40, 220, 20},                              /* E PIANO: the frog's green */
-    {255, 170, 0}};                             /* F SAX: brass (its S) */
+    {255, 170, 0}};                             /* F SAX: brass */
 enum { SP_SOLO_A = 6, SP_HOLD = 7, SP_SOLO_B = 14, SP_HALF = 15 };
 
 static uint8_t smk_fad_last[4] = {0xFF, 0xFF, 0xFF, 0xFF};
