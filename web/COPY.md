@@ -59,10 +59,8 @@ Each appears only in its moment.
 | not-found | nothing answers | not found: data cable? unplug, plug in, again | 10 | No se encuentra | |
 | wrong-board | an FM-1 when SMK-37 is chosen (or the reverse) | this is an FM-1 / SMK-37: choose it above | 8 | | |
 | official | runs the factory firmware | factory firmware (version): ready | 5 | Firmware oficial ({v}): listo ~ | |
-| old-stock | SMK-37 older than V016 | update to V016 with M-UPGRADE first | 8 | | |
 | is-mel | runs FMEL-1 | FMEL-1 (version): it can be updated | 6 | FMEL-1 ({v}): listo para actualizar ~ | |
 | rescue | in the USB rescue | in the rescue: ready | 4 | En rescate: listo ~ | |
-| custom | runs another custom firmware | another custom firmware: safer to go back to the factory one first | 10 | El FM-1 lleva otro firmware no oficial ({v}). Más seguro: vuelve primero al V15 oficial (paso 5). ~ | The FM-1 runs another unofficial firmware ({v}). Safer: go back to the official V15 first (step 5). ~ |
 | cut-off | in FMEL's update mode | an install was cut off: finish it | 7 | Instalación a medias: termínala ~ | |
 | other-loader | in another firmware's update mode | another firmware's update: switch it off and on | 9 | | |
 | ask | confirm before writing | install FMEL-1 for the (model)? don't unplug it | 9 | | |

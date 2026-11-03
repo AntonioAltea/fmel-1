@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // MEL's web installer: Felucca's update protocol (fm1ota.js, fm1pkg.js) with MEL's checks on top, the same as
-// tools/fm1_install.py: the package is whole and is MEL, for the keyboard chosen. What the keyboard runs is said,
-// with advice (another custom firmware: the official one first is safer), never a gate: Install installs. An install
+// tools/fm1_install.py: the package is whole and is MEL, for the keyboard chosen. What the keyboard runs is never a
+// gate, nor a warning (step 2's advice says it once): Install installs. An install
 // cut off is finished, never started over; the official firmware can always go back on. Two boards: the FM-1, and the SMK-37 (Pro, Elite, MKE-P37: one keyboard,
 // three names, each with its own package so that M-VAVE's updater still takes the unit's own factory one back).
 import { Updater, sameKeyboard } from "./fm1ota.js";
@@ -41,8 +41,6 @@ const M = {                                     // what the page says, by langua
     isMel: (t) => `FMEL-1 (${t}): ready to update.`,
     rescue: () => "In rescue: ready.",
     official: (t) => `Official firmware (${t}): ready.`,
-    oldStock: (t) => `The SMK-37 runs the official firmware ${t}: update it to V016 with M-UPGRADE first (step 5), then install FMEL-1.`,
-    custom: (t) => `The FM-1 runs another unofficial firmware (${t}). Safer: go back to the official V15 first (step 5).`,
     wrongBoard: (t) => `That is ${t}, not the keyboard chosen at the top: choose the other one there.`,
     error: (m) => `Error: ${m}`,
     start: (t) => `Starting on ${t}…`,
@@ -80,8 +78,6 @@ const M = {                                     // what the page says, by langua
     isMel: (t) => `FMEL-1 (${t}): listo para actualizar.`,
     rescue: () => "En rescate: listo.",
     official: (t) => `Firmware oficial (${t}): listo.`,
-    oldStock: (t) => `El SMK-37 lleva el firmware oficial ${t}: primero actualízalo al V016 con M-UPGRADE (paso 5) y después instala FMEL-1.`,
-    custom: (t) => `El FM-1 lleva otro firmware no oficial (${t}). Más seguro: vuelve primero al V15 oficial (paso 5).`,
     wrongBoard: (t) => `Eso es un ${t}, no el teclado elegido arriba: elige el otro ahí.`,
     error: (m) => `Error: ${m}`,
     start: (t) => `Empezando en ${t}…`,
@@ -124,7 +120,6 @@ const isMel = (id) => (board === "fm1" ? /^FM-1_95\d$/ : /_45\d$/).test(id.text)
 const isOfficialOrRescue = (id) => /_0\d\d$/.test(id.text) && !isLoader(id);
 const isLoader = (id) => /^ota-/i.test(id.model);
 const isOurLoader = (id) => /^ota-.+_[49]\d\d$/i.test(id.text);   // Felucca's loader, as MEL's packages carry
-const stockTooOld = (id) => board === "smk37" && /_0\d\d$/.test(id.text) && id.version > 0 && id.version < 16;
 const installable = (id) => onBoard(id) && !isLoader(id);   // (whatever it runs: the advice is said, the reader decides)
 
 // ---- the package: whole (its CRCs, its SHA-256 as published), and MEL for the chosen keyboard
@@ -192,9 +187,8 @@ async function connect() {
     else if (isLoader(device)) say("dev", "otherLoader", "bad", device.text);
     else if (isMel(device)) say("dev", "isMel", "ok", device.text);
     else if (/_000$/.test(device.text)) say("dev", "rescue", "ok");
-    else if (stockTooOld(device)) say("dev", "oldStock", "bad", device.text);
     else if (isOfficialOrRescue(device)) say("dev", "official", "ok", device.text);
-    else say("dev", "custom", "bad", device.text);
+    else { delete shown.dev; $("dev").textContent = ""; $("dev").className = "muted"; }   // (another firmware: nothing to say)
   } catch (e) {
     say("dev", "error", "bad", e.message);
   }
