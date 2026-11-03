@@ -61,6 +61,7 @@ Each appears only in its moment.
 | official | runs the factory firmware | factory firmware (version): ready | 5 | Firmware oficial ({v}): listo ~ | |
 | is-mel | runs FMEL-1 | FMEL-1 (version): it can be updated | 6 | FMEL-1 ({v}): listo para actualizar ~ | |
 | rescue | in the USB rescue | in the rescue: ready | 4 | En rescate: listo ~ | |
+| found | runs another firmware | found (its identity): ready | 3 | Encontrado: {v}. Listo. ~ | Found: {v}. Ready. ~ |
 | cut-off | in FMEL's update mode | an install was cut off: finish it | 7 | Instalación a medias: termínala ~ | |
 | other-loader | in another firmware's update mode | another firmware's update: switch it off and on | 9 | | |
 | ask | confirm before writing | install FMEL-1 for the (model)? don't unplug it | 9 | | |

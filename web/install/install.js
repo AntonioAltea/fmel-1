@@ -41,6 +41,7 @@ const M = {                                     // what the page says, by langua
     isMel: (t) => `FMEL-1 (${t}): ready to update.`,
     rescue: () => "In rescue: ready.",
     official: (t) => `Official firmware (${t}): ready.`,
+    found: (t) => `Found: ${t}. Ready.`,
     wrongBoard: (t) => `That is ${t}, not the keyboard chosen at the top: choose the other one there.`,
     error: (m) => `Error: ${m}`,
     start: (t) => `Starting on ${t}…`,
@@ -78,6 +79,7 @@ const M = {                                     // what the page says, by langua
     isMel: (t) => `FMEL-1 (${t}): listo para actualizar.`,
     rescue: () => "En rescate: listo.",
     official: (t) => `Firmware oficial (${t}): listo.`,
+    found: (t) => `Encontrado: ${t}. Listo.`,
     wrongBoard: (t) => `Eso es un ${t}, no el teclado elegido arriba: elige el otro ahí.`,
     error: (m) => `Error: ${m}`,
     start: (t) => `Empezando en ${t}…`,
@@ -188,7 +190,7 @@ async function connect() {
     else if (isMel(device)) say("dev", "isMel", "ok", device.text);
     else if (/_000$/.test(device.text)) say("dev", "rescue", "ok");
     else if (isOfficialOrRescue(device)) say("dev", "official", "ok", device.text);
-    else { delete shown.dev; $("dev").textContent = ""; $("dev").className = "muted"; }   // (another firmware: nothing to say)
+    else say("dev", "found", "ok", device.text);   // (another firmware: found, and ready; no warning)
   } catch (e) {
     say("dev", "error", "bad", e.message);
   }
