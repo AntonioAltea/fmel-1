@@ -72,11 +72,11 @@ jobs:
         with:
           subject-path: build/mel-[0-9]*.fwsc
 
-      - name: Release (tags only)
-        if: github.ref_type == 'tag'
+      - name: Release (tags only)            # (the release builds, not the dev ones: mel-smk37.fwsc; no comment
+        if: github.ref_type == 'tag'          # inside files: it becomes part of the pattern)
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/mel-[0-9]*.fwsc   # (the release builds, not the dev ones: mel-smk37.fwsc)
+            build/mel-[0-9]*.fwsc
             build/SHA256SUMS
           generate_release_notes: true
