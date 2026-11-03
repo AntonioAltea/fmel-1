@@ -7,9 +7,9 @@
  * SEQ: 16 steps of 1/16, up to 4 notes each (a chord: it is a Mellotron), LENGTH 1..16, GATE, SWING (the off-beat
  *   sixteenths late: 0 straight .. 100 a triplet feel).
  *   PLAY starts / stops. REC, stopped: step recording (play a note or a chord, let go: the next step; SEL: a rest).
- *   REC while playing: what you play goes into the step it falls on. SEL held 1 s: the pattern is cleared. */
+ *   REC while playing: what you play goes into the step it falls on. REC held 1 s: the pattern is cleared.
+ * A step plays at full velocity (on the SMK-37): what is played now does not change it. */
 
-enum { S_ARP = 16, S_SEQ = 32 };
 #define S_IN (S_KEY | S_MIDI | S_LATCH | S_PED)
 static const uint8_t RATE_TICKS[6] = {96, 48, 32, 24, 16, 12};
 

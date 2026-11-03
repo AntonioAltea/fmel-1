@@ -9,7 +9,8 @@ cd "$(dirname "$0")/.."
 mkdir -p tapes/zip tapes/wav
 BASE="http://www.leisureland.us/audio/MellotronSamples"
 for e in "20230210165402 MkII%20Violins MkII_Violins" "20230210170717 MkII%20Flute MkII_Flute" \
-         "20230210165719 8%20Choir 8_Choir" "20240717141134 Cello Cello" "20230210165732 Vibes Vibes"; do
+         "20230210165719 8%20Choir 8_Choir" "20240717141134 Cello Cello" "20230210165732 Vibes Vibes" \
+         "20230210170547 Tenor%20Sax Tenor_Sax"; do
     set -- $e
     [ -s "tapes/zip/$3.zip" ] || curl -sSLf --retry 3 -o "tapes/zip/$3.zip" "https://web.archive.org/web/${1}id_/$BASE/$2.zip"
     mkdir -p "tapes/wav/$3"

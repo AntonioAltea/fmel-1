@@ -3,11 +3,17 @@
 # Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
 """Build MEL (Dinghy, on Felucca / SLOOP's platform): the app, the update loader and an installable .fwsc package.
 
-  tools/build.py [--release X.Y[-suffix]]
+  tools/build.py [--release X.Y[-suffix]] [--board fm1|smk37] [--model pro|elite|mke]
 
 Outputs in build/: mel.bin (app), loader/ota.bin (update loader),
 mel.fwsc (package). See README.md for the toolchain and the SDK. The tapes
 (firmware/gen/mel_tapes.h, in the tree) come from tools/gen_tapes.py and tapes/wav/ (tools/get_tapes.sh).
+
+--board smk37 (or BOARD=smk37) builds for the M-Vave SMK-37 (docs/SMK37.md): -DBOARD_SMK37=1 for the app and the
+loader, identity SMK-37 Pro_450 (release X.Y: SMK-37 Pro_45Y, as the FM-1's FM-1_95Y), the SMK flash layout (fm1pkg_make.py, app slot
+0x97400), the package build/mel-smk37.fwsc. --model elite / mke (or MODEL=) with smk37: the same build under the
+SMK-37 Elite's or the MKE-P37's model name (identity, loader and update record; -DSMK_MODEL), so M-Vave's updater
+still takes that unit's factory package: mel-smk37-elite.fwsc, -mke.fwsc. The default stays the FM-1.
 
 The JieLi toolchain is Linux x86-64 only. JIELI_TOOLCHAIN points at it; on
 macOS (or with JIELI_DOCKER=1) each tool runs in a linux/amd64 container.
@@ -38,7 +44,8 @@ APP_SLOT = fm1pkg_make.APP_SLOT
 LOADER_LOAD = 0x01C0A800
 LOADER_NAME = b"usb_hid_ota.bin"    # the file name the SPL looks for
 DOCKER_IMAGE = os.environ.get("JIELI_DOCKER_IMAGE", "debian:bookworm-slim")
-CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]
+CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]   # keep -Os: with -O2 (unity
+                                    # build, usb.c inside) the FM-1's USB-MIDI IN babbled on the device (OberVave, 2026-10-13)
 NOT_ROM = {-4000000 & 0xFFFFFFFF}   # numbers that look like ROM addresses: mel_fx.c's DRIVE clamps at +-4000000
 LINE = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*\t(.*)$")
 
@@ -49,6 +56,14 @@ SDK_SHA256 = {
     "cfg/eq_cfg_hw.bin": "41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d",
 }
 
+BOARD = "fm1"                       # fm1 (default) or smk37: BOARD env or --board
+BOARD_PREFIX = {"fm1": "FM-1_95", "smk37": "SMK-37 Pro_45"}   # identity: prefix + minor (0: a dev build); MEL is
+                                    # FM-1_95N and SMK-37 Pro_45N (Dinghy is 99N)
+BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}
+MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}   # smk37: one keyboard, three names
+DATA_FAMILY = "FMEL1"               # the SMK store's owner tag (store.h): 1..7 of A-Z 0-9
+SCREEN_NAME = "FMEL-1"              # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
+SCREEN_COLOUR = 0x2E36              # turquoise, #2EC4B6 (the simulator's)
 PRODUCT = "FM-1_950"                # MEL is FM-1_95N (N: the minor version; free in the hub's catalogue: Dinghy is
                                     # 99N); numeric, as installers parse it and resume only FM-1_9NN loaders
 VERSION = None                      # APP_VER for release builds
@@ -125,7 +140,8 @@ def ldr_wrap(image):
 def build_loader():
     LDR.mkdir(parents=True, exist_ok=True)
     src = FW / "loader"
-    flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src"]
+    flags = [*CFLAGS, *BOARD_DEFS[BOARD], "-Ifirmware/hal", "-Ifirmware/src", f'-DLDR_NAME="{SCREEN_NAME}"',
+             f"-DLDR_COLOUR={SCREEN_COLOUR:#x}u"]
     tc_all(("cc", "-c", src / "crt0_ldr.S", "-o", LDR / "crt0_ldr.o"),
            ("cc", *flags, "-c", src / "loader.c", "-o", LDR / "loader.o"))
     elf = LDR / "loader.elf"
@@ -156,15 +172,28 @@ def build_loader():
 def build_app():
     if not (FW / "gen" / "mel_tapes.h").exists():   # (in the tree: tools/gen_tapes.py makes it again)
         raise SystemExit("firmware/gen/mel_tapes.h missing: tools/get_tapes.sh, then tools/gen_tapes.py firmware/gen/mel_tapes.h")
-    flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ifirmware/gen", "-Ibuild/gen", f'-DFELUCCA_ID="{PRODUCT}"',
+    flags = [*CFLAGS, *BOARD_DEFS[BOARD], "-Ifirmware/hal", "-Ifirmware/src", "-Ifirmware/gen", "-Ibuild/gen",
+             f'-DFELUCCA_ID="{PRODUCT}"',
              f'-DAPP_VER="{VERSION or "0.0"}"']
+    if BOARD == "smk37":
+        if not re.fullmatch(r"[A-Z0-9]{1,7}", DATA_FAMILY):
+            raise SystemExit("DATA_FAMILY: 1..7 of A-Z 0-9")
+        flags.append(f'-DDATA_FAMILY="{DATA_FAMILY}"')
+    flags += os.environ.get("DINGHY_DEFS", "").split()   # (a test build: DINGHY_DEFS=-DFELUCCA_UAC=0 ./build.sh)
     cmds = [("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
             ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
             ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
             ("cc", *flags, "-c", FW / "src" / "mel.c", "-o", OUT / "mel.o")]
     tc_all(*cmds)
     elf = OUT / "mel.elf"
-    tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o",
+    ld = FW / "app.ld"
+    if APP_SLOT != 0x8DFBC:          # another board's app slot (SMK-37): the same script, its XIP length
+        txt = ld.read_text()
+        if txt.count("LENGTH = 0x8DFBC") != 1:
+            raise SystemExit("app.ld: the XIP LENGTH line was not found")
+        ld = OUT / "app.ld"
+        ld.write_text(txt.replace("LENGTH = 0x8DFBC", f"LENGTH = {APP_SLOT:#X}".replace("0X", "0x")))
+    tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", ld, OUT / "crt0.o", OUT / "fm1_vec.o",
        OUT / "fm1_isr.o", OUT / "mel.o", "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
         (OUT / sect).unlink(missing_ok=True)
@@ -274,19 +303,37 @@ def mmio_check():
 
 
 def main():
-    global PRODUCT, VERSION
+    global PRODUCT, VERSION, BOARD, APP_SLOT
     ap = argparse.ArgumentParser()
-    ap.add_argument("--release", metavar="X.Y", help="release build: the version string X.Y (identity FM-1_95Y)")
+    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_95Y (SMK-37 Pro_45Y), version string X.Y")
+    ap.add_argument("--board", choices=sorted(BOARD_PREFIX), default=None,
+                    help="target board: fm1 (default) or smk37 (default: $BOARD, else fm1)")
+    ap.add_argument("--model", choices=sorted(MODELS), default=None,
+                    help="smk37: the model name, pro (default), elite or mke (default: $MODEL, else pro)")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
     a = ap.parse_args()
-    name = "mel.fwsc"
+    BOARD = (a.board or os.environ.get("BOARD") or "fm1").lower().replace("-", "")
+    if BOARD not in BOARD_PREFIX:
+        raise SystemExit(f"BOARD={BOARD}: use fm1 or smk37")
+    model = (a.model or os.environ.get("MODEL") or "pro").lower()
+    if model not in MODELS or (model != "pro" and BOARD != "smk37"):
+        raise SystemExit(f"MODEL={model}: pro, elite or mke, with BOARD=smk37")
+    fm1pkg_make.set_board(BOARD)
+    APP_SLOT = fm1pkg_make.APP_SLOT
+    suffix = "" if BOARD == "fm1" else "-" + BOARD
+    if model != "pro":              # another model name: identity, loader and update record (fm1_cc.h SMK_MODEL)
+        BOARD_DEFS[BOARD] = [*BOARD_DEFS[BOARD], f'-DSMK_MODEL="{MODELS[model]}"']
+        BOARD_PREFIX[BOARD] = BOARD_PREFIX[BOARD].replace(MODELS["pro"], MODELS[model])
+        suffix += "-" + model
+    PRODUCT = BOARD_PREFIX[BOARD] + "0"
+    name = f"mel{suffix}.fwsc"
     if a.release:                   # one digit each: the identity has room for two (X.Y; a .Z only in the text)
         m = re.fullmatch(r"(\d)\.(\d)(\.\d)?(-[A-Za-z0-9]+)?", a.release)
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z or X.Y-suffix, one digit each")
+        PRODUCT = BOARD_PREFIX[BOARD] + m[2]
         VERSION = m[1] + "." + m[2] + (m[3] or "")
-        PRODUCT = "FM-1_95" + m[2]
-        name = f"mel-{a.release}.fwsc"
+        name = f"mel-{a.release}{suffix}.fwsc"
     fm1pkg_make.SDK = a.sdk
     for rel, sha in SDK_SHA256.items():          # fail early without the SDK
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:
@@ -309,7 +356,7 @@ def main():
     (OUT / name).write_bytes(pkg)
     print(f"app      {OUT / 'mel.bin'}  {len(img)} B")
     print(f"loader   {LDR / 'ota.bin'}  {len(ota)} B")
-    print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}")
+    print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}" + (f", board {BOARD}" if BOARD != "fm1" else ""))
     return 0
 
 

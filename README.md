@@ -2,20 +2,41 @@
 
 <p><img src="web/emu/img/choir.png" width="240" alt="The choir tape"> <img src="web/emu/img/tape.png" width="240" alt="The LOFI page: the cassette"></p>
 
-This is a personal project to create a few sounds I'm interested in for the M-VAVE FM-1.
+This is a personal project to create a few sounds I'm interested in for the M-VAVE FM-1 and SMK-37.
 
 ## What is this?
 This firmware, based on [zvenson's dinghy](https://github.com/zvenson/dinghy), aims to reproduce Mellotron sounds and
 color them with some basic FX and lo-fi tape effects. It also lets you mix two different Mellotron sounds together.
 
-**[Try it in your browser](https://antonioaltea.github.io/fmel-1/)**: the same code the FM-1 runs, in a simulator.
-To put it on your FM-1, use the [web installer](https://antonioaltea.github.io/fmel-1/install/) (Chrome or Edge) or
-download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/latest).
+**[Try it in your browser](https://antonioaltea.github.io/fmel-1/)**: the same code the keyboard runs, in a simulator
+(FM-1 or SMK-37). To install it, use the [web installer](https://antonioaltea.github.io/fmel-1/install/) (Chrome or
+Edge; FM-1 or SMK-37) or download the newest [release](https://github.com/AntonioAltea/fmel-1/releases/latest).
+
+It runs on the M-Vave FM-1 and the SMK-37 (Pro, Elite, MKE-P37). SMK-37 controls: [SMK37.md](SMK37.md).
+
+## Sounds
+
+A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX: Mellotron M400S tapes. F PIANO: a Steinway B.
+
+## New in 1.1
+
+- E SAX: Taijiguy's tenor sax tape. PIANO moves to F; saved settings follow it.
+- PIANO: VCSL's samples played clean (was SLOOP's LOFI KEYS).
+- SMK-37 support: 37 velocity keys, pads, faders, wheels, pedal.
+- SETUP > VELOCITY (SMK-37): how far the softest note drops. 0%: 0 dB. 50%: -20 dB. 100%: -40 dB.
+- Mod wheel (SMK-37, or MIDI CC 1): vibrato DEPTH, from the page's value to 100%, and its MIX to fully wet.
+- OCT- and OCT+ held 5 s: restart into USB rescue mode.
+- Tapes in block ADPCM (genkigenki's Erik37 format). Flute and sax in 8-bit PCM.
+- Installer and simulator: FM-1 / SMK-37 selector.
+- REC held 1 s clears the pattern (was SEL held, in step recording).
+- SEQ steps play at full level (SMK-37); playing over them does not change it.
+- AGE adds no hiss. HISS is the only hiss control.
 
 ## Disclaimer
 
 This is a hobby project, not an official M-VAVE thing. Install at your own risk. If something goes wrong,
-the installer's "If something goes wrong" section shows how to get back to the official firmware.
+the installer's "If something goes wrong" section shows how to get back to the official firmware. Holding OCT- and
+OCT+ for 5 s restarts the keyboard into USB rescue mode.
 
 ## The tapes
 
@@ -24,16 +45,16 @@ serial #500, with new tapes and frames, and shared on his site [leisureland.us](
 
 They are his work, not mine, and not under this repository's GPL licence. His terms, in his own words
 ([KVR, 4 May 2021](https://www.kvraudio.com/forum/viewtopic.php?t=561309)): "they are free to use, but cannot be used
-in any commercial, for profit software." FMEL-1 is free and not for profit, so it carries them: packed for the FM-1
-(IMA ADPCM at 11025 Hz, a few seconds of each) in `firmware/gen/mel_tapes.h`, and so inside every build (`mel.fwsc`,
-the web version).
+in any commercial, for profit software." FMEL-1 is free and not for profit, so it carries them: packed at 11025 Hz,
+a few seconds of each, as block ADPCM in genkigenki's [Erik37](https://github.com/genkigenki/erik37) format (the flute
+and the sax as 8-bit PCM) in `firmware/gen/mel_tapes.h`, and so inside every build (`mel*.fwsc`, the web version).
 
 So: share FMEL-1 freely, but don't sell it, nor anything with these tapes in it. Thank you, Bernie.
 
-The fifth sound, PIANO, is not a Mellotron tape: it is [SLOOP](https://github.com/isod89/sloop-fm1)'s LOFI KEYS, its
-four keys of a Steinway B from Versilian Studios' [VCSL](https://github.com/sgossner/VCSL) (public domain, CC0) made
-and played as SLOOP makes and plays them (an octave up from the keys; 1 s of each at 22050 Hz, looped; a few bits off, a little drive, a gentle
-low-pass, a 2.5 s decay and a slow pitch wobble); about 44 KB.
+The sixth sound, F PIANO, is not a Mellotron tape: it is four keys of a Steinway B from Versilian Studios'
+[VCSL](https://github.com/sgossner/VCSL) (public domain, CC0), as [SLOOP](https://github.com/isod89/sloop-fm1) cut
+them, played clean: an octave up from the keys, 1 s of each at 22050 Hz as 8-bit PCM (cleaner than the tapes' ADPCM), each
+key's own decay going on as it rings; about 88 KB.
 
 To pack the tapes again (another selection, other lengths), fetch his originals (from his old site, via the Wayback
 Machine) and run the packer:
@@ -46,6 +67,8 @@ Machine) and run the packer:
 
 - Drawings by my friend Javi
 - [Dinghy](https://github.com/zvenson/dinghy) by zvenson: the firmware FMEL-1 grew out of
+- genkigenki: the SMK-37 board layer ([fm1-to-smk37](https://github.com/genkigenki/fm1-to-smk37)), the first SMK-37
+  build of FMEL-1, the tapes' block ADPCM ([Erik37](https://github.com/genkigenki/erik37))
 - [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (@kurogedelic), Hügelton Instruments: the FM-1
   platform underneath
 - [SLOOP](https://github.com/isod89/sloop-fm1) by isod89: its changes to that platform

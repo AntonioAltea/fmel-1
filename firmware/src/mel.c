@@ -11,29 +11,32 @@
  *   SEL    LAYER   a second sound on the same tape's other track: SOUND (OFF A B C D E), MIX (between the two), OCTAVE,
  *                  DETUNE; on its page SEL again turns the SOUND (lit: a layer sounds)
  *   LFO    LOFI    TAPE: WOW, FLUTTER, DRIVE (into the tape: saturation), HISS  -  WEAR: AGE (a copy of a copy:
- *                  the band narrows, and the copying deck adds its hiss, flutter, drive), DROPOUT, DRIFT, CRUSH
+ *                  the band narrows, and the copying deck adds its flutter, drive), DROPOUT, DRIFT, CRUSH
  *   FX     FX      VIBRATO: RATE DEPTH TONE MIX - ECHO: TIME REPEATS TONE MIX - REVERB: SIZE TONE PRE MIX
  *          held    LFO held 0.6 s: LOFI out / in; FX held: FX out / in (each on its own; the EQ stays; lit: in, dark: out)
  *   EDIT   EQ      SPEAKER: Felucca's SPEAKER EQ, FLAT, LOWCUT, BASS+, and HIGHCUT; held 0.6 s: FLAT (again, soon: as it was)
  *   GLO    SETUP   TEMPO (ARP, SEQ), TUNE (fine: to play along with others), LENGTH (a note: as long as held / 8 s,
- *                  as on the M400), SCREEN (the old-tape look / clean); the screen says what each one does.
+ *                  as on the M400), SCREEN (the old-tape look / clean), COLOUR; the SMK-37: VELOCITY (how much
+ *                  how hard you play changes the level; 0: none)
  *          SOUNDS  GLO again: PLAY OWN (each sound its own PLAY) / SHARED (one for all); every sound's PLAY, a table
  *   ARP    ARP     on / off and its page: MODE, RATE, OCTAVES, GATE
  *   SEQ    SEQ     16 steps of up to 4 notes: LENGTH, GATE, STEP, SWING; PLAY start / stop, REC record
- *                  (step recording: SEL is a rest, SEL held 1 s clears the pattern)
- *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E PIANO (a track selector: it stops at A and E; HOME goes
+ *                  (step recording: SEL is a rest); REC held 1 s clears the pattern
+ *   PRESETS the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX, F PIANO (a track selector: it stops at A and F; HOME goes
  *          round)   ALGORITHM the tempo, anywhere
  *   ENV    HOLD    the notes stay after you let go; the next chord replaces them
  *          held    ENV held 0.6 s: HALF SPEED on / off (as the M4000D's switch): the motor at half speed, the tapes an
  *                  octave down and twice as long, its wow and flutter slower; it slows down and speeds up in ~0.4 s
  *   OCT- OCT+   SAVE (it also saves itself)
- *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = vibrato, pitch bend = the motor (+-2 semitones)
+ *   USB-MIDI notes in (any channel), sustain pedal, mod wheel = the vibrato's DEPTH, pitch bend = the motor (+-2 semitones)
+ *   SMK-37 (BOARD_SMK37, SMK37.md): the 37 keys with velocity, the pads, faders, wheels and pedal on top: mel_smk.h
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
- * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): IMA ADPCM at 11025 Hz, a root every 3-4 semitones
- * (the piano: SLOOP's, at 22050 Hz, MEL_RATE: four keys; a kind 1 zone).
+ * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): block ADPCM (Erik37's format) at 11025 Hz, a root every 3-4 semitones
+ * (the flute and the sax as 8-bit PCM, kind 2; the piano: VCSL's four keys at 22050 Hz, MEL_RATE, darkening as it rings).
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
+#define SMK_MASTER_FADER 4                      /* (SMK-37: the fourth fader is the volume, not K1: mel_smk.h) */
 #define CV_MAX (240u * 124u)                    /* the stage is the biggest canvas */
 #include "platform.c"
 
@@ -41,12 +44,15 @@ typedef struct {
     uint32_t off, n, ls, ck;                    /* byte offset in MEL_DATA, samples, loop start, first checkpoint */
     uint8_t root, lo, hi;                       /* MIDI notes */
     uint8_t sh;                                 /* its rate: MEL_RATE >> sh (tape time stays in MEL_RATE samples) */
-    uint8_t kind;                               /* 0 a tape; 1 the piano, played as SLOOP's SAMPLE engine (LOFI KEYS) */
+    uint8_t kind;                               /* 0 a tape (ADPCM); 1 SLOOP's SAMPLE engine (LOFI KEYS); 2 a tape as
+                                                 * 8-bit PCM at gain / 32 (the piano: clean, its grain 45 dB down) */
     uint8_t gain;                               /* its level, Q5 */
-    uint8_t lidx;                               /* the decoder's step index at the loop start */
+    uint8_t lidx;                               /* the decoder's step index at the loop start (kind 2: 0) */
     uint16_t dk, d1k, pk;                       /* a sound that dies away (dk 0: it does not): its decay per tape
                                                  * sample (Q24) and per 1024 (Q15), from its peak (sample pk) */
-    int16_t lpred;                              /* the decoder's predictor at the loop start */
+    int16_t lpred;                              /* the decoder's predictor at the loop start (kind 1, IMA); kinds 0
+                                                 * and 2: its brightness floor, the one-pole (Q15) a note darkens to
+                                                 * (0: it does not darken) */
 } mel_zone_t;
 #include "mel_tapes.h"
 #include "mel_sprites.h"
@@ -69,12 +75,19 @@ static const int16_t IMA_STEP[89] = {
     22385, 24623, 27086, 29794, 32767};
 static const int8_t IMA_IDX[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
 
-typedef struct {                                /* a head on a tape: the ADPCM decoder and the interpolator */
+typedef struct {                                /* a head on a tape: the decoder and the interpolator (block ADPCM: pred
+                                                 * and idx are its last two samples) */
     const mel_zone_t *z;
     uint32_t pos, frac;                         /* next sample to decode; where we are between s[1] and s[2], Q16 */
     int32_t pred, idx, gain, s[4];              /* the last four samples (4-point Hermite between the middle two) */
     int32_t dg;                                 /* a sound that dies away: how far it has, 0..ONE */
-    int32_t lp;                                 /* (kind 1) its CUT's one-pole */
+    int32_t lp;                                 /* (kind 1) its CUT's one-pole; (a zone that darkens) its brightness one-pole */
+    int32_t bk;                                 /* (a zone that darkens) that one-pole's coefficient now, Q15: 3 x the floor at the strike,
+                                                 * from 0.1 s darkening to the zone's floor (lpred) in ~0.5 s, as Erik37's */
+    uint32_t age;                               /* (a zone that darkens) frames since the strike */
+    int32_t up, u1, u2;                         /* a note well above its tape's root: two one-poles (coefficient up,
+                                                 * Q15; 0: none) at the tape's own band, so the hiss and breath its
+                                                 * speeding up raised above it go (blind test, 2026-10-30) */
 } head_t;
 
 static struct {
@@ -87,6 +100,9 @@ static struct {
     int8_t loct;                                /* ISR: the layer's octave */
     int32_t det, drift;                         /* ISR: this key's own pitch; the voice's slow wander (DRIFT) */
     head_t h, h2;                               /* the sound (PRESETS) and the layer (SEL) */
+#if BOARD_SMK37
+    int32_t velg;                               /* main: the key's velocity, the tape's level (Q15, mel_smk.h) */
+#endif
 } voice[NV];
 static volatile uint32_t tpos[128];             /* ISR: where each key's tape is, tape samples from its start */
 
@@ -143,11 +159,42 @@ static const mel_zone_t *zone_of(uint32_t set, uint32_t note)
     return &MEL_ZONE[z0 + i];
 }
 
+/* a tape (kind 0): block ADPCM, the format of genkigenki's Erik37 (erk_codec.h, MPL-2.0): 32 samples in 17 bytes, a
+ * header (filter << 4 | shift), then 4-bit residuals, low nibble first: s = ((c1 s1 + c2 s2 + 32) >> 6) + q 2^shift */
+static const int8_t BLK_FILT[16][2] = {
+    {0, 0}, {60, 0}, {122, -60}, {115, -52}, {126, -63}, {124, -61}, {118, -58}, {108, -52},
+    {98, -55}, {88, -50}, {76, -46}, {60, -40}, {40, -36}, {16, -32}, {30, 0}, {-30, -24}};
 static int32_t adpcm_next(head_t *h)
 {
     const mel_zone_t *z = h->z;
-    uint32_t b = MEL_DATA[z->off + (h->pos >> 1)], code = h->pos & 1u ? b >> 4 : b & 15u;
-    int32_t step = IMA_STEP[h->idx], vd = step >> 3, p;
+    uint32_t b, code;
+    int32_t step, vd, p;
+    if (z->kind == 2u) {                        /* 8-bit PCM: a byte a sample */
+        p = (int32_t)(int8_t)MEL_DATA[z->off + h->pos] * 256;
+        if (++h->pos >= z->n) h->pos = z->ls;
+        return p;
+    }
+    if (z->kind == 0u) {                        /* block ADPCM; pred, idx: the last two samples */
+        const uint8_t *blk = &MEL_DATA[z->off + (h->pos >> 5) * 17u];
+        uint32_t i = h->pos & 31u, hd = blk[0];
+        b = blk[1u + (i >> 1)];
+        code = i & 1u ? b >> 4 : b & 15u;
+        p = ((BLK_FILT[hd >> 4][0] * h->pred + BLK_FILT[hd >> 4][1] * h->idx + 32) >> 6)
+            + ((int32_t)(code ^ 8u) - 8) * (1 << (hd & 15u));
+        h->idx = h->pred;
+        h->pred = p > 32767 ? 32767 : p < -32768 ? -32768 : p;
+        if (++h->pos >= z->n) {                 /* the loop: back to its start, with the checkpoint's state there */
+            uint32_t ck = MEL_CKS[z->ck + z->ls / MEL_CK];
+            h->pos = z->ls;
+            h->pred = (int16_t)(ck & 0xFFFFu);
+            h->idx = (int16_t)(ck >> 16);
+        }
+        return h->pred;
+    }
+    b = MEL_DATA[z->off + (h->pos >> 1)];
+    code = h->pos & 1u ? b >> 4 : b & 15u;
+    step = IMA_STEP[h->idx];
+    vd = step >> 3;
     if (code & 4u) vd += step;
     if (code & 2u) vd += step >> 1;
     if (code & 1u) vd += step >> 2;
@@ -164,17 +211,23 @@ static int32_t adpcm_next(head_t *h)
 }
 
 /* put a head on tape t samples in (MEL_RATE's; past the end of the recording: round its loop) */
-static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
+static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain, uint32_t note, uint32_t upcut)
 {
     uint32_t p, k, ck;
     t >>= z->sh;                                /* (in the zone's own samples from here) */
     p = t < z->n ? t : z->ls + (t - z->ls) % (z->n - z->ls);
-    k = p / MEL_CK;
-    ck = MEL_CKS[z->ck + k];
     h->z = z;
-    h->pos = k * MEL_CK;
-    h->pred = (int16_t)(ck & 0xFFFFu);
-    h->idx = (int32_t)(ck >> 16);
+    if (z->kind == 2u) {                        /* (PCM: straight there) */
+        h->pos = p;
+        h->pred = 0;
+        h->idx = 0;
+    } else {
+        k = p / MEL_CK;
+        ck = MEL_CKS[z->ck + k];
+        h->pos = k * MEL_CK;
+        h->pred = (int16_t)(ck & 0xFFFFu);
+        h->idx = z->kind ? (int32_t)(ck >> 16) : (int16_t)(ck >> 16);   /* (IMA: its step index; blocks: s2) */
+    }
     h->frac = 0;
     h->gain = gain;
     h->dg = ONE;
@@ -189,6 +242,10 @@ static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain)
     h->s[2] = adpcm_next(h);
     h->s[3] = adpcm_next(h);
     h->lp = 0;
+    h->bk = z->lpred ? (z->lpred * 3 > 32767 ? 32767 : z->lpred * 3) : 32767;   /* (a piano: tempered from the start) */
+    h->age = 0;
+    h->up = upcut && note > z->root + 2u ? (z->sh ? 17830 : 25900) : 0;   /* (5.5 kHz: an 11025 Hz tape's band) */
+    h->u1 = h->u2 = 0;
 }
 
 static uint32_t layer_note(uint32_t note, int32_t oct)   /* the layer's note, OCTAVE away */
@@ -198,15 +255,19 @@ static uint32_t layer_note(uint32_t note, int32_t oct)   /* the layer's note, OC
 }
 static void voice_head(uint32_t vi)             /* the heads on the current sound's and layer's tracks, where the tape is */
 {
-    uint32_t st = p_sound % MEL_NSETS, ly = p_layer, note = voice[vi].note, hsh = note * 2654435761u;
-    int32_t g = MEL_SET_STRUCK[st] ? G_TAPE                 /* every tape its own level (the piano: SLOOP's, even) */
-              : (G_TAPE * (32768 + ((int32_t)((hsh >> 8) & 0xFFu) - 128) * 30)) >> 15;
+    uint32_t st = p_sound % MEL_NSETS, ly = p_layer, note = voice[vi].note;
+    int32_t g = G_TAPE;                         /* every key as loud (a level of its own per key, as a Mellotron's
+                                                 * tapes, was heard as jumps) */
+#if BOARD_SMK37
+    g = (g * voice[vi].velg) >> 15;             /* (the SMK's velocity: how hard the head meets the tape) */
+#endif
     voice[vi].set = (uint8_t)st;
     voice[vi].layer = (uint8_t)ly;
     voice[vi].loct = (int8_t)p_loct;
-    head_start(&voice[vi].h, zone_of(st, note), tpos[note], g);
+    head_start(&voice[vi].h, zone_of(st, note), tpos[note], g, note, MEL_SET_UPCUT[st]);
     if (ly)                                     /* (the same tape, another track: as the M400's A B C) */
-        head_start(&voice[vi].h2, zone_of((ly - 1u) % MEL_NSETS, layer_note(note, p_loct)), tpos[note], g);
+        head_start(&voice[vi].h2, zone_of((ly - 1u) % MEL_NSETS, layer_note(note, p_loct)), tpos[note], g,
+                   layer_note(note, p_loct), MEL_SET_UPCUT[(ly - 1u) % MEL_NSETS]);
 }
 
 static int struck(void)                        /* the piano is on either track: a key strikes anew */
@@ -245,7 +306,7 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     int32_t a = h->s[0], b = h->s[1], c = h->s[2], d = h->s[3], g = (h->gain * gm) >> 15;
     step >>= sh;                                /* (the zone's own samples from here) */
     t >>= sh;
-    if (h->z->kind) {
+    if (h->z->kind == 1u) {
         int32_t lp = h->lp, gz = h->z->gain;
         g = (g * (h->dg >> 9)) >> 15;
         for (i = 0; i < n; i++) {
@@ -276,6 +337,10 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     }
     if (h->z->dk)
         g = (g * (h->dg >> 9)) >> 15;
+    if (h->z->kind == 2u)
+        g = (g * h->z->gain) >> 5;              /* (PCM: stored near full scale, its level here) */
+    if (h->z->lpred && (h->age += n) > FS / 10u)   /* the brightness: from 0.1 s ~0.5 s to the floor (per 32 frames) */
+        h->bk -= ((h->bk - h->z->lpred) * 95) >> 16;
     for (i = 0; i < n; i++) {
         int32_t t, c1, c2, c3, y;
         frac += step;
@@ -292,6 +357,18 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
         c2 = a - ((5 * b) >> 1) + 2 * c - (d >> 1);
         c3 = ((d - a) >> 1) + ((3 * (b - c)) >> 1);
         y = ((((((c3 * t) >> 12) + c2) * t >> 12) + c1) * t >> 12) + b;
+        if (h->up) {                            /* (well above its root: the tape's own band) */
+            int32_t e = (y - h->u1) * h->up;
+            h->u1 += (e + ((e >> 31) & 32767)) >> 15;
+            e = (h->u1 - h->u2) * h->up;
+            h->u2 += (e + ((e >> 31) & 32767)) >> 15;
+            y = h->u2;
+        }
+        if (h->z->lpred) {                      /* (the piano's brightness one-pole) */
+            int32_t e = (y - h->lp) * h->bk;   /* (|y - lp| < 2^16: no overflow; toward zero, as tz) */
+            h->lp += (e + ((e >> 31) & 32767)) >> 15;
+            y = h->lp;
+        }
         acc[i] += (y * g) >> 15;
     }
     h->frac = frac;
@@ -304,9 +381,11 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     return ran << sh;
 }
 
-static void voice_sub(uint32_t vi, int32_t *mix, int32_t g16, int32_t drift, int32_t atk, int32_t relk)
+/* the tapes (11025 Hz) and the 22050 Hz zones go to two buses: the tapes' is low-passed (tape_lp) after the heads'
+ * Hermite, whose images of an 11025 Hz tape (-31 dB above 5.6 kHz) were heard as grain from the first moment */
+static void voice_sub(uint32_t vi, int32_t *mix, int32_t *mixt, int32_t g16, int32_t drift, int32_t atk, int32_t relk)
 {
-    int32_t acc[SUB], a0, a1, a, da, c16;
+    int32_t acc[2][SUB], a0, a1, a, da, c16;
     uint32_t i, ran, note;
     if (voice[vi].trig != voice[vi].seen || (!voice[vi].busy && voice[vi].gate)) {
         voice[vi].seen = voice[vi].trig;
@@ -333,19 +412,24 @@ static void voice_sub(uint32_t vi, int32_t *mix, int32_t g16, int32_t drift, int
     voice[vi].drift -= voice[vi].drift >> 10;
     c16 = g16 + voice[vi].det * drift / 32 + ((voice[vi].drift * drift) >> 6);   /* DRIFT: keys +-25 ct, wander +-9 ct */
     for (i = 0; i < SUB; i++)
-        acc[i] = 0;
+        acc[0][i] = acc[1][i] = 0;
     if (voice[vi].layer) {                      /* the sound and the layer, MIX between them */
         uint32_t ln = layer_note(note, voice[vi].loct);
         ran = head_run(&voice[vi].h, step_of(((int32_t)note - voice[vi].h.z->root) * 1600 + c16 +
-                                             (voice[vi].h.z->kind ? pno16 : 0)), acc, SUB, p_ga, tpos[note]);
+                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h.z->sh != 0u], SUB,
+                       p_ga, tpos[note]);
         head_run(&voice[vi].h2, step_of(((int32_t)ln - voice[vi].h2.z->root) * 1600 + c16 + p_ldet16 +
-                                        (voice[vi].h2.z->kind ? pno16 : 0)), acc, SUB, p_gb, tpos[note]);
+                                        (voice[vi].h2.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h2.z->sh != 0u], SUB,
+                 p_gb, tpos[note]);
     } else
         ran = head_run(&voice[vi].h, step_of(((int32_t)note - voice[vi].h.z->root) * 1600 + c16 +
-                                             (voice[vi].h.z->kind ? pno16 : 0)), acc, SUB, 32767, tpos[note]);
+                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h.z->sh != 0u], SUB,
+                       32767, tpos[note]);
     da = (a1 - a0) / (int32_t)SUB;
-    for (a = a0, i = 0; i < SUB; i++, a += da)
-        mix[i] += (acc[i] * (a >> 9)) >> 15;
+    for (a = a0, i = 0; i < SUB; i++, a += da) {
+        mix[i] += (acc[0][i] * (a >> 9)) >> 15;
+        mixt[i] += (acc[1][i] * (a >> 9)) >> 15;
+    }
     voice[vi].amp = a1;
     if (tpos[note] + ran >= TAPE_LEN) {
         tpos[note] = TAPE_LEN;                  /* (without 8 SEC the tape loops; it rewinds 8 s at most) */
@@ -371,16 +455,34 @@ static int32_t sat(int32_t x)                   /* the tape's saturation, 2 x fu
 
 #include "mel_fx.c"
 
+/* the tapes' bus low-passed: a 4-pole Butterworth at 5 kHz (two biquads, Q12, direct form I, rounded), what the
+ * heads' Hermite leaves above an 11025 Hz tape's band taken out */
+static void tape_lp(int32_t *x, uint32_t n)
+{
+    static const int16_t C[2][5] = {{311, 621, 311, -3865, 1012}, {398, 797, 398, -4959, 2457}};   /* b0 b1 b2 a1 a2 */
+    static int32_t st[2][4];                     /* x1 x2 y1 y2 */
+    uint32_t i, k;
+    for (k = 0; k < 2u; k++) {
+        int32_t x1 = st[k][0], x2 = st[k][1], y1 = st[k][2], y2 = st[k][3];
+        for (i = 0; i < n; i++) {
+            int32_t v = x[i], y = (C[k][0] * v + C[k][1] * x1 + C[k][2] * x2 - C[k][3] * y1 - C[k][4] * y2 + 2048) >> 12;
+            x2 = x1; x1 = v; y2 = y1; y1 = y;
+            x[i] = y;
+        }
+        st[k][0] = x1; st[k][1] = x2; st[k][2] = y1; st[k][3] = y2;
+    }
+}
+
 static void app_audio(int32_t *out, uint32_t n)
 {
-    static int32_t mix[HALF_FRAMES], act;
+    static int32_t mix[HALF_FRAMES], mixt[HALF_FRAMES], act;
     static uint8_t held[128];
     int32_t drift = (p_drift * (32767 - lofi_bp)) >> 15, atk = p_atk, relk = p_relk, sum = 0;   /* (no LOFI: in tune) */
     uint32_t v, i, b;
     if (n > HALF_FRAMES)
         n = HALF_FRAMES;
     for (i = 0; i < n; i++)
-        mix[i] = 0;
+        mix[i] = mixt[i] = 0;
     fx_block();
     for (b = 0; b < n; b += SUB) {              /* the motor (the same for every tape), then every voice */
         int32_t g16;
@@ -397,8 +499,11 @@ static void app_audio(int32_t *out, uint32_t n)
             pno16 = (sine(ph) * MEL_PNO_LFO_C16) >> 15;
         }
         for (v = 0; v < NV; v++)
-            voice_sub(v, mix + b, g16, drift, atk, relk);
+            voice_sub(v, mix + b, mixt + b, g16, drift, atk, relk);
     }
+    tape_lp(mixt, n);                           /* (the tapes' bus, its images gone) */
+    for (i = 0; i < n; i++)
+        mix[i] += mixt[i];
     for (i = 0; i < 128u; i++)                  /* the tapes not held run back */
         held[i] = 0;
     for (v = 0; v < NV; v++) {
@@ -415,16 +520,24 @@ static void app_audio(int32_t *out, uint32_t n)
 }
 
 /* ---- notes (main loop): a note sounds while anything holds it */
-enum { S_KEY = 1, S_MIDI = 2, S_LATCH = 4, S_PED = 8 };   /* (+ S_ARP, S_SEQ: mel_seq.c) */
+enum { S_KEY = 1, S_MIDI = 2, S_LATCH = 4, S_PED = 8, S_ARP = 16, S_SEQ = 32 };   /* (ARP, SEQ: mel_seq.c) */
 static uint8_t src[128];
+#if BOARD_SMK37
+static uint8_t smk_note_vel[128], smk_vel_last = 100;   /* the velocity each note was struck with (keys, MIDI) */
+static uint32_t smk_vsens;                      /* SETUP's VELOCITY (apply) */
+static uint8_t smk_solo;                        /* pad 7 / 15 held: only the sound (1) or only the layer (2) heard */
+static void smk_init(void);
+#endif
 static uint32_t ages;
 
-static uint32_t t_hit;                          /* (the screen) when a note last started: the ECHO's and REVERB's graphs */
+static uint32_t t_hit, n_hit;                   /* (the screen) when a note last started: the ECHO's and REVERB's graphs;
+                                                 * how many have (the sax: every other one) */
 static void note_on(uint32_t note)
 {
     uint32_t v, pick = 0, best = 0xFFFFFFFFu;
     int st = struck();
     t_hit = fm1_ms;
+    n_hit++;
     for (v = 0; v < NV && !st; v++)         /* its own voice still sounding: the tape just goes on (the piano: a
                                                  * new strike in a voice of its own, the last one dying away) */
         if ((voice[v].busy || voice[v].gate) && voice[v].note == note) {
@@ -439,6 +552,16 @@ static void note_on(uint32_t note)
     }
     voice[pick].note = (uint8_t)note;
     voice[pick].age = ++ages;
+#if BOARD_SMK37
+    {                                           /* a key or MIDI: its velocity; ARP: the last one struck; SEQ: all of
+                                                 * it (what is played now is not the pattern's) */
+        uint32_t vel = src[note] & (S_KEY | S_MIDI) ? smk_note_vel[note] : src[note] & S_SEQ ? 127u : smk_vel_last;
+        vel = vel < 1u ? 1u : vel > 127u ? 127u : vel;   /* VELOCITY: how far down the softest goes, even in dB (100%:
+                                                          * 40 dB, 50%: 20; 0: every key as loud, as on the FM-1) */
+        voice[pick].velg = (int32_t)exp2_neg(smk_vsens * (127u - vel) * 4354u / 126u);
+
+    }
+#endif
     voice[pick].trig++;
     voice[pick].gate = 1;
 }
@@ -479,7 +602,8 @@ enum {
     P_VRATE, P_VDEPTH, P_VTONE, P_VMIX,         /* FX: VIBRATO */
     P_ETIME, P_EFB, P_ETONE, P_EMIX,            /*     ECHO */
     P_RSIZE, P_RTONE, P_RTYPE, P_RMIX,          /*     REVERB */
-    P_SPK, P_RSV1, P_RSV2, P_RSV3,              /* EQ (the three after it: the old EQ's places, unused) */
+    P_SPK, P_VEL, P_RSV2, P_RSV3,               /* EQ (the three after it: the old EQ's places; VELOCITY, SETUP's on
+                                                 * the SMK-37, in the first) */
     P_BPM, P_TUNE, P_LEN, P_LOOK,               /* SETUP */
     P_AMODE, P_ARATE, P_AOCT, P_AGATE,          /* ARP */
     P_SLEN, P_SGATE, P_STEP, P_SWING,           /* SEQ */
@@ -493,10 +617,10 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, MEL_NSETS, 0, 1}, {0, 100, 50, 1}, {-1, 1, 0, 1}, {0, 30, 0, 1},
     {0, 100, 28, 1}, {0, 100, 22, 1}, {0, 100, 22, 1}, {0, 100, 12, 1},
     {0, 100, 18, 1}, {0, 100, 0, 1}, {0, 100, 30, 1}, {0, 100, 0, 1},
-    {0, 100, 60, 1}, {0, 100, 50, 1}, {0, 100, 70, 1}, {0, 100, 100, 1},   /* (VIBRATO: 3 Hz, on) */
+    {0, 100, 80, 1}, {0, 100, 50, 1}, {0, 100, 70, 1}, {0, 100, 100, 1},   /* (VIBRATO: 5.5 Hz, on) */
     {0, 100, 38, 1}, {0, 100, 35, 1}, {0, 100, 45, 1}, {0, 100, 0, 1},
     {0, 100, 55, 1}, {0, 100, 45, 1}, {0, 1, 1, 1}, {0, 100, 34, 1},
-    {0, 3, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1},
+    {0, 3, 0, 1}, {0, 100, 50, 1}, {0, 0, 0, 1}, {0, 0, 0, 1},
     {40, 240, 90, 1}, {-50, 50, 0, 1}, {0, 1, 0, 1}, {0, 1, 1, 1},
     {0, 4, 0, 1}, {0, 5, 3, 1}, {1, 3, 1, 1}, {10, 100, 60, 5},
     {1, 16, 16, 1}, {10, 100, 80, 5}, {0, 15, 0, 1}, {0, 100, 0, 5},
@@ -504,20 +628,27 @@ static const int16_t PINFO[NP][4] = {           /* lo, hi, default, step */
     {0, 5, 0, 1},
 };
 
-#define SET_VER 12u                             /* (11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
+#define SET_VER 15u                             /* (14: as 15, E PIANO, F SAX; 13: as 14, VELOCITY's place unused; 11, 12: five sounds, before the SAX; 11: the old EQ, LOW MID FREQ HIGH where SPEAKER is; 10: before COLOUR; 7 .. 9: as 10, but the piano's PLAY (7: the
                                                  * tapes', 8, 9: an earlier piano's) starts again from its own) */
 #define NPLAY 4u                                /* PLAY's TONE PITCH ATTACK RELEASE: each sound its own */
+#define NSETS12 5u                              /* the sounds in settings before 13 */
 typedef struct {
     uint8_t ver, np, half, rsv;                 /* half: HALF SPEED (a reserved byte before: older settings load, off) */
     int16_t p[NP];
     uint8_t steps[16][4];                       /* the pattern: up to 4 notes a step, 0 = none */
     int16_t play[MEL_NSETS][NPLAY];             /* every sound's PLAY (the one playing: in p, here when it changes) */
 } mel_set_t;
+typedef struct {                                /* versions 11, 12, five sounds: they load */
+    uint8_t ver, np, half, rsv;
+    int16_t p[NP];
+    uint8_t steps[16][4];
+    int16_t play[NSETS12][NPLAY];
+} mel_set12_t;
 typedef struct {                                /* versions 7 .. 10, before COLOUR: they load */
     uint8_t ver, np, half, rsv;
     int16_t p[NP - 1u];
     uint8_t steps[16][4];
-    int16_t play[MEL_NSETS][NPLAY];
+    int16_t play[NSETS12][NPLAY];
 } mel_set10_t;
 typedef struct {                                /* version 6, before SOUNDS: it loads, its PLAY every sound's */
     uint8_t ver, np, half, rsv;
@@ -549,11 +680,20 @@ static void apply(void)                         /* the parameters -> the sound *
     c_pal[2] = COLOR_PAL[PV(P_COLOR)][2];
     p_loct = PV(P_BOCT);                        /* (the octave before the layer: a voice reads them together) */
     p_ldet16 = PV(P_BDET) * 16;
-    p_ga = sine(0x40000000u - (uint32_t)PV(P_BMIX) * (0x40000000u / 100u));   /* MIX: the same power all the way */
-    p_gb = sine((uint32_t)PV(P_BMIX) * (0x40000000u / 100u));
+    {
+        uint32_t m = (uint32_t)PV(P_BMIX);
+#if BOARD_SMK37
+        if (smk_solo) m = smk_solo == 1u ? 0u : 100u;   /* (a SOLO pad held) */
+#endif
+        p_ga = sine(0x40000000u - m * (0x40000000u / 100u));   /* MIX: the same power all the way */
+        p_gb = sine(m * (0x40000000u / 100u));
+    }
     p_layer = (uint8_t)PV(P_BSND);
     p_tape8 = (uint8_t)PV(P_LEN);
     p_half = set.half;
+#if BOARD_SMK37
+    smk_vsens = (uint32_t)PV(P_VEL);
+#endif
     p_tune16 = PV(P_TUNE) * 16;
     p_drift = PV(P_DRIFT);
     p_atk = (int32_t)MEL_ATK[PV(P_ATK)];
@@ -568,6 +708,7 @@ static void apply(void)                         /* the parameters -> the sound *
     f_crush = PV(P_CRUSH);
     f_vinc = (int32_t)MEL_LFO[PV(P_VRATE)];
     f_vdep = d * d * 88 / 10000;
+    f_vdk = d;
     f_vtone = MEL_TONE[PV(P_VTONE)];
     f_vmix = PV(P_VMIX) * 327;
     f_etime = (echo_ms(PV(P_ETIME)) * 441 / 10) << 8;
@@ -586,6 +727,13 @@ static void apply(void)                         /* the parameters -> the sound *
 
 /* ---- text */
 #define KEY0 53u                                /* key 0 = F3 */
+#if BOARD_SMK37
+#define KEY_VEL(k) (fm1_in.key_vel[SMK_KEY_F3 + (k)])   /* (the SMK's middle keys: keybed 5..31) */
+#define UNDO_NOTE(pid, v) smk_undo_note(pid, v)
+#else
+#define KEY_VEL(k) 100u
+#define UNDO_NOTE(pid, v) ((void)0)
+#endif
 static int black(uint32_t note) { return (0x54Au >> (note % 12u)) & 1u; }
 static char *put(char *p, const char *s) { while (*s) *p++ = *s++; *p = 0; return p; }
 static char *put_int(char *p, int32_t v, int sign)
@@ -633,7 +781,11 @@ static const ctl_t CTL[NPG][4] = {
     {{P_RSIZE, F_NUM, "SIZE", 0}, {P_RTONE, F_NUM, "TONE", 0}, {P_RTYPE, F_ENUM, "TYPE", N_RTYPE}, {P_RMIX, F_PCT, "MIX", 0}},
     {{P_SPK, F_ENUM, "SPEAKER", N_SPK}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{P_LEN, F_ENUM, "LENGTH", N_LEN}, {P_LOOK, F_ENUM, "SCREEN", N_LOOK}, {P_COLOR, F_ENUM, "COLOUR", N_COLOR},
+#if BOARD_SMK37
+     {P_VEL, F_PCT, "VELOCITY", 0}},
+#else
      {0, 0, 0, 0}},
+#endif
     {{P_PMODE, F_ENUM, "PLAY", N_PMODE}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{P_AMODE, F_ENUM, "MODE", ARP_MODE}, {P_ARATE, F_ENUM, "RATE", ARP_RATE}, {P_AOCT, F_X, "OCTAVES", 0},
      {P_AGATE, F_PCT, "GATE", 0}},
@@ -711,15 +863,34 @@ static void changed(uint32_t what)              /* a parameter changed: to the s
 #include "mel_ui.c"
 
 /* encoders with a little acceleration: fast turns go further */
-static int32_t turn(uint32_t e)
+/* a knob's clicks, a fast turn of a wide value (range > 32 steps, not names) sped up, as Felucca's accel (ui_input.c,
+ * its #52), on sooner (Felucca's from 25 ms a click was slower than MEL's x3 under 50 ms): the speed is the time per
+ * click, ACC_RATE / ms -> 60 ms x2, 40 ms x3, 30 ms x4 .. x8 at most (x4 over a range up to 64). Only the longer of
+ * this read's and the last one's counts, and only while the turn goes on (both under ACC_GAP) one way: a slow turn, a
+ * turn's first two clicks, one quick click alone and a reversal are a step a click */
+#define ACC_GAP 62u
+#define ACC_RATE 120u
+static int32_t turn(uint32_t e, int32_t range)
 {
-    static uint32_t last[7];
-    int32_t d = fm1_enc_take(e);
-    if (d) {
-        if (fm1_ms - last[e] < 50u) d *= 3;
-        last[e] = fm1_ms;
+    static uint32_t t[8], ms[8];
+    static int8_t way[8];
+    int32_t d = fm1_enc_take(e), up = d > 0 ? 1 : -1;
+    uint32_t a, i, m = 1;
+    e &= 7u;
+    if (!d) return 0;
+    a = (uint32_t)(d < 0 ? -d : d);
+    i = (fm1_ms - t[e]) / a;                    /* ms a click, this read */
+    if (way[e] != up || i >= ACC_GAP)
+        i = 127u;                               /* a new turn, or the other way */
+    else if (range > 32 && ms[e] < ACC_GAP) {
+        m = ACC_RATE / (i > ms[e] ? i : ms[e] ? ms[e] : 1u);
+        a = range > 64 ? 8u : 4u;
+        m = m < 1u ? 1u : m > a ? a : m;
     }
-    return d;
+    t[e] = fm1_ms;
+    ms[e] = i ? i : 1u;
+    way[e] = (int8_t)up;
+    return d * (int32_t)m;
 }
 static int set_param(uint32_t pid, int32_t v)   /* clamped to its range: 1 if it moved */
 {
@@ -769,6 +940,11 @@ static void reel_idle(void)                     /* between clicks: no faster tha
 
 static void go_group(uint32_t g)                /* a section's button: its page, or (in it) its next page */
 {
+    if (g != G_SEQ && seq_rec && !seq_play) {   /* step recording stays on SEQ's page: leaving it, REC goes off (else
+                                                 * SELECT, a rest there, would never reach LAYER) */
+        seq_rec = 0;
+        chord_open = 0;
+    }
     if (PG_GROUP[page] == g)
         page = G_FIRST[g] + (page - G_FIRST[g] + 1u) % G_COUNT[g];
     else
@@ -785,23 +961,31 @@ static int16_t play_ok(uint32_t k, int32_t v)  /* a stored PLAY value, or its de
 {
     return (int16_t)(v >= PINFO[P_TONE + k][0] && v <= PINFO[P_TONE + k][1] ? v : PINFO[P_TONE + k][2]);
 }
+static uint32_t old_set(uint32_t k)            /* settings before 15: E PIANO, F SAX (the same swap both ways) */
+{
+    return k == 4u ? 5u : k == 5u ? 4u : k;
+}
 static void app_init(void)
 {
     uint32_t k, n = 0;
     static mel_set_t s;                         /* (an older version loads into its start) */
+    mel_set12_t *r = (mel_set12_t *)(void *)&s;
     mel_set10_t *q = (mel_set10_t *)(void *)&s;
     mel_set6_t *o = (mel_set6_t *)(void *)&s;
     const int16_t *p = 0;
     const uint8_t *st = 0;
     const int16_t (*pl)[NPLAY] = 0;
+    uint32_t npl = MEL_NSETS;                   /* the sounds whose PLAY was stored */
     for (k = 0; k < NP; k++)
         set.p[k] = PINFO[k][2];
     set.ver = SET_VER;
     set.np = NP;
-    if (!settings_load(&s, sizeof s) && (s.ver == SET_VER || s.ver == 11u) && s.np == NP) {   /* (else: the defaults) */
+    if (!settings_load(&s, sizeof s) && s.ver >= 13u && s.ver <= SET_VER && s.np == NP) {   /* (else: the defaults) */
         n = NP; p = s.p; st = &s.steps[0][0]; pl = s.play;
+    } else if (!settings_load(r, sizeof *r) && (r->ver == 11u || r->ver == 12u) && r->np == NP) {
+        n = NP; p = r->p; st = &r->steps[0][0]; pl = r->play; npl = NSETS12;
     } else if (!settings_load(q, sizeof *q) && q->ver >= 7u && q->ver <= 10u && q->np == NP - 1u) {
-        n = NP - 1u; p = q->p; st = &q->steps[0][0]; pl = q->play;
+        n = NP - 1u; p = q->p; st = &q->steps[0][0]; pl = q->play; npl = NSETS12;
     } else if (!settings_load(o, sizeof *o) && o->ver == 6u && o->np == NP - 2u) {
         n = NP - 2u; p = o->p; st = &o->steps[0][0];
     }
@@ -810,25 +994,34 @@ static void app_init(void)
         for (k = 0; k < n; k++)
             if (p[k] >= PINFO[k][0] && p[k] <= PINFO[k][1])
                 set.p[k] = p[k];
+        if (s.ver < 15u) {                      /* (E was the PIANO, F the SAX) */
+            set.p[P_SOUND] = (int16_t)old_set((uint32_t)PV(P_SOUND));
+            if (PV(P_BSND)) set.p[P_BSND] = (int16_t)(old_set((uint32_t)PV(P_BSND) - 1u) + 1u);
+        }
         for (k = 0; k < 64u; k++)
             set.steps[k / 4u][k % 4u] = st[k] < 128u ? st[k] : 0u;
     }
     for (k = 0; k < MEL_NSETS * NPLAY; k++) {   /* every sound's PLAY: its own, or (new) as PLAY was; the piano's
                                                  * from its own (before 8 it had the tapes') */
-        uint32_t st = k / NPLAY, i = k % NPLAY;
-        set.play[st][i] = pl && (s.ver >= 10u || !MEL_SET_STRUCK[st]) ? play_ok(i, pl[st][i])
+        uint32_t st = k / NPLAY, i = k % NPLAY, os = n && s.ver < 15u ? old_set(st) : st;   /* (where it was stored) */
+        set.play[st][i] = pl && os < npl && (s.ver >= 10u || !MEL_SET_STRUCK[st]) ? play_ok(i, pl[os][i])
                         : n && !MEL_SET_STRUCK[st] ? set.p[P_TONE + i] : (int16_t)MEL_SET_PLAY[st][i];
     }
     if (PV(P_PMODE) || !n)                      /* (OWN: the knobs are the sound playing's) */
         for (k = 0; k < NPLAY; k++)
             set.p[P_TONE + k] = set.play[PV(P_SOUND)][k];
     if (n && s.ver < 12u)                       /* (the old EQ's LOW was where SPEAKER is: FLAT) */
-        set.p[P_SPK] = set.p[P_RSV1] = set.p[P_RSV2] = set.p[P_RSV3] = 0;
+        set.p[P_SPK] = set.p[P_RSV2] = set.p[P_RSV3] = 0;
+    if (n && s.ver < 14u)                       /* (VELOCITY: new) */
+        set.p[P_VEL] = PINFO[P_VEL][2];
     set.p[P_STEP] = 0;
     set.p[P_TUNE] = 0;                          /* (TUNE is gone from SETUP: none left from before) */
     apply();
     for (k = 0; k < 27u; k++)
         held_note[k] = 255;
+#if BOARD_SMK37
+    smk_init();
+#endif
     clk_last = fm1_ms;
     lcd_fill(0, 0, 240, 240, C_BLACK);
     say("v" APP_VER);
@@ -872,8 +1065,8 @@ static void pend(uint32_t btn, uint32_t t0, uint32_t fired, uint32_t len, const 
 /* EQ FLAT and PATTERN CLEARED can be undone: the same hold again within UNDO_MS, while what they left is untouched */
 #define UNDO_MS 5000u
 static int16_t eq_undo;
-static uint8_t pat_pre[16][4], pat_undo[16][4]; /* (pat_pre: as it was before SELECT's press put a rest in) */
-static uint32_t t_eq_undo, t_pat_undo, cur_pre, cur_undo;
+static uint8_t pat_undo[16][4];
+static uint32_t t_eq_undo, t_pat_undo, cur_undo;
 static int eq_undoable(void) { return !PV(P_SPK) && t_eq_undo && fm1_ms - t_eq_undo < UNDO_MS; }
 static int pat_undoable(void)
 {
@@ -890,14 +1083,56 @@ static void octave(int32_t d)
     put_int(put(s, "OCTAVE "), PV(P_OCT), 1);
     say(s);
 }
+static void pedal_set(int on)                   /* the pedal holds what sounds, and what is let go while it is down */
+{
+    uint32_t k;
+    pedal = (uint8_t)(on != 0);
+    if (pedal) {
+        for (k = 0; k < 128u; k++)
+            if (in_get(k)) in_set(k, S_PED, 0);
+    } else
+        in_clear(S_PED);
+}
+static void hold_switch(void)                   /* HOLD on: what the keys (and MIDI) hold now stays too; off: all goes */
+{
+    uint32_t k;
+    hold = !hold;
+    if (hold) {
+        for (k = 0; k < 128u; k++)
+            if (in_get(k) & (S_KEY | S_MIDI)) in_set(k, S_LATCH, 0);
+    } else
+        in_clear(S_LATCH);
+    say(hold ? "HOLD ON" : "HOLD OFF");
+}
+#if BOARD_SMK37
+#include "mel_smk.h"
+#endif
 static void buttons(void)
 {
     uint32_t rel, b = fm1_input_edges(&rel);    /* pressed / released since the last call */
-    static uint32_t t_sel, sel_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_env, env_long;
+    static uint32_t t_rec, rec_long, t_fx, fx_long, t_lfo, lfo_long, t_edit, edit_long, t_env, env_long;
     const char *was = pend_what;
     pend_what = 0;
+#if BOARD_SMK37
+    smk_buttons(b);
+#endif
     if (b & (1u << BTN_OCT_DOWN)) octave(-1);
     if (b & (1u << BTN_OCT_UP)) octave(1);
+    {                                           /* OCT- and OCT+ held 5 s: the USB rescue (the update mode the SMK-37's
+                                                 * other firmwares open the same way), as if it had failed to start */
+        static uint32_t t_both;
+        uint32_t both = (1u << BTN_OCT_DOWN) | (1u << BTN_OCT_UP);
+        if ((fm1_in.buttons & both) != both) t_both = 0;
+        else if (!t_both) t_both = fm1_ms ? fm1_ms : 1u;
+        else if (fm1_ms - t_both >= 5000u) {
+#if !defined(DINGHY_HOST) && !defined(DINGHY_WEB)
+            bootguard.failed = 1u;              /* (bootguard_begin: a second failed start -> the rescue) */
+            bootguard.pending = 1u;
+            fm1_reboot();
+#endif
+            t_both = 0;
+        }
+    }
     if (b & (1u << BTN_HOME)) {                 /* HOME: to PLAY; there, the next sound */
         if (PG_GROUP[page] == G_PLAY) to_sound((PV(P_SOUND) + 1) % (int32_t)MEL_NSETS);   /* (round and round) */
         else go_group(G_PLAY);
@@ -948,7 +1183,9 @@ static void buttons(void)
     }
     if (b & (1u << BTN_PLAY))
         seq_start(!seq_play);
-    if (b & (1u << BTN_REC)) {
+    if (b & (1u << BTN_REC)) { t_rec = fm1_ms; rec_long = 0; }   /* REC: recording on / off when let go; held, the
+                                                 * pattern cleared */
+    if (rel & (1u << BTN_REC) && !rec_long) {
         seq_rec = !seq_rec;
         chord_open = 0;
         if (page != PG_SEQ) go_group(G_SEQ);
@@ -956,13 +1193,8 @@ static void buttons(void)
         redraw |= 0xFu;
     }
     if (b & (1u << BTN_SEL)) {
-        t_sel = fm1_ms;
-        sel_long = 0;
-        if (seq_rec && !seq_play) {             /* step recording: a rest (held: the pattern cleared) */
+        if (seq_rec && !seq_play && page == PG_SEQ) {   /* step recording: a rest */
             uint32_t k;
-            for (k = 0; k < 64u; k++)
-                pat_pre[k / 4u][k % 4u] = set.steps[k / 4u][k % 4u];
-            cur_pre = seq_cur;
             for (k = 0; k < 4u; k++) set.steps[seq_cur][k] = 0;
             seq_cur = (seq_cur + 1u) % (uint32_t)PV(P_SLEN);
             chord_open = 0;
@@ -974,9 +1206,9 @@ static void buttons(void)
         } else
             go_group(G_LAYER);
     }
-    if (seq_rec && !seq_play && fm1_in.buttons & (1u << BTN_SEL) && !sel_long && fm1_ms - t_sel > 1000u) {
+    if (fm1_in.buttons & (1u << BTN_REC) && !rec_long && fm1_ms - t_rec > 1000u) {
         uint32_t k, had = 0;
-        sel_long = 1;
+        rec_long = 1;
         if (pat_undoable()) {                   /* (again, soon: as it was) */
             for (k = 0; k < 64u; k++)
                 set.steps[k / 4u][k % 4u] = pat_undo[k / 4u][k % 4u];
@@ -985,10 +1217,10 @@ static void buttons(void)
             say("PATTERN BACK");
         } else {
             for (k = 0; k < 64u; k++) {
-                had |= pat_undo[k / 4u][k % 4u] = pat_pre[k / 4u][k % 4u];
+                had |= pat_undo[k / 4u][k % 4u] = set.steps[k / 4u][k % 4u];
                 set.steps[k / 4u][k % 4u] = 0;
             }
-            cur_undo = cur_pre;
+            cur_undo = seq_cur;
             seq_cur = 0;
             t_pat_undo = had ? (fm1_ms ? fm1_ms : 1u) : 0u;
             say("PATTERN CLEARED");
@@ -1004,11 +1236,8 @@ static void buttons(void)
         say(set.half ? "HALF SPEED" : "FULL SPEED");
         redraw |= 3u;
     }
-    if (rel & (1u << BTN_ENV) && !env_long) {
-        hold = !hold;
-        if (!hold) in_clear(S_LATCH);
-        say(hold ? "HOLD ON" : "HOLD OFF");
-    }
+    if (rel & (1u << BTN_ENV) && !env_long)
+        hold_switch();
     if (b & (1u << BTN_SAVE)) {
         save_req = 1;
         say(quiet() ? "SAVED" : "SAVES WHEN SILENT");
@@ -1017,8 +1246,7 @@ static void buttons(void)
     pend(BTN_FX, t_fx, fx_long, 600u, by_fx ? "FX IN" : "FX OUT");
     pend(BTN_EDIT, t_edit, edit_long, 600u, eq_undoable() ? "EQ BACK" : "EQ FLAT");
     pend(BTN_ENV, t_env, env_long, 600u, set.half ? "FULL SPEED" : "HALF SPEED");
-    if (seq_rec && !seq_play)
-        pend(BTN_SEL, t_sel, sel_long, 1000u, pat_undoable() ? "PATTERN BACK" : "CLEAR PATTERN");
+    pend(BTN_REC, t_rec, rec_long, 1000u, pat_undoable() ? "PATTERN BACK" : "CLEAR PATTERN");
     if (pend_what != was) redraw |= 1u;
 }
 
@@ -1026,15 +1254,32 @@ static void knobs(void)
 {
     uint32_t k;
     int32_t d;
-    if ((d = turn(ENC_PRESETS)) != 0) {         /* the sound, on every page: A .. E, and there it stops */
+#if BOARD_SMK37
+    {                                           /* K1 TONE, K4 PITCH (the pads choose the sound) */
+        static const uint8_t PID[2] = {P_TONE, P_PITCH}, ENC[2] = {ENC_MASTER, ENC_PRESETS};
+        for (k = 0; k < 2u; k++) {
+            int32_t old = PV(PID[k]);
+            if ((d = turn(ENC[k], PINFO[PID[k]][1] - PINFO[PID[k]][0])) != 0 && set_param(PID[k], old + d * PINFO[PID[k]][3])) {
+                char s[24], *p = put(s, k ? "PITCH " : "TONE ");
+                UNDO_NOTE(PID[k], old);
+                changed(PG_GROUP[page] == G_PLAY ? k : 99u);
+                fmt_val(&CTL[PG_PLAY][k], PV(PID[k]), p);
+                say(s);
+            }
+        }
+    }
+#else
+    if ((d = turn(ENC_PRESETS, 0)) != 0) {         /* the sound, on every page: A .. F, and there it stops */
         int32_t v = PV(P_SOUND) + d, hi = (int32_t)MEL_NSETS - 1;
         v = v < 0 ? 0 : v > hi ? hi : v;
         if (v != PV(P_SOUND)) to_sound(v);
     }
+#endif
     if ((d = fm1_enc_take(ENC_SELECT)) != 0)    /* SELECT: the hand on the reel (the pages: the sections' buttons) */
         reel_turn(d);
     reel_idle();
-    if ((d = turn(ENC_ALGORITHM)) != 0 && set_param(P_BPM, PV(P_BPM) + d)) {   /* ALGORITHM: the tempo, anywhere */
+    if ((d = turn(ENC_ALGORITHM, PINFO[P_BPM][1] - PINFO[P_BPM][0])) != 0 && set_param(P_BPM, PV(P_BPM) + d)) {   /* ALGORITHM: the tempo, anywhere */
+        UNDO_NOTE(P_BPM, PV(P_BPM) - d);
         changed(99);
         {
             char s[16];
@@ -1045,7 +1290,8 @@ static void knobs(void)
     set.p[P_STEP] = (int16_t)seq_cur;
     for (k = 0; k < 4u; k++) {                  /* KNOB 1..4: this page's */
         const ctl_t *c = &CTL[page][k];
-        if ((d = turn(ENC_KNOB1 + k)) != 0 && c->pid == P_PMODE && c->name) {   /* SOUNDS: OWN keeps, then takes */
+        int32_t range = c->fmt == F_ENUM || c->fmt == F_SND || c->pid == P_STEP ? 0 : PINFO[c->pid][1] - PINFO[c->pid][0];
+        if ((d = turn(ENC_KNOB1 + k, range)) != 0 && c->pid == P_PMODE && c->name) {   /* SOUNDS: OWN keeps, then takes */
             play_keep();
             if (set_param(P_PMODE, PV(P_PMODE) + d)) {
                 play_take();
@@ -1053,6 +1299,7 @@ static void knobs(void)
             }
             continue;
         }
+        if (d && c->name && c->pid != P_STEP) UNDO_NOTE(c->pid, PV(c->pid));
         if (d && c->name && set_param(c->pid, PV(c->pid) + d * PINFO[c->pid][3])) {
             if (c->pid == P_STEP) { seq_cur = (uint32_t)PV(P_STEP); chord_open = 0; touched = k; redraw |= 10u; continue; }
             if (c->pid == P_SLEN) {
@@ -1081,9 +1328,12 @@ static void app_loop(void)
     for (k = 0; k < 27u; k++) {                 /* (a key stops the note it started: octave and pitch may change meanwhile) */
         if (down >> k & 1u) {
             held_note[k] = (uint8_t)(base + k);
+#if BOARD_SMK37
+            smk_note_vel[held_note[k]] = smk_vel_last = KEY_VEL(k);
+#endif
             in_set(held_note[k], S_KEY | (hold ? S_LATCH : 0u), 0);
             rec_note(held_note[k]);
-            midi_send(0x90, held_note[k], 100);
+            midi_send(0x90, held_note[k], KEY_VEL(k));
         }
         if (up >> k & 1u && held_note[k] < 128u) {
             in_set(held_note[k], pedal ? S_PED : 0u, S_KEY);
@@ -1092,6 +1342,9 @@ static void app_loop(void)
         }
     }
     prev_keys = keys;
+#if BOARD_SMK37
+    smk_poll(base);                             /* the outer keys, the pads, the faders, the wheels, the pedal */
+#endif
 
     buttons();
     knobs();
@@ -1102,18 +1355,16 @@ static void app_loop(void)
         if (ty == 0x90u && d2) {
             int32_t nt = (int32_t)d1 + PV(P_PITCH);
             midi_note[d1] = (uint8_t)(nt < 0 ? 0 : nt > 127 ? 127 : nt);
+#if BOARD_SMK37
+            smk_note_vel[midi_note[d1]] = d2 & 127u;
+#endif
             in_set(midi_note[d1], S_MIDI | (hold ? S_LATCH : 0u), 0);
             rec_note(midi_note[d1]);
         } else if (ty == 0x80u || ty == 0x90u)
             in_set(midi_note[d1], pedal && in_get(midi_note[d1]) ? S_PED : 0u, S_MIDI);
-        else if (ty == 0xB0u && d1 == 64u) {     /* the pedal holds what sounds, and what is let go while it is down */
-            pedal = d2 >= 64u;
-            if (pedal) {
-                for (k = 0; k < 128u; k++)
-                    if (in_get(k)) in_set(k, S_PED, 0);
-            } else
-                in_clear(S_PED);
-        } else if (ty == 0xB0u && d1 == 1u)
+        else if (ty == 0xB0u && d1 == 64u)      /* the sustain pedal */
+            pedal_set(d2 >= 64u);
+        else if (ty == 0xB0u && d1 == 1u)
             p_mod = d2;
         else if (ty == 0xB0u && (d1 == 120u || d1 == 123u))
             in_clear(S_MIDI | S_PED | S_LATCH);
@@ -1150,6 +1401,9 @@ static void app_loop(void)
     fm1_led_key(BTN_SEQ, PG_GROUP[page] == G_SEQ);
     fm1_led_key(BTN_SAVE, dirty);
     fm1_led_key(BTN_SEL, PV(P_BSND) != 0 || page == PG_LAYER);   /* lit: a layer sounds (or its page is up) */
+#if BOARD_SMK37
+    smk_leds();
+#endif
 
     ui_lv += ((int32_t)(sum > 256u ? 256u : sum) - ui_lv) / 4;
     if (!sum && ui_lv < 4) ui_lv = 0;           /* (the division alone would leave it at 1..3: never still) */
@@ -1162,6 +1416,10 @@ static void app_loop(void)
         t_msg = 0;
         redraw |= 1u;
     }
+#if BOARD_SMK37
+    if (smk_check())                            /* KNOB BANK held at power-on: the panel check instead */
+        goto smk_drawn;
+#endif
     if ((redraw & 1u) || ((ui_lv || reel16) && fm1_ms - t_head >= 100u) || (!ui_lv && head_lv)
         || (pend_what && fm1_ms - t_head >= 40u)) {     /* (a hold's bar fills) */
         draw_header(ui_lv > 0);                 /* (the reel turns while something sounds) */
@@ -1178,6 +1436,9 @@ static void app_loop(void)
         draw_tapes(base, (redraw & 4u) != 0);
         t_tapes = fm1_ms;
     }
+#if BOARD_SMK37
+smk_drawn:
+#endif
     redraw = 0;
 
     if (((dirty && fm1_ms - t_change > 2000u) || save_req) && quiet()) {

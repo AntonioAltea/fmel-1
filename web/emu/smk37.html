@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMEL-1 on the SMK-37</title>
+<meta name="description" content="Simulator of FMEL-1 on the M-Vave SMK-37: the same code as the keyboard runs, compiled for the browser.">
+<link rel="icon" href="img/icon.png">
+<script>   /* the language before anything is drawn: the one chosen, else the browser's (Spanish or English) */
+try {
+  const l = localStorage.getItem("mel-lang") || (/^es\b/i.test(navigator.language || "") ? "es" : "en");
+  if (l === "es") document.documentElement.lang = "es";
+} catch (e) {}
+</script>
+<style>
+:root { --ground: #eef5f4; --ink: #1d2e2c; --muted: #5a706d; --rule: #d0e2df; --card: #f8fcfb; --accent: #12998d; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --ground: #0f1716; --ink: #e4f1ef; --muted: #91aaa6; --rule: #253432; --card: #162220; --accent: #4fd3c5; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --ground: #0f1716; --ink: #e4f1ef; --muted: #91aaa6; --rule: #253432; --card: #162220; --accent: #4fd3c5; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); margin: 0; padding: 24px 16px 48px;
+       font: 400 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1240px; margin: 0 auto; }
+html[lang="en"] [data-lang="es"], html[lang="es"] [data-lang="en"] { display: none !important; }
+a { color: var(--accent); }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: 1rem; }
+.top .grow { flex: 1; }
+.board { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; background: var(--card); }
+.board a { font-size: .9rem; padding: .25em .9em; color: var(--ink); text-decoration: none; border: 0; border-radius: 0; background: none; }
+.board a[aria-current="page"] { background: var(--accent); color: #04201d; font-weight: 600; }
+.top a, .lang { font: inherit; font-size: .9rem; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .25em .7em; cursor: pointer; text-decoration: none; }
+h1 { margin: 0; font-size: 2.4rem; line-height: 1.1; letter-spacing: .02em; }
+.intro { color: var(--muted); margin: .4rem 0 1.4rem; max-width: 46rem; }
+.device { position: relative; width: 100%; aspect-ratio: 1400 / 660; user-select: none; -webkit-user-select: none; touch-action: none; }
+.device svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.device canvas { position: absolute; left: 2.857%; top: 6.061%; width: 17.143%; height: 36.364%; image-rendering: pixelated; background: #000; border-radius: 3px; pointer-events: none; }
+.ctl { cursor: pointer; }
+.knob { cursor: ns-resize; }
+.fader, .wheel { cursor: ns-resize; }
+.face { transition: fill .05s; }
+.lit .face.btn { fill: #109488; }
+.lit text.cap { fill: #effffd; }
+.down .face { stroke: #5fd0c3; stroke-width: 3; }
+.down .face.white { fill: #c9ece8; }
+.down .face.black { fill: #2a6f68; }
+.cap { fill: #d4d4d7; font: 600 13px system-ui, sans-serif; letter-spacing: .04em; pointer-events: none; }
+.start { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(10, 24, 22, .45); border-radius: 3.1% / 6.7%; }
+.start[hidden] { display: none; }
+.start button { font: 600 1.25rem system-ui, sans-serif; padding: .7em 1.7em; border: 0; border-radius: 999px; background: #19b0a2; color: #04201d; cursor: pointer; }
+.start button:disabled { opacity: .6; cursor: progress; }
+.bar { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin-top: .9rem; color: var(--muted); font-size: .92rem; }
+.bar button { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: .3em .8em; cursor: pointer; }
+.bar .grow { flex: 1; }
+.bar label { display: inline-flex; gap: .4em; align-items: center; }
+.hint { color: var(--muted); font-size: .92rem; margin: .7rem 0 0; }
+kbd { font: 600 .82em ui-monospace, Menlo, monospace; background: var(--card); border: 1px solid var(--rule); border-radius: 4px; padding: 0 .3em; color: var(--ink); }
+details.manual { margin-top: 1.4rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
+details.manual summary { cursor: pointer; font-size: 1.1rem; }
+.manual table { border-collapse: collapse; margin: .8rem 0; width: 100%; font-size: .92rem; }
+.manual th, .manual td { text-align: left; vertical-align: top; padding: .3rem .6rem; border-bottom: 1px solid var(--rule); }
+.manual th { width: 32%; color: var(--ink); }
+.manual td { color: var(--muted); }
+footer { margin-top: 2.4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .9rem; }
+footer p { margin: .3rem 0; }
+@media (max-width: 640px) { h1 { font-size: 2rem; } .start button { font-size: 1rem; padding: .55em 1.3em; } }
+</style>
+</head>
+<body>
+<main>
+<nav class="top">
+  <nav class="board" aria-label="board"><a href="./">FM-1</a><a aria-current="page" href="smk37.html">SMK-37</a></nav>
+  <span class="grow"></span>
+  <a href="install/?board=smk37"><span data-lang="en">Install on the SMK-37</span><span data-lang="es">Instalar en el SMK-37</span></a>
+  <a href="https://github.com/AntonioAltea/fmel-1/blob/main/SMK37.md">SMK37.md</a>
+  <a href="https://github.com/AntonioAltea/fmel-1">GitHub</a>
+  <button class="lang" id="lang" type="button"><span data-lang="en">Español</span><span data-lang="es">English</span></button>
+</nav>
+
+<header>
+  <h1>FMEL-1 · SMK-37</h1>
+  <p class="intro" data-lang="en">FMEL-1 on the M-Vave SMK-37 (Pro, Elite, MKE-P37), in the browser: the same code the keyboard runs. The panel is drawn for clarity, not to scale.</p>
+  <p class="intro" data-lang="es">FMEL-1 en el M-Vave SMK-37 (Pro, Elite, MKE-P37), en el navegador: el mismo código que ejecuta el teclado. El panel está dibujado para entenderse, no a escala.</p>
+</header>
+
+<div class="device" id="device">
+  <svg id="panel" viewBox="0 0 1400 660" role="application" aria-label="SMK-37"></svg>
+  <canvas id="screen" width="240" height="240" aria-label="screen"></canvas>
+  <div class="start" id="start"><button id="go"><span data-lang="en">Switch on</span><span data-lang="es">Encender</span></button></div>
+</div>
+
+<div class="bar">
+  <span id="status"></span>
+  <span class="grow"></span>
+  <label><span data-lang="en">Velocity</span><span data-lang="es">Velocidad</span> <input id="vel" type="range" min="1" max="127" value="100"></label>
+  <span id="load" hidden></span>
+  <button id="midi" type="button"></button>
+  <button id="reset" type="button"><span data-lang="en">Factory settings</span><span data-lang="es">Ajustes de fábrica</span></button>
+</div>
+<p class="hint" data-lang="en">Keys, pads and buttons: click them, or the computer keyboard (<kbd>Z</kbd>…<kbd>/</kbd>, <kbd>Q</kbd>…<kbd>Y</kbd>: the middle 27 keys). Knobs, faders and wheels: drag up and down, or the mouse wheel; the pitch wheel springs back. The pedal: hold it.</p>
+<p class="hint" data-lang="es">Teclas, pads y botones: haz clic, o el teclado del ordenador (<kbd>Z</kbd>…<kbd>/</kbd>, <kbd>Q</kbd>…<kbd>Y</kbd>: las 27 teclas del medio). Knobs, faders y ruedas: arrastra arriba y abajo, o la rueda del ratón; la rueda de pitch vuelve sola. El pedal: mantenlo.</p>
+
+<details class="manual">
+<summary><span data-lang="en">Manual</span><span data-lang="es">Manual</span></summary>
+<table data-lang="en"><tr><th>Keys</th><td>all 37, C3..C6; how hard you play is how loud the tape (the SEQ's steps: full level)</td></tr><tr><th>Pads 1–6 (top)</th><td>the sound: A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX, F PIANO</td></tr><tr><th>Pads 9–14 (bottom)</th><td>the layer's sound, the same columns (the lit one again: no layer)</td></tr><tr><th>Pad 7 / 15, held</th><td>only the top row / only the bottom row heard</td></tr><tr><th>Pad 8 / 16</th><td>HOLD / HALF SPEED: a tap switches it; held, it is the other way only while held</td></tr><tr><th>Faders 1–4</th><td>MIX (up: the top row, down: the bottom), how much LOFI, how much FX, VOLUME</td></tr><tr><th>K1 K2 K3 K4</th><td>TONE, the hand on the reel, TEMPO, PITCH</td></tr><tr><th>K5–K8</th><td>the page's four knobs (the plate on the screen)</td></tr><tr><th>< ></th><td>the section's pages, back and on</td></tr><tr><th>FADER BANK</th><td>UNDO the last knob or pad change; again: redone (lit while there is one)</td></tr><tr><th>Wheels, pedal</th><td>pitch: the motor (±2 semitones); mod: the vibrato; the pedal: sustain</td></tr><tr><th>PATCH SCALE NOTE REPEAT FX PARA GLOBE CHORD ARP SEQ SEQ PLAY SEQ REC BT</th><td>the FM-1's HOME SEL LFO FX EDIT GLO ENV ARP SEQ PLAY REC SAVE: the FM-1 simulator's manual applies</td></tr><tr><th>KNOB BANK</th><td>held at power-on: the panel check</td></tr></table>
+<table data-lang="es"><tr><th>Teclas</th><td>las 37, C3..C6; cuanto más fuerte tocas, más suena la cinta (los pasos del SEQ: a tope)</td></tr><tr><th>Pads 1–6 (arriba)</th><td>el sonido: A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX, F PIANO</td></tr><tr><th>Pads 9–14 (abajo)</th><td>el sonido de la capa, en las mismas columnas (el encendido otra vez: sin capa)</td></tr><tr><th>Pad 7 / 15, mantenido</th><td>solo se oye la fila de arriba / la de abajo</td></tr><tr><th>Pad 8 / 16</th><td>HOLD / HALF SPEED: un toque lo cambia; mantenido, cambia solo mientras lo mantienes</td></tr><tr><th>Faders 1–4</th><td>MIX (arriba: la fila de arriba, abajo: la de abajo), cuánto LOFI, cuánto FX, VOLUMEN</td></tr><tr><th>K1 K2 K3 K4</th><td>TONE, la mano en la bobina, TEMPO, PITCH</td></tr><tr><th>K5–K8</th><td>los cuatro knobs de la página (la placa de la pantalla)</td></tr><tr><th>< ></th><td>las páginas del apartado, hacia atrás y hacia delante</td></tr><tr><th>FADER BANK</th><td>DESHACER el último cambio de knob o pad; otra vez: rehecho (encendido mientras hay uno)</td></tr><tr><th>Ruedas, pedal</th><td>pitch: el motor (±2 semitonos); mod: el vibrato; el pedal: sustain</td></tr><tr><th>PATCH SCALE NOTE REPEAT FX PARA GLOBE CHORD ARP SEQ SEQ PLAY SEQ REC BT</th><td>los HOME SEL LFO FX EDIT GLO ENV ARP SEQ PLAY REC SAVE del FM-1: vale el manual del simulador del FM-1</td></tr><tr><th>KNOB BANK</th><td>mantenido al encender: la comprobación del panel</td></tr></table>
+</details>
+
+<footer>
+  <p data-lang="en">The tapes: Bernie Kornowicz (Taijiguy)'s Mellotron M400S, from <a href="http://leisureland.us">leisureland.us</a>, free for non-commercial use. Drawings by Javi. The SMK-37 layer is genkigenki's; built on <a href="https://github.com/zvenson/dinghy">Dinghy</a> and <a href="https://github.com/hugelton/Felucca">Felucca</a>.</p>
+  <p data-lang="es">Las cintas: el Mellotron M400S de Bernie Kornowicz (Taijiguy), de <a href="http://leisureland.us">leisureland.us</a>, libres para uso no comercial. Dibujos de Javi. La capa del SMK-37 es de genkigenki; hecho sobre <a href="https://github.com/zvenson/dinghy">Dinghy</a> y <a href="https://github.com/hugelton/Felucca">Felucca</a>.</p>
+  <p>GPL-3.0 · <a href="https://github.com/AntonioAltea/fmel-1">source</a> · not affiliated with M-Vave.</p>
+</footer>
+</main>
+
+<script>
+"use strict";
+try { localStorage.setItem("mel-board", "smk37"); } catch (e) {}   // (the installer opens on this board)
+const NS = "http://www.w3.org/2000/svg";
+// platform.c's SMK-37 ids
+const BTN = { "KNOB BANK": 0, "FADER BANK": 1, "<": 2, ">": 3, "OCT-": 4, "OCT+": 5, ARP: 6, "NOTE REPEAT": 7, SCALE: 8,
+              CHORD: 9, GLOBE: 10, BT: 11, PATCH: 12, PARA: 13, FX: 14, SEQ: 15, "SEQ PLAY": 16, "SEQ REC": 17 };
+const NKEY = 37, PITCH_REST = 535, MOD_REST = 620;
+let lang = document.documentElement.lang === "es" ? "es" : "en";
+const TEXT = {
+  en: { off: "", loading: "Loading the tapes…", on: "On.", fail: "Could not start: ", error: "Error: ",
+        midi: "Connect MIDI", midiOn: "MIDI connected", noMidi: "This browser has no Web MIDI (try Chrome or Edge).",
+        midiNone: "MIDI connected, but there is no MIDI keyboard.", midiNo: "MIDI not allowed: " },
+  es: { off: "", loading: "Cargando las cintas…", on: "Encendido.", fail: "No ha podido arrancar: ", error: "Error: ",
+        midi: "Conectar MIDI", midiOn: "MIDI conectado", noMidi: "Este navegador no tiene Web MIDI (prueba Chrome o Edge).",
+        midiNone: "MIDI conectado, pero no hay ningún teclado MIDI.", midiNo: "MIDI no permitido: " },
+};
+const t = (k) => TEXT[lang][k];
+const STORE = "mel-emu-smk37-settings";
+
+const svg = document.getElementById("panel");
+function el(tag, attrs, parent = svg) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  parent.appendChild(e);
+  return e;
+}
+function label(parent, x, y, s, size = 13) {
+  const e = el("text", { x, y, "text-anchor": "middle", class: "cap" }, parent);
+  e.style.fontSize = size + "px";
+  e.textContent = s;
+  return e;
+}
+
+// ---------------------------------------------------------------- the panel (drawn for clarity, not to scale)
+el("rect", { x: 4, y: 4, width: 1392, height: 652, rx: 36, fill: "#1e1e20", stroke: "#323236", "stroke-width": 3 });
+el("rect", { x: 28, y: 28, width: 264, height: 264, rx: 18, fill: "#080909" });   // (the screen's bezel)
+
+const knobs = [];
+function knob(x, y, i) {
+  const g = el("g", { class: "ctl knob", role: "slider", "aria-label": `K${i + 1}` });
+  el("circle", { cx: x, cy: y, r: 31, fill: "#2c2c2f" }, g);
+  el("circle", { cx: x, cy: y, r: 25, fill: "#1c1c1e", stroke: "#4a4a4d", "stroke-width": 2, class: "face" }, g);
+  const ind = el("line", { x1: x, y1: y - 20, x2: x, y2: y - 10, stroke: "#e8e6ee", "stroke-width": 3, "stroke-linecap": "round" }, g);
+  label(g, x, y + 48, `K${i + 1}`);
+  el("circle", { cx: x, cy: y, r: 40, fill: "transparent" }, g);
+  knobs[i] = { g, ind, x, y, angle: 0, id: i };
+}
+for (let i = 0; i < 8; i++) knob(345 + (i % 4) * 92, i < 4 ? 80 : 200, i);
+
+const faders = [];
+function fader(x, i) {
+  const g = el("g", { class: "ctl fader", role: "slider", "aria-label": `fader ${i + 1}` });
+  el("rect", { x: x - 22, y: 36, width: 44, height: 236, rx: 10, fill: "#262628" }, g);
+  el("rect", { x: x - 3, y: 52, width: 6, height: 200, rx: 3, fill: "#0e0e10" }, g);
+  const cap = el("rect", { x: x - 18, y: 0, width: 36, height: 20, rx: 4, fill: "#d8d8dc", stroke: "#8a8a90", class: "face" }, g);
+  label(g, x, 290, `F${i + 1}`);
+  faders[i] = { g, cap, x, value: i === 3 ? 100 : 127, id: i };
+}
+for (let i = 0; i < 4; i++) fader(710 + i * 62, i);
+function faderDraw(f) { f.cap.setAttribute("y", 252 - (f.value / 127) * 200 - 10); }
+
+const pads = [];
+function pad(x, y, i) {
+  const g = el("g", { class: "ctl", role: "button", "aria-label": `pad ${i + 1}` });
+  const face = el("rect", { x, y, width: 50, height: 50, rx: 7, fill: "#2a2a2d", stroke: "#3e3e43", "stroke-width": 1.5, class: "face" }, g);
+  label(g, x + 25, y + 30, String(i + 1), 11).style.fill = "#6d6d73";
+  pads[i] = { g, face, id: i };
+}
+for (let i = 0; i < 16; i++) pad(966 + (i % 8) * 54, i < 8 ? 36 : 92, i);
+
+const buttons = {};
+function button(x, y, w, name) {
+  const g = el("g", { class: "ctl", role: "button", "aria-label": name });
+  el("rect", { x, y, width: w, height: 34, rx: 8, fill: "#2c2c2f", stroke: "#3e3e43", "stroke-width": 1.5, class: "face btn" }, g);
+  label(g, x + w / 2, y + 22, name, name.length > 8 ? 10 : 12);
+  buttons[name] = { g, id: BTN[name] };
+}
+const BROW1 = ["PATCH", "SCALE", "NOTE REPEAT", "FX", "PARA", "GLOBE", "CHORD", "ARP", "BT"];
+const BROW2 = ["SEQ", "SEQ PLAY", "SEQ REC", "KNOB BANK", "FADER BANK", "<", ">", "OCT-", "OCT+"];
+BROW1.forEach((n, i) => button(966 + i * 48, 166, 44, n));
+BROW2.forEach((n, i) => button(966 + i * 48, 214, 44, n));
+
+const wheels = [];
+function wheel(x, i, name) {
+  const g = el("g", { class: "ctl wheel", role: "slider", "aria-label": name });
+  el("rect", { x: x - 24, y: 350, width: 48, height: 250, rx: 12, fill: "#262628" }, g);
+  el("rect", { x: x - 14, y: 362, width: 28, height: 226, rx: 10, fill: "#151517", class: "face" }, g);
+  const mark = el("rect", { x: x - 14, y: 0, width: 28, height: 6, rx: 3, fill: "#d8d8dc" }, g);
+  label(g, x, 622, name, 11);
+  wheels[i] = { g, mark, raw: i ? MOD_REST : PITCH_REST, id: i };
+}
+wheel(62, 0, "PITCH");
+wheel(122, 1, "MOD");
+function wheelDraw(w) { w.mark.setAttribute("y", 588 - (w.raw / 1023) * 226 - 3); }
+
+const pedalG = el("g", { class: "ctl", role: "button", "aria-label": "pedal" });
+el("rect", { x: 34, y: 300, width: 116, height: 36, rx: 8, fill: "#2c2c2f", stroke: "#3e3e43", "stroke-width": 1.5, class: "face btn" }, pedalG);
+label(pedalG, 92, 323, "PEDAL", 12);
+
+// the 37 keys, C3..C6
+const keys = [];
+const isBlack = (k) => [1, 3, 6, 8, 10].includes(k % 12);
+(function keybed(x0, y0, w, h) {
+  el("rect", { x: x0, y: y0, width: w, height: h, rx: 18, fill: "#262628" });
+  const nw = 22, pitch = (w - 20) / nw;
+  let wi = 0;
+  const wx = [];
+  for (let k = 0; k < NKEY; k++) if (!isBlack(k)) wx[k] = x0 + 10 + wi++ * pitch;
+  for (let k = 0; k < NKEY; k++) if (!isBlack(k)) {
+    const g = el("g", { class: "ctl", role: "button", "aria-label": `key ${k}` });
+    el("rect", { x: wx[k] + 1, y: y0 + 10, width: pitch - 2, height: h - 20, rx: 4, fill: "#f2f0ea", stroke: "#8a8a90", class: "face white" }, g);
+    g.dataset.key = k;
+    keys[k] = g;
+  }
+  for (let k = 0; k < NKEY; k++) if (isBlack(k)) {
+    const g = el("g", { class: "ctl", role: "button", "aria-label": `key ${k}` });
+    el("rect", { x: wx[k - 1] + pitch * 0.68, y: y0 + 10, width: pitch * 0.64, height: (h - 20) * 0.6, rx: 3, fill: "#1a1a1c", stroke: "#000", class: "face black" }, g);
+    g.dataset.key = k;
+    keys[k] = g;
+  }
+})(170, 340, 1200, 290);
+
+// ---------------------------------------------------------------- the language
+const statusEl = document.getElementById("status"), loadEl = document.getElementById("load");
+let statusKey = "off", statusExtra = "", midiOn = false;
+function status(key, extra = "") { statusKey = key; statusExtra = extra; statusEl.textContent = t(key) + extra; }
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.getElementById("midi").textContent = t(midiOn ? "midiOn" : "midi");
+  if (statusKey) statusEl.textContent = t(statusKey) + statusExtra;
+}
+document.getElementById("lang").addEventListener("click", () => {
+  lang = lang === "es" ? "en" : "es";
+  try { localStorage.setItem("mel-lang", lang); } catch (e) {}
+  applyLang();
+});
+applyLang();
+
+// ---------------------------------------------------------------- the device
+let node = null, ctx = null;
+const send = (m) => node && node.port.postMessage(m);
+const velEl = document.getElementById("vel");
+let keyLo = 0, keyHi = 0;
+const keySources = new Map();
+function keyHold(k, src, down) {
+  let s = keySources.get(k);
+  if (!s) keySources.set(k, (s = new Set()));
+  if (down) s.add(src); else s.delete(src);
+  const lo = keyLo, hi = keyHi, on = s.size > 0;
+  if (k < 32) keyLo = on ? (keyLo | (1 << k)) >>> 0 : (keyLo & ~(1 << k)) >>> 0;
+  else keyHi = on ? keyHi | (1 << (k - 32)) : keyHi & ~(1 << (k - 32));
+  if (lo !== keyLo || hi !== keyHi) {
+    send({ type: "keys37", lo: keyLo, hi: keyHi, vel: +velEl.value });
+    keys[k].classList.toggle("down", on);
+  }
+}
+function buttonSet(name, down) {
+  const b = buttons[name];
+  if (!b) return;
+  b.g.classList.toggle("down", down);
+  send({ type: "button", id: b.id, down });
+}
+function padSet(i, down) {
+  pads[i].g.classList.toggle("down", down);
+  send({ type: "pad", id: i, vel: down ? +velEl.value : 0 });
+}
+function turn(k, n) {
+  if (!n) return;
+  k.angle = (k.angle + n * 15) % 360;
+  k.ind.setAttribute("transform", `rotate(${k.angle} ${k.x} ${k.y})`);
+  send({ type: "enc", id: k.id, n });
+}
+function faderSet(f, v) {
+  f.value = Math.max(0, Math.min(127, Math.round(v)));
+  faderDraw(f);
+  send({ type: "fader", id: f.id, value: f.value });
+}
+function wheelSet(w, raw) {
+  w.raw = Math.max(0, Math.min(1023, Math.round(raw)));
+  wheelDraw(w);
+  send({ type: "wheel", id: w.id, value: w.raw });
+}
+faders.forEach(faderDraw);
+wheels.forEach(wheelDraw);
+
+function drag(g, onDy, onEnd) {                  // drag up / down (and the mouse wheel: steps of 1)
+  let y0 = 0, id = null;
+  g.addEventListener("pointerdown", (e) => { id = e.pointerId; y0 = e.clientY; g.setPointerCapture(id); e.preventDefault(); });
+  g.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== id) return;
+    const r = svg.getBoundingClientRect(), dy = (y0 - e.clientY) * 660 / r.height;
+    y0 = e.clientY;
+    onDy(dy);
+  });
+  const end = (e) => { if (e.pointerId === id) { id = null; if (onEnd) onEnd(); } };
+  g.addEventListener("pointerup", end);
+  g.addEventListener("pointercancel", end);
+  g.addEventListener("wheel", (e) => { e.preventDefault(); onDy(e.deltaY < 0 ? 4 : -4, true); }, { passive: false });
+}
+for (const k of knobs) { let acc = 0; drag(k.g, (dy) => { acc += dy; const n = Math.trunc(acc / 6); if (n) { acc -= n * 6; turn(k, n); } }); }
+for (const f of faders) drag(f.g, (dy) => faderSet(f, f.value + dy * 127 / 200));
+drag(wheels[0].g, (dy) => wheelSet(wheels[0], wheels[0].raw + dy * 1023 / 226), () => wheelSet(wheels[0], PITCH_REST));   // (it springs back)
+drag(wheels[1].g, (dy) => wheelSet(wheels[1], wheels[1].raw - dy * 1023 / 226));                                         // (up = lower raw)
+for (const [name, b] of Object.entries(buttons)) {
+  b.g.addEventListener("pointerdown", (e) => { b.g.setPointerCapture(e.pointerId); buttonSet(name, true); e.preventDefault(); });
+  const up = () => buttonSet(name, false);
+  b.g.addEventListener("pointerup", up);
+  b.g.addEventListener("pointercancel", up);
+}
+for (const p of pads) {
+  p.g.addEventListener("pointerdown", (e) => { p.g.setPointerCapture(e.pointerId); padSet(p.id, true); e.preventDefault(); });
+  const up = () => padSet(p.id, false);
+  p.g.addEventListener("pointerup", up);
+  p.g.addEventListener("pointercancel", up);
+}
+function pedal(down) {
+  pedalG.classList.toggle("down", down);
+  send({ type: "pedal", value: down ? 0 : 1000 });   // (a pedal that reads low when pressed; MEL learns either at power-on)
+}
+pedalG.addEventListener("pointerdown", (e) => { pedalG.setPointerCapture(e.pointerId); pedal(true); e.preventDefault(); });
+pedalG.addEventListener("pointerup", () => pedal(false));
+pedalG.addEventListener("pointercancel", () => pedal(false));
+
+// keys: press, and slide across them
+const pointerKey = new Map();
+function keyAt(x, y) {
+  const tg = document.elementFromPoint(x, y), g = tg && tg.closest && tg.closest("g[data-key]");
+  return g ? +g.dataset.key : -1;
+}
+svg.addEventListener("pointerdown", (e) => {
+  const k = keyAt(e.clientX, e.clientY);
+  if (k < 0) return;
+  e.preventDefault();
+  svg.setPointerCapture(e.pointerId);
+  pointerKey.set(e.pointerId, k);
+  keyHold(k, "p" + e.pointerId, true);
+});
+svg.addEventListener("pointermove", (e) => {
+  if (!pointerKey.has(e.pointerId)) return;
+  const k = keyAt(e.clientX, e.clientY), was = pointerKey.get(e.pointerId);
+  if (k !== was && k >= 0) { keyHold(was, "p" + e.pointerId, false); keyHold(k, "p" + e.pointerId, true); pointerKey.set(e.pointerId, k); }
+});
+const pointerEnd = (e) => {
+  if (!pointerKey.has(e.pointerId)) return;
+  keyHold(pointerKey.get(e.pointerId), "p" + e.pointerId, false);
+  pointerKey.delete(e.pointerId);
+};
+svg.addEventListener("pointerup", pointerEnd);
+svg.addEventListener("pointercancel", pointerEnd);
+
+// the computer keyboard: the middle 27 keys (F3..G5), as on the FM-1 simulator
+const KEYMAP = {
+  KeyZ: 0, KeyS: 1, KeyX: 2, KeyD: 3, KeyC: 4, KeyF: 5, KeyV: 6, KeyB: 7, KeyH: 8, KeyN: 9, KeyJ: 10, KeyM: 11,
+  Comma: 12, KeyL: 13, Period: 14, Semicolon: 15, Slash: 16, Digit1: 17, KeyQ: 18, KeyW: 19, Digit3: 20, KeyE: 21,
+  Digit4: 22, KeyR: 23, KeyT: 24, Digit6: 25, KeyY: 26,
+};
+window.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey || !node) return;
+  if (e.code in KEYMAP) { if (!e.repeat) keyHold(5 + KEYMAP[e.code], e.code, true); e.preventDefault(); }
+});
+window.addEventListener("keyup", (e) => { if (e.code in KEYMAP) keyHold(5 + KEYMAP[e.code], e.code, false); });
+window.addEventListener("blur", () => {
+  for (const [k, s] of keySources) for (const src of [...s]) if (!src.startsWith("p")) keyHold(k, src, false);
+});
+
+// the screen, the LEDs and the pads' colours
+const screen = document.getElementById("screen"), sctx = screen.getContext("2d"), img = sctx.createImageData(240, 240);
+function drawScreen(fb) {
+  const d = img.data;
+  for (let i = 0, j = 0; i < fb.length; i++, j += 4) {
+    const c = fb[i];
+    d[j] = ((c >> 11) * 527 + 23) >> 6;
+    d[j + 1] = (((c >> 5) & 63) * 259 + 33) >> 6;
+    d[j + 2] = ((c & 31) * 527 + 23) >> 6;
+    d[j + 3] = 255;
+  }
+  sctx.putImageData(img, 0, 0);
+}
+function drawLeds([lo]) { for (const b of Object.values(buttons)) b.g.classList.toggle("lit", !!((lo >>> b.id) & 1)); }
+function drawPads(rgb) {
+  rgb.forEach((c, i) => {
+    const r = (c >>> 16) & 255, g = (c >>> 8) & 255, b = c & 255;
+    pads[i].face.setAttribute("fill", c ? `rgb(${Math.max(r, 42)},${Math.max(g, 42)},${Math.max(b, 45)})` : "#2a2a2d");
+  });
+}
+
+// ---------------------------------------------------------------- switching on
+function savedSettings() {
+  try { const s = JSON.parse(localStorage.getItem(STORE) || "null"); return Array.isArray(s) ? s : null; } catch (e) { return null; }
+}
+async function start() {
+  const go = document.getElementById("go");
+  go.disabled = true;
+  status("loading");
+  try {
+    ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
+    await ctx.audioWorklet.addModule("worklet.js");
+    const wasm = await (await fetch("mel-smk37.wasm", { cache: "no-cache" })).arrayBuffer();
+    node = new AudioWorkletNode(ctx, "mel", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+    node.connect(ctx.destination);
+    node.port.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "ready") {
+        document.getElementById("start").hidden = true;
+        status("on");
+        faders.forEach((f) => send({ type: "fader", id: f.id, value: f.value }));
+      } else if (m.type === "error") {
+        status("error", m.message);
+      } else if (m.type === "frame") {
+        if (m.fb) drawScreen(m.fb);
+        if (m.leds) drawLeds(m.leds);
+        if (m.pads) drawPads(m.pads);
+        if (m.settings) { try { localStorage.setItem(STORE, JSON.stringify(m.settings)); } catch (err) {} }
+        if (m.load !== undefined) loadEl.textContent = `CPU ${(m.load * 100).toFixed(0)} %`;
+      }
+    };
+    node.port.postMessage({ type: "load", wasm, settings: savedSettings() }, [wasm]);
+    await ctx.resume();
+  } catch (err) {
+    status("fail", err.message);
+    go.disabled = false;
+  }
+}
+document.getElementById("go").addEventListener("click", start);
+document.getElementById("reset").addEventListener("click", () => {
+  try { localStorage.removeItem(STORE); } catch (e) {}
+  location.reload();
+});
+
+// MIDI in
+document.getElementById("midi").addEventListener("click", async () => {
+  if (!navigator.requestMIDIAccess) { status("noMidi"); return; }
+  try {
+    const access = await navigator.requestMIDIAccess();
+    const hook = () => {
+      const names = [];
+      for (const input of access.inputs.values()) {
+        input.onmidimessage = (m) => { const [a, b = 0, c = 0] = m.data; if (a < 0xF0) send({ type: "midi", data: [a, b, c] }); };
+        names.push(input.name);
+      }
+      if (names.length) { statusKey = ""; statusEl.textContent = "MIDI: " + names.join(", "); } else status("midiNone");
+    };
+    access.onstatechange = hook;
+    hook();
+    midiOn = true;
+    applyLang();
+  } catch (err) {
+    status("midiNo", err.message);
+  }
+});
+</script>
+</body>
+</html>

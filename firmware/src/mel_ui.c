@@ -26,6 +26,19 @@
 #define STAGE_H 124                             /* (the pages are drawn for 108, centred in it) */
 #define TAPES_Y 148
 #define PLATE_Y 180
+#if BOARD_SMK37
+#define UI_NKEY 37u                             /* the keyboard strip: the SMK's 37 keys (C3 .. C6 at OCTAVE 0) */
+#define UI_K0 5u                                /* (keybed 5 is the FM-1's first key, F3) */
+#define UI_NWHITE 22
+#define UI_BX 3                                 /* a black key: its offset and width */
+#define UI_BW 7
+#else
+#define UI_NKEY 27u
+#define UI_K0 0u
+#define UI_NWHITE 16
+#define UI_BX 5
+#define UI_BW 10
+#endif
 
 /* ---- drawing on the canvas, with the background known (text blended onto it, not onto black) */
 static uint16_t mix565(uint32_t a, uint32_t b, uint32_t t)   /* a .. b, t 0..16 */
@@ -147,16 +160,19 @@ static void spr_violins(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t l
     spr_fiddle(cx + S(30), cy - S(6), S(170), t + 700u, lv, 0, RGB(176, 94, 40));
     spr_fiddle(cx, cy + S(4), S(220), t, lv, 0, RGB(214, 120, 46));
 }
-static void spr_unpack(const sprite_t *sp, uint32_t f, uint8_t *px)   /* (a frame after the first: only where it
-                                                                     * is not the first; 255, as the first there) */
+static void spr_unpack(const sprite_t *sp, uint32_t f, uint8_t *px)   /* (a delta frame: only where it is not
+                                                                     * the first; 255, as the first there) */
 {
     const uint8_t *r = sp->frame[f];
-    uint32_t i = 0, n, end = (uint32_t)sp->w * sp->h;
-    if (f) spr_unpack(sp, 0u, px);
-    for (; i < end; r += 2)
-        if (r[1] == 255u) i += r[0];
+    uint32_t i = 0, n, v, end = (uint32_t)sp->w * sp->h;
+    if (sp->delta >> f & 1u) spr_unpack(sp, 0u, px);
+    while (i < end) {
+        if (*r >> 4) n = *r >> 4, v = *r++ & 15u;   /* a short run of part 0 */
+        else n = r[1], v = r[2], r += 3;
+        if (v == 255u) i += n;
         else
-            for (n = r[0]; n--; ) px[i++] = r[1];
+            while (n--) px[i++] = (uint8_t)v;
+    }
 }
 static const uint8_t *spr_frame(const sprite_t *sp, uint32_t f)   /* a frame unpacked (the last one kept) */
 {
@@ -242,6 +258,18 @@ static void spr_piano(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)
     static const uint8_t F[4] = {1, 2, 3, 2};   /* playing: the hands up the keys and back (200 ms each) */
     spr_pix(&SPR_PIANO, lv ? F[t / 200u % 4u] : 0u, cx, cy, s, 15);   /* (silent: hands in its lap) */
 }
+static void spr_sax(int32_t cx, int32_t cy, int32_t s, uint32_t t, int32_t lv)   /* a bear with a saxophone
+                                                                                   * (drawn), moving with the notes */
+{
+    uint32_t f = n_hit & 1u ? 1u : 2u, v, dt = fm1_ms - t_hit;   /* every other note: the sax low, half up */
+    (void)t;
+    for (v = 0; v < NV && !voice[v].gate; v++)
+        ;
+    if (!lv) f = 0u;                            /* silent: the sax down */
+    else if (v < NV && dt >= (f == 1u ? 250u : 0u))   /* a note held: rising, half up at 250 ms, all of it at 600 */
+        f = dt >= (f == 1u ? 600u : 500u) ? 3u : 2u;
+    spr_pix(&SPR_SAX, f, cx, cy, s, 15);
+}
 #undef S
 static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32_t t, int32_t lv)   /* a sound's
                                                          * drawing, by its name, centred on cx cy, sc/256 of its size */
@@ -251,7 +279,8 @@ static void spr_sound(const char *nm, int32_t cx, int32_t cy, int32_t sc, uint32
     else if (nm[0] == 'V' && nm[2] == 'B') spr_vibes(cx, cy, sc, t, lv);
     else if (nm[0] == 'V') spr_violins(cx, cy + 10, 230 * sc >> 8, t, lv);
     else if (nm[0] == 'P') spr_piano(cx, cy, sc, t, lv);
-    else spr_cello(cx, cy, sc, t, lv);
+    else if (nm[0] == 'C') spr_cello(cx, cy, sc, t, lv);
+    else if (nm[0] == 'S') spr_sax(cx, cy, sc, t, lv);
 }
 
 /* ---- the body's top */
@@ -383,25 +412,24 @@ static void stage_play(void)                    /* the sound (and the layer), th
 static void stage_layer(void)                   /* LAYER: the sound and the layer, the MIX between them */
 {
     uint32_t snd = (uint32_t)PV(P_SOUND), ly = (uint32_t)PV(P_BSND), t = spr_lv() ? spr_t() : 0u;
-    int32_t mix = PV(P_BMIX), x;
-    spr_sound(MEL_SET_NAME[snd], 62, 38, 320, t, spr_lv());   /* (whole, a quarter bigger: the MIX is the slider) */
+    int32_t mix = PV(P_BMIX), x, sa = ly ? 192 + (128 * p_ga >> 15) : 320, sb = 192 + (128 * p_gb >> 15);
+    /* (as big as each is in the MIX, standing on the names: whole, a quarter bigger, .. three quarters of that;
+     * the one not heard, still) */
+    spr_sound(MEL_SET_NAME[snd], 62, 88 - (80 * sa >> 8) / 2, sa, t, ly && !p_ga ? 0 : spr_lv());
     tx_c(62, 86, &F16, MEL_SET_NAME[snd], C_INK);
     if (ly) {
-        spr_sound(MEL_SET_NAME[ly - 1u], 178, 38, 320, t + 400u, spr_lv());
+        spr_sound(MEL_SET_NAME[ly - 1u], 178, 88 - (80 * sb >> 8) / 2, sb, t + 400u, p_gb ? spr_lv() : 0);
         tx_c(178, 86, &F16, MEL_SET_NAME[ly - 1u], C_LAMPT);
     } else {
         rrect(140, 10, 76, 50, 6, C_BODY2);
         tx_c(178, 25, &F20, "OFF", C_INK2);
-        tx_c(178, 86, &F16, "SEL: A LAYER", C_INK2);
     }
     tx(8, 100, &F16, "A", C_INK);               /* the MIX: A .. B */
     tx(224, 100, &F16, "B", ly ? C_LAMPT : C_INK2);
     rrect(24, 104, 192, 8, 4, C_BODY2);
     x = 24 + mix * 184 / 100;
-    if (ly) {
-        rrect(24, 104, x - 24 + 8, 8, 4, C_INK2);
-        rrect(x, 104, 216 - x, 8, 4, C_OXIDE2);
-    }
+    if (ly)                                     /* (the colour as far as B is in, from A) */
+        rrect(24, 104, x - 24 + 8, 8, 4, C_OXIDE2);
     disc(x + 4, 108, 6, ly ? C_INK : C_INK2);
 }
 
@@ -409,7 +437,7 @@ static uint32_t tape_run;                       /* the cassette: how far its tap
 static void stage_tape(void)                    /* TAPE: a cassette (drawn), a snake its tape: running with the tapes
                                                  * (wow), quivering (flutter); stopped, its tongue flicking */
 {
-    int32_t fl = ui_lv && !by_lofi ? fxv_flut / 500 : 0;
+    int32_t fl = ui_lv && !by_lofi ? fxv_flut * (f_lofi_amt >> 5) / (500 * 1023) : 0;   /* (as much as LOFI is in: the SMK's fader) */
     uint32_t f = ui_lv ? 2u + tape_run / 16000u % 6u : fm1_ms / 400u % 2u;
     spr_pix(&SPR_TAPE, f, 120, 54 + (fl > 2 ? 2 : fl < -2 ? -2 : fl), 332, 0);
 }
@@ -513,13 +541,8 @@ static void stage_verb(void)                    /* REVERB: the sound, then the r
 }
 
 static void stage_eq(void)                      /* EQ: SPEAKER's curve, as its filters answer (MEL_SPK_DB: 20 Hz ..
-                                                 * 20 kHz across, 0 .. -24 dB down), its settings, what the one on does */
+                                                 * 20 kHz across, 0 .. -24 dB down), and its settings */
 {
-    static const char *const HELP[4][2] = {
-        {"As it is: for headphones,", "the line out and USB."},
-        {"The lows the speaker can't", "play out: louder, cleaner."},
-        {"Those lows out too, heard", "as their harmonics instead."},
-        {"The highs over the tapes'", "out: the hiss, CRUSH's grit."}};
     int32_t x, py = 0, k, v = PV(P_SPK), sum = 0;
     const uint8_t *db = MEL_SPK_DB + v * 224;
     for (k = 0; k <= 24; k += 12)
@@ -539,33 +562,23 @@ static void stage_eq(void)                      /* EQ: SPEAKER's curve, as its f
         tx(x + 3, 52, &F16, N_SPK[k], k == v ? RGB(255, 252, 244) : C_INK2);
         x += w + (224 - sum) / 3;
     }
-    tx(12, 74, &F16, HELP[v][0], C_INK);
-    tx(12, 90, &F16, HELP[v][1], C_INK);
 }
 
-static void stage_setup(void)                   /* SETUP: the settings, and what the one you touch does */
+static void stage_setup(void)                   /* SETUP: the settings, the one you touch marked */
 {
-    static const char *const NAME[3] = {"LENGTH", "SCREEN", "COLOUR"};
-    static const char *const HELP[6][2] = {
-        {"Settings for the whole MEL.", "Turn a knob: it says here."},
-        {"A note sounds as long as", "you hold it (the tape loops)."},
-        {"As on a real M400: a tape", "runs out after 8 seconds."},
-        {"A clean, steady picture.", ""},
-        {"The screen as an old tape:", "scanlines, sway, tears, grain."},
-        {"The screen's colour, to go", "with your FM-1's buttons."}};
-    int32_t k, h = touched > 2u ? 0 : touched == 0u ? 1 + PV(P_LEN) : touched == 1u ? 3 + PV(P_LOOK) : 5;
-    for (k = 0; k < 3; k++) {
+    static const char *const NAME[4] = {"LENGTH", "SCREEN", "COLOUR", "VELOCITY"};
+    int32_t k;
+    char s[8];
+    for (k = 0; k < (BOARD_SMK37 ? 4 : 3); k++) {   /* (VELOCITY: the SMK-37's keys) */
         int32_t y = 2 + k * 22;
         if ((uint32_t)k == touched) rrect(2, y + 4, 6, 8, 3, C_LAMP);
         tx(12, y, &F16, NAME[k], C_INK2);
-        tx(84, y, &F16, k == 2 ? N_COLOR[PV(P_COLOR)] : k ? (PV(P_LOOK) ? "OLD TAPE" : "CLEAN")
+        if (k == 3) put(put_int(s, PV(P_VEL), 0), "%");
+        tx(84, y, &F16, k == 3 ? s : k == 2 ? N_COLOR[PV(P_COLOR)] : k ? (PV(P_LOOK) ? "OLD TAPE" : "CLEAN")
                                 : PV(P_LEN) ? "8 SECONDS" : "AS HELD", C_INK);
     }
     rrect(160, 47, 20, 14, 3, C_LAMP);          /* (the colour: its lamp and what runs) */
     rrect(184, 47, 20, 14, 3, C_OXIDE2);
-    cv_rect(8, 72, 224, 1, C_BODY2);
-    tx(12, 75, &F16, HELP[h][0], C_INK);
-    tx(12, 91, &F16, HELP[h][1], C_INK);
 }
 
 static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, the one playing lit */
@@ -573,7 +586,7 @@ static void stage_sounds(void)                  /* SOUNDS: every sound's PLAY, t
     static const char *const HEAD[NPLAY] = {"TONE", "PITCH", "ATK", "REL"};
     uint32_t k, i, own = (uint32_t)PV(P_PMODE), snd = (uint32_t)PV(P_SOUND);
     char s[12];
-    tx(8, 0, &F16, own ? "Each sound its own PLAY:" : "PLAY is one for all:", C_INK);
+    tx(8, 0, &F16, own ? "PLAY OWN" : "PLAY SHARED", C_INK);
     for (i = 0; i < NPLAY; i++)
         tx_c(100 + (int32_t)i * 41, 16, &F16, HEAD[i], C_INK2);
     for (k = 0; k < MEL_NSETS; k++) {
@@ -595,7 +608,7 @@ static void stage_arp(void)                     /* ARP: the mode, the arpeggio (
     uint32_t i, n = arp_n, lo = 127;
     tx_c(120, 4, &F24, ARP_MODE[PV(P_AMODE)], arp_on ? C_INK : C_INK2);
     if (!n) {
-        tx_c(120, 66, &F20, arp_on ? "PLAY A CHORD" : "ARP IS OFF: PRESS ARP", C_INK2);
+        if (!arp_on) tx_c(120, 66, &F20, "OFF", C_INK2);
         return;
     }
     if (n > 24u) n = 24u;
@@ -647,9 +660,13 @@ static void tape_look(uint32_t h)   /* (the wow sways it slowly, the flutter sha
     static uint16_t row[240];
     int32_t y, x, amp = ui_lv ? PV(P_WOW) * 3 / 100 : 0, off = ui_lv ? fxv_wow / 160 : 0, drop = fxv_drop;
     int32_t jit = ui_lv ? (fxv_flut + (fxv_flut < 0 ? -150 : 150)) / 300 : 0;   /* the flutter: a nervous shake */
+    int32_t lf = by_lofi ? 0 : f_lofi_amt;     /* (as much as LOFI is in: the SMK's LOFI fader; out: no sway, no
+                                                 * tears, no grain, a clean tape) */
     uint32_t i;
     if (!PV(P_LOOK)) return;
-    if (by_lofi) amp = off = drop = jit = 0;   /* (LOFI out: no sway, no tears, no grain: a clean tape) */
+    amp = amp * lf / 32767;
+    off = off * lf / 32767;
+    jit = jit * lf / 32767;
     off = off > 4 ? 4 : off < -4 ? -4 : off;
     off += jit > 3 ? 3 : jit < -3 ? -3 : jit;
     for (y = 0; y < (int32_t)h; y++) {
@@ -662,7 +679,7 @@ static void tape_look(uint32_t h)   /* (the wow sways it slowly, the flutter sha
         if (y & 1)                              /* scanlines */
             for (x = 0; x < 240; x++) p[x] = dim(p[x]);
     }
-    if (ui_lv && drop > 2000) {                 /* a dropout: the tracking slips */
+    if (ui_lv && drop > 2000 && (int32_t)(urnd() & 32767u) < lf) {   /* a dropout: the tracking slips */
         int32_t y0 = (int32_t)(urnd() % h), hb = 3 + drop / 3000, s2 = 6 + (int32_t)(urnd() % 14u);
         for (y = y0; y < y0 + hb && y < (int32_t)h; y++) {
             uint16_t *p = &cv_px[(uint32_t)y * 240u];
@@ -670,7 +687,7 @@ static void tape_look(uint32_t h)   /* (the wow sways it slowly, the flutter sha
             for (x = 0; x < 240; x++) p[x] = (x + y) & 3 ? row[x] : swap16(C_WHITE);
         }
     }
-    for (i = 0; !by_lofi && i < (uint32_t)PV(P_AGE) * 3u; i++) {   /* AGE: grain */
+    for (i = 0; i < (uint32_t)(PV(P_AGE) * 3 * lf / 32767); i++) {   /* AGE: grain */
         uint32_t at = (urnd() >> 8) % (240u * h);
         cv_px[at] = dim(dim(cv_px[at]));
     }
@@ -708,7 +725,7 @@ static void draw_stage(void)
     STAGE[page]();
     if ((PG_GROUP[page] == G_LOFI && by_lofi) || (PG_GROUP[page] == G_FX && by_fx)) {   /* this section is out */
         rrect(40, 40, 160, 24, 6, C_INK);
-        tx_c(120, 42, &F20, PG_GROUP[page] == G_FX ? "OUT - HOLD FX" : "OUT - HOLD LFO", C_BODY);
+        tx_c(120, 42, &F20, PG_GROUP[page] == G_FX ? "FX OUT" : "LOFI OUT", C_BODY);
     }
     cv_oy = 0;
     tape_look(STAGE_H);
@@ -716,14 +733,15 @@ static void draw_stage(void)
     lv_drawn = spr_lv();
 }
 
-/* ---- the keyboard: the 27 keys, lit while they sound; with LENGTH 8 S the light drains as the key's tape runs out */
+/* ---- the keyboard: the 27 keys (SMK: 37), lit while they sound; with LENGTH 8 S the light drains as the key's tape runs out */
 static uint32_t tapes_sig = 1;
 static void draw_tapes(uint32_t base, int force)
 {
-    uint8_t lit[27];                            /* how much of the key is lit, 0..24 */
+    uint8_t lit[UI_NKEY];                       /* how much of the key is lit, 0..24 */
     uint32_t k, v, sig = 2166136261u;
-    int32_t wx[27], nw = 0;
-    for (k = 0; k < 27u; k++) {
+    int32_t wx[UI_NKEY], nw = 0;
+    base -= UI_K0;
+    for (k = 0; k < UI_NKEY; k++) {
         uint32_t note = base + k, a = 0, t = note < 128u ? tpos[note] : 0;
         for (v = 0; v < NV; v++)
             if (voice[v].busy && voice[v].note == note && (uint32_t)voice[v].amp > a)
@@ -734,23 +752,23 @@ static void draw_tapes(uint32_t base, int force)
     if (sig == tapes_sig && !force)
         return;
     tapes_sig = sig;
-    for (k = 0; k < 27u; k++)                   /* where each key is: the white ones side by side */
-        wx[k] = black(base + k) ? nw * 240 / 16 : nw++ * 240 / 16;
+    for (k = 0; k < UI_NKEY; k++)               /* where each key is: the white ones side by side */
+        wx[k] = black(base + k) ? nw * 240 / UI_NWHITE : nw++ * 240 / UI_NWHITE;
     cv_begin(240, 32, C_FRAME);
-    for (k = 0; k < 27u; k++)                   /* the white keys */
+    for (k = 0; k < UI_NKEY; k++)               /* the white keys */
         if (!black(base + k)) {
-            int32_t x = wx[k], w = (wx[k] + 240 / 16) - x - 1;
+            int32_t x = wx[k], w = (wx[k] + 240 / UI_NWHITE) - x - 1;
             rrect(x + 1, -4, w, 34, 3, C_BODY);
             cv_rect(x + 1, 2, w, 1, C_BODY2);   /* (the felt's shadow) */
             if (lit[k]) rrect(x + 1, 26 - lit[k] * 28 / 24, w, lit[k] * 28 / 24 + 4, 3, C_LAMP);
         }
-    for (k = 0; k < 27u; k++)                   /* the black ones, over them */
+    for (k = 0; k < UI_NKEY; k++)               /* the black ones, over them */
         if (black(base + k)) {
-            int32_t x = wx[k] - 5;
-            cv_rect(x, 0, 10, 19, C_FRAME);
-            cv_rect(x + 1, 0, 8, 18, lit[k] ? C_LAMPT : C_KNOB);
-            if (lit[k]) cv_rect(x + 1, 18 - lit[k] * 18 / 24, 8, lit[k] * 18 / 24, C_LAMP);
-            cv_rect(x + 2, 14, 6, 2, lit[k] ? C_OXIDE2 : RGB(70, 70, 76));   /* (its front edge, caught by light) */
+            int32_t x = wx[k] - UI_BX;
+            cv_rect(x, 0, UI_BW, 19, C_FRAME);
+            cv_rect(x + 1, 0, UI_BW - 2, 18, lit[k] ? C_LAMPT : C_KNOB);
+            if (lit[k]) cv_rect(x + 1, 18 - lit[k] * 18 / 24, UI_BW - 2, lit[k] * 18 / 24, C_LAMP);
+            cv_rect(x + 2, 14, UI_BW - 4, 2, lit[k] ? C_OXIDE2 : RGB(70, 70, 76));   /* (its front edge, caught by light) */
         }
     cv_rect(0, 0, 240, 2, C_FRAME);             /* the felt */
     cv_rect(0, 1, 240, 1, RGB(120, 30, 34));

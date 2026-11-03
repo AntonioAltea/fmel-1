@@ -2,7 +2,8 @@
 /* MEL's tape and effects (the audio ISR), in the order the sound goes through them. Included by mel.c.
  *
  *   the tape     (LOFI)  AGE: a copy of a copy: the band narrows, two poles each side (9 kHz .. 1.1 kHz, 20 .. 380 Hz),
- *                        and every copy brings the copying deck's hiss, flutter and drive (added to the knobs')
+ *                        and every copy brings the copying deck's flutter and drive (added to the knobs'; no hiss:
+ *                        HISS is its own)
  *                        DROPOUT: the oxide gone in places, dips of 30..200 ms (past half way the motor drags too)
  *                        the M400's TONE; DRIVE, after the JHS 424 (a Portastudio's cassette preamp): 0 .. +36 dB into
  *                        a soft clipper, a bias for even harmonics, a low-pass closing as it drives, the level kept;
@@ -25,19 +26,27 @@
  * Integers only. The main loop sets the f_ values (apply()); the screen reads the fxv_ values. */
 
 static volatile int32_t f_wow, f_flut, f_sat, f_hiss, f_age, f_drop, f_crush, f_tone;
-static volatile int32_t f_vinc, f_vdep, f_vtone, f_vmix;
+static volatile int32_t f_vinc, f_vdep, f_vtone, f_vmix, f_vdk;   /* (f_vdk: DEPTH as the knob has it, 0..100) */
 static volatile int32_t f_etime, f_efb, f_etone, f_emix;
 static volatile int32_t f_rfb, f_rdamp, f_rtype, f_rmix;
 static volatile int16_t f_hg[8];                /* HALL: its lines' gains (Q14), for SIZE (rv_hall_gains) */
 static volatile int32_t f_spk, f_by_lofi, f_by_fx;   /* f_spk: the EQ, 0 FLAT, 1 LOWCUT, 2 BASS+, 3 HIGHCUT */
+static volatile int32_t f_lofi_amt = 32767, f_fx_amt = 32767;   /* how much LOFI and FX, 0 .. 32767 (the SMK's faders) */
 static int32_t lofi_bp, fx_bp;                  /* ISR: how bypassed, 0 (all in) .. 32767 (all out), ramped */
+#define GATE_LV 16                              /* the silence gate: nothing plays and the output has stayed within */
+#define GATE_N (FS * 3u / 10u)                  /* +-GATE_LV (-66 dB) for 0.3 s: exactly 0 from then on (a codec turns
+                                                 * a tail's last LSBs or a DC of 2 into noise on the headphones) */
+static uint32_t gate_n;                         /* ISR: how long it has been that quiet, frames */
+static uint8_t gate_on;
 static volatile int32_t fxv_wow, fxv_drop;      /* ISR -> screen: the wow now (1/16 cent), how deep a dropout is (0..32768) */
 static volatile int32_t fxv_flut;               /* ISR -> screen: the flutter now (flut_am: +-1200 at 100) */
 static int32_t flut_am;                         /* ISR: flutter's level shake now, Q15 around 0 */
 static volatile uint32_t fxv_vib;               /* the vibrato's phase */
 
 #define K_RHP 2119                              /* 450 Hz, below which the reverb gets less (no mud) */
-#define RV_OUT 12                               /* the reverb's level out: all wet (MIX 100) as loud as all dry */
+#define RV_OUT 3                                /* the reverb's level out (x 3 / 2): all wet (MIX 100) as loud as all
+                                                 * dry; its input is 8 x what it was (1.0), so a quiet tail keeps
+                                                 * its fine steps instead of 12-LSB ones */
 #define VIB_N 512u
 #define ECHO_N 44100u                           /* 1 s */
 static int32_t vib_buf[VIB_N];
@@ -313,20 +322,23 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
     int32_t rg = 32768 + (rl < 0 ? rl * 2 : 0);   /* the reel held back: the tape quieter (to -2 dB) .. */
     kt = (kt * (32768 + rl * 4)) >> 15;         /* .. and darker; pushed on, a little brighter */
     kt = kt > 16000 ? 16000 : kt < 200 ? 200 : kt;
-    int32_t sv_ = f_sat + age / 4 > 100 ? 100 : f_sat + age / 4, hv = f_hiss + age * 2 / 5 > 100 ? 100 : f_hiss + age * 2 / 5;
+    int32_t sv_ = f_sat + age / 4 > 100 ? 100 : f_sat + age / 4, hv = f_hiss;   /* (AGE: no hiss) */
     int32_t dg = MEL_DRV[sv_], dmk = MEL_DRVMK[sv_], dlk = MEL_DRVLP[sv_] >> 1, dbias = sv_ * 49;   /* DRIVE */
     int32_t hl = (hv * hv * 13 / 100 * (8192 + act * 3 / 4)) >> 15;
-    int32_t blt = f_by_lofi ? 32767 : 0, bl = lofi_bp, bft = f_by_fx ? 32767 : 0, bf = fx_bp;
+    int32_t blt = f_by_lofi ? 32767 : 32767 - f_lofi_amt, bl = lofi_bp, bft = f_by_fx ? 32767 : 32767 - f_fx_amt, bf = fx_bp;
     int32_t amt = flut_am, agl = 4096 + age * 14;   /* (AGE: the level the narrowing takes, given back) */
     int32_t crush = f_crush, hold_n = 1 + crush * 7 / 100, mask = ~((1 << (crush * 9 / 100)) - 1);
     int32_t spk = f_spk;
     int32_t vmix = f_vmix, vdep = f_vdep, vtk = f_vtone >> 1, emix = f_emix, efb = f_efb, etk = f_etone >> 1;
     int32_t rfb = f_rfb, rdamp = f_rdamp, rmix = f_rmix, rtype = f_rtype, e_tgt = f_etime, k;
     uint32_t i, vinc = (uint32_t)f_vinc;
-    if (p_mod) {                                /* the mod wheel: vibrato, whatever the page says */
-        int32_t m = p_mod * 258;
-        if (vmix < m) vmix = m;
-        if (vdep < p_mod / 3) vdep = p_mod / 3;
+    if (p_mod) {                                /* the mod wheel: the vibrato deeper, from the page's DEPTH (down) to all
+                                                 * of it (up), and wetter, to all wet; on DEPTH's own law (as the knob:
+                                                 * fine where it is little; straight in samples it was nearly all there
+                                                 * at the first touch); RATE and TONE the page's */
+        int32_t dk = f_vdk + (100 - f_vdk) * p_mod / 127;
+        vdep = dk * dk * 88 / 10000;
+        vmix += (32767 - vmix) * p_mod / 127;
     }
     for (i = 0; i < n; i++) {
         int32_t x = mix[i], y, y0, l, r, in, wl, wr, dry = 0, wetl = 32767 - bl, wetf = 32767 - bf;
@@ -335,32 +347,32 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
         bf += (bft - bf) >> 8;
         /* the tape (LOFI) */
         if (bl) {                               /* its dry: the M400's TONE alone */
-            d1 += ((x - d1) * kt) >> 14;
-            d2 += ((d1 - d2) * kt) >> 14;
+            d1 += tz((x - d1) * kt, 14u);
+            d2 += tz((d1 - d2) * kt, 14u);
             dry = d2;
         }
         if (bl >= 32640 && blt)
             y = dry;
         else {
-            lg += ((x - lg) * kg) >> 14;        /* AGE: two poles down from the top, two up from the bottom */
-            lg2 += ((lg - lg2) * kg) >> 14;
-            hg += ((lg2 - hg) * kh) >> 14;
-            hg2 += ((lg2 - hg - hg2) * kh) >> 14;
+            lg += tz((x - lg) * kg, 14u);        /* AGE: two poles down from the top, two up from the bottom */
+            lg2 += tz((lg - lg2) * kg, 14u);
+            hg += tz((lg2 - hg) * kh, 14u);
+            hg2 += tz((lg2 - hg - hg2) * kh, 14u);
             y = ((lg2 - hg - hg2) * agl) >> 12;
             am += (amt - am) >> 6;              /* FLUTTER's roughness */
             y += (y * am) >> 15;
             drop_g += (drop_t - drop_g) >> 7;   /* DROPOUT */
             y = (y * (drop_g >> 1)) >> 14;
-            lp1 += ((y - lp1) * kt) >> 14;      /* TONE: two poles */
-            lp2 += ((lp1 - lp2) * kt) >> 14;
+            lp1 += tz((y - lp1) * kt, 14u);      /* TONE: two poles */
+            lp2 += tz((lp1 - lp2) * kt, 14u);
             if (rl) lp2 = (lp2 * rg) >> 15;
             {                                   /* DRIVE: gain, bias, the clipper, the DC out, warm, the level back */
                 int32_t u = (lp2 * dg) >> 8;
                 u = u > 4000000 ? 4000000 : u < -4000000 ? -4000000 : u;
                 y = drive_clip(u + dbias);
-                dc_y = y - dc_x + ((dc_y * 32735) >> 15);
+                dc_y = y - dc_x + tz(dc_y * 32735, 15);
                 dc_x = y;
-                dlp += ((dc_y - dlp) * dlk) >> 14;
+                dlp += tz((dc_y - dlp) * dlk, 14u);
                 y = (dlp * dmk) >> 15;
             }
             rnd2 ^= rnd2 << 13;
@@ -407,24 +419,24 @@ trails:
             d = e_d + ((fxv_wow * (e_d >> 8)) >> 11);
             d = d < 256 ? 256 : d > (int32_t)(ECHO_N - 2u) << 8 ? (int32_t)(ECHO_N - 2u) << 8 : d;
             TAP(echo_buf, ECHO_N, ew, d, rd);
-            e_lp += ((rd - e_lp) * etk) >> 14;  /* each repeat darker */
-            echo_buf[ew] = (int16_t)sat((((l + r) >> 2) * (wetf >> 1) >> 13) + ((e_lp * efb) >> 15));   /* and dirtier;
+            e_lp += tz((rd - e_lp) * etk, 14u);  /* each repeat darker */
+            echo_buf[ew] = (int16_t)sat((((l + r) >> 2) * (wetf >> 1) >> 13) + tz(e_lp * efb, 15));   /* and dirtier;
                                                                        * (FX bypassed: nothing new goes in, the repeats go on) */
             if (++ew >= ECHO_N) ew = 0;
-            l += (e_lp * emix) >> 15;
-            r += (e_lp * emix) >> 15;
+            l += tz(e_lp * emix, 15u);
+            r += tz(e_lp * emix, 15u);
         }
         /* REVERB */
         if (rmix) {
             if (rtype != rv_type) { rv_setup(rtype); rv_type = rtype; }
-            in = (((l + r) >> 4) * wetf) >> 15; /* (FX bypassed: nothing new goes in, it rings out) */
-            r_hp += ((in - r_hp) * (K_RHP >> 1)) >> 14;
-            in = (in - (r_hp >> 1)) >> 1;
+            in = tz(tz(l + r, 1u) * wetf, 15u); /* (FX bypassed: nothing new goes in, it rings out) */
+            r_hp += tz((in - r_hp) * (K_RHP >> 1), 14u);
+            in = tz(in - tz(r_hp, 1u), 1u);
             if ((rv_odd ^= 1u) != 0u) {         /* (every other sample: the two in, one step, the half way out) */
                 if (rtype) rv_plate((rv_x + in) >> 1, rdamp, rfb, &wl, &wr);
                 else rv_hall((rv_x + in) >> 1, rdamp, &wl, &wr);
-                y = wl, wl = (rv_ol + wl) >> 1, rv_ol = y;
-                y = wr, wr = (rv_or + wr) >> 1, rv_or = y;
+                y = wl, wl = tz(rv_ol + wl, 1u), rv_ol = y;
+                y = wr, wr = tz(rv_or + wr, 1u), rv_or = y;
             } else {
                 rv_x = in;
                 wl = rv_ol;
@@ -432,8 +444,8 @@ trails:
             }
             k = 32767 - ((rmix * (wetf >> 1)) >> 14);   /* MIX: the dry less as it goes all wet (MIX 100: no dry;
                                                  * FX bypassed: all of it, the tail ringing out over it) */
-            l = (((l >> 1) * (k >> 1)) >> 13) + ((wl * (rmix >> 4)) >> 11) * RV_OUT;
-            r = (((r >> 1) * (k >> 1)) >> 13) + ((wr * (rmix >> 4)) >> 11) * RV_OUT;
+            l = tz(tz(l, 1u) * (k >> 1), 13u) + tz(wl * (rmix >> 4) * RV_OUT, 12u);
+            r = tz(tz(r, 1u) * (k >> 1), 13u) + tz(wr * (rmix >> 4) * RV_OUT, 12u);
         }
         if (spk == 3) {                         /* HIGHCUT: two one-pole low-passes (what lowcut1 takes away) */
             l -= lowcut1(l, &hc_s[0], &hc_s[1], 1u);
@@ -447,8 +459,19 @@ trails:
             r = lowcut1(r, &lc_s[4], &lc_s[5], spk == 2 ? 5u : 6u);
             r = lowcut1(r, &lc_s[6], &lc_s[7], spk == 2 ? 5u : 6u) + b;
         }
-        out[2u * i] += sat(l);                  /* the limiter: untouched up to 0.6 of full scale, then round */
-        out[2u * i + 1u] += sat(r);
+        l = sat(l);                             /* the limiter: untouched up to 0.6 of full scale, then round */
+        r = sat(r);
+        if (mix[i] || l > GATE_LV || l < -GATE_LV || r > GATE_LV || r < -GATE_LV) {
+            gate_on = 0;                        /* (open at once: no attack is cut) */
+            gate_n = 0;
+        } else if (gate_n < GATE_N)
+            gate_n++;
+        else if (!act)
+            gate_on = 1;
+        if (!gate_on) {
+            out[2u * i] += l;
+            out[2u * i + 1u] += r;
+        }
     }
     if (!vmix) fxv_vib += vinc * n;             /* (the screen's vibrato keeps its rate) */
     lofi_bp = bl;

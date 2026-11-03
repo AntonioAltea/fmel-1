@@ -14,6 +14,7 @@ class Mel extends AudioWorkletProcessor {
     this.sentDraws = -1;
     this.sentWrites = -1;
     this.sentLeds = "";
+    this.sentPads = "";
     this.lastFrame = 0;
     this.busy = 0;
     this.frames = 0;
@@ -23,7 +24,7 @@ class Mel extends AudioWorkletProcessor {
   async onMessage(m) {
     if (m.type === "load") {
       try {
-        const { instance } = await WebAssembly.instantiate(m.wasm, {});
+        const { instance } = await WebAssembly.instantiate(m.wasm, {});   // (mel.wasm, or mel-smk37.wasm)
         const ex = instance.exports;
         if (m.settings && m.settings.length) {
           new Uint8Array(ex.memory.buffer, ex.web_settings(), m.settings.length).set(m.settings);
@@ -41,7 +42,10 @@ class Mel extends AudioWorkletProcessor {
     }
     const ex = this.ex;
     if (!ex) return;
-    if (m.type === "keys" || m.type === "button") this.queue.push(m);
+    if (m.type === "keys" || m.type === "keys37" || m.type === "button" || m.type === "pad") this.queue.push(m);
+    else if (m.type === "fader" && ex.web_fader) ex.web_fader(m.id, m.value | 0);   // (the SMK-37's, smk37.html)
+    else if (m.type === "wheel" && ex.web_wheel) ex.web_wheel(m.id, m.value | 0);
+    else if (m.type === "pedal" && ex.web_pedal) ex.web_pedal(m.value | 0);
     else if (m.type === "enc") ex.web_enc(m.id, m.n | 0);
     else if (m.type === "master") ex.web_master(m.value | 0);
     else if (m.type === "midi") ex.web_midi(m.data[0] | 0, m.data[1] | 0, m.data[2] | 0);
@@ -52,6 +56,8 @@ class Mel extends AudioWorkletProcessor {
     while (this.queue.length && now - this.nextOk >= 0) {
       const m = this.queue.shift();
       if (m.type === "keys") ex.web_keys(m.mask >>> 0);
+      else if (m.type === "keys37") ex.web_keys37(m.lo >>> 0, m.hi >>> 0, m.vel | 0);
+      else if (m.type === "pad") ex.web_pad(m.id, m.vel | 0);
       else ex.web_button(m.id, m.down ? 1 : 0);
       this.nextOk = now + HOLD_MS;
     }
@@ -61,6 +67,11 @@ class Mel extends AudioWorkletProcessor {
     const ex = this.ex, mem = ex.memory.buffer, msg = { type: "frame" }, transfer = [];
     const leds = ex.web_leds(0) + "," + ex.web_leds(1);
     if (leds !== this.sentLeds) { this.sentLeds = leds; msg.leds = [ex.web_leds(0) >>> 0, ex.web_leds(1) >>> 0]; }
+    if (ex.web_pads) {
+      const pads = Array.from(new Uint32Array(mem, ex.web_pads(), 16));
+      const key = pads.join(",");
+      if (key !== this.sentPads) { this.sentPads = key; msg.pads = pads; }
+    }
     const draws = ex.web_screen_draws();
     if (draws !== this.sentDraws) {
       this.sentDraws = draws;
@@ -76,7 +87,7 @@ class Mel extends AudioWorkletProcessor {
       msg.load = this.busy / (this.frames / sampleRate * 1000);
       this.busy = this.frames = 0;
     }
-    if (msg.leds || msg.fb || msg.settings || msg.load !== undefined) this.port.postMessage(msg, transfer);
+    if (msg.leds || msg.pads || msg.fb || msg.settings || msg.load !== undefined) this.port.postMessage(msg, transfer);
   }
 
   process(inputs, outputs) {
