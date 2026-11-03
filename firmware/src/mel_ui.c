@@ -412,11 +412,13 @@ static void stage_play(void)                    /* the sound (and the layer), th
 static void stage_layer(void)                   /* LAYER: the sound and the layer, the MIX between them */
 {
     uint32_t snd = (uint32_t)PV(P_SOUND), ly = (uint32_t)PV(P_BSND), t = spr_lv() ? spr_t() : 0u;
-    int32_t mix = PV(P_BMIX), x;
-    spr_sound(MEL_SET_NAME[snd], 62, 38, 320, t, spr_lv());   /* (whole, a quarter bigger: the MIX is the slider) */
+    int32_t mix = PV(P_BMIX), x, sa = ly ? 192 + (128 * p_ga >> 15) : 320, sb = 192 + (128 * p_gb >> 15);
+    /* (as big as each is in the MIX, standing on the names: whole, a quarter bigger, .. three quarters of that;
+     * the one not heard, still) */
+    spr_sound(MEL_SET_NAME[snd], 62, 88 - (80 * sa >> 8) / 2, sa, t, ly && !p_ga ? 0 : spr_lv());
     tx_c(62, 86, &F16, MEL_SET_NAME[snd], C_INK);
     if (ly) {
-        spr_sound(MEL_SET_NAME[ly - 1u], 178, 38, 320, t + 400u, spr_lv());
+        spr_sound(MEL_SET_NAME[ly - 1u], 178, 88 - (80 * sb >> 8) / 2, sb, t + 400u, p_gb ? spr_lv() : 0);
         tx_c(178, 86, &F16, MEL_SET_NAME[ly - 1u], C_LAMPT);
     } else {
         rrect(140, 10, 76, 50, 6, C_BODY2);
@@ -426,10 +428,8 @@ static void stage_layer(void)                   /* LAYER: the sound and the laye
     tx(224, 100, &F16, "B", ly ? C_LAMPT : C_INK2);
     rrect(24, 104, 192, 8, 4, C_BODY2);
     x = 24 + mix * 184 / 100;
-    if (ly) {
-        rrect(24, 104, x - 24 + 8, 8, 4, C_INK2);
-        rrect(x, 104, 216 - x, 8, 4, C_OXIDE2);
-    }
+    if (ly)                                     /* (the colour as far as B is in, from A) */
+        rrect(24, 104, x - 24 + 8, 8, 4, C_OXIDE2);
     disc(x + 4, 108, 6, ly ? C_INK : C_INK2);
 }
 
