@@ -132,6 +132,7 @@ async function loadMeta() {
   } catch (e) {
     meta = null;
   }
+  $("ver").textContent = meta && meta.version ? meta.version.replace(/^v/, "") : "";   // what Install installs
   await loadPackage();
 }
 async function loadPackage() {
