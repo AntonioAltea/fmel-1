@@ -18,6 +18,11 @@ It runs on the M-Vave FM-1 and the SMK-37 (Pro, Elite, MKE-P37). SMK-37 controls
 
 A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX: Mellotron M400S tapes. F PIANO: a Steinway B.
 
+## New in 1.2
+
+- FLUTE: 1.0's again: its 12 tapes in IMA ADPCM, each key its own level, no low-pass. With LOFI and FX out, it plays as 1.0 to the sample. (1.1's had a whoosh at the start of its low notes.)
+- SAX: 8-bit PCM, now packed without loss: the same sound in 30 KB less.
+
 ## New in 1.1
 
 - E SAX: Taijiguy's tenor sax tape. PIANO moves to F; saved settings follow it.
@@ -26,7 +31,7 @@ A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX: Mellotron M400S tapes. F PIANO: a Ste
 - SETUP > VELOCITY (SMK-37): how far the softest note drops. 0%: 0 dB. 50%: -20 dB. 100%: -40 dB.
 - Mod wheel (SMK-37, or MIDI CC 1): vibrato DEPTH, from the page's value to 100%, and its MIX to fully wet.
 - OCT- and OCT+ held 5 s: restart into USB rescue mode.
-- Tapes in block ADPCM (genkigenki's Erik37 format). Flute in IMA ADPCM, as in release 1.0: its 12 tapes, and each key its own level. Sax in 8-bit PCM, packed without loss.
+- Tapes in block ADPCM (genkigenki's Erik37 format). Flute and sax in 8-bit PCM.
 - Installer and simulator: FM-1 / SMK-37 selector.
 - REC held 1 s clears the pattern (was SEL held, in step recording).
 - SEQ steps play at full level (SMK-37); playing over them does not change it.
