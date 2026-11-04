@@ -33,7 +33,8 @@
  *
  * The sound: mel_fx.c (the tape, then EQ, VIBRATO, ECHO, REVERB). The screen: mel_ui.c. ARP and SEQ:
  * mel_seq.c. The tapes: firmware/gen/mel_tapes.h (tools/gen_tapes.py): block ADPCM (Erik37's format) at 11025 Hz, a root every 3-4 semitones
- * (the flute and the sax as 8-bit PCM, kind 2; the piano: VCSL's four keys at 22050 Hz, MEL_RATE, darkening as it rings).
+ * (the flute as IMA ADPCM, kind 3, on no low-pass: release 1.0's; the sax as 8-bit PCM packed without loss, kind 2; the piano: VCSL's four
+ * keys at 22050 Hz, MEL_RATE, darkening as it rings).
  * Integers only (no FPU, no libgcc): docs/RULES.md. */
 #define APP_NAME "MEL"
 #define SMK_MASTER_FADER 4                      /* (SMK-37: the fourth fader is the volume, not K1: mel_smk.h) */
@@ -45,13 +46,13 @@ typedef struct {
     uint8_t root, lo, hi;                       /* MIDI notes */
     uint8_t sh;                                 /* its rate: MEL_RATE >> sh (tape time stays in MEL_RATE samples) */
     uint8_t kind;                               /* 0 a tape (ADPCM); 1 SLOOP's SAMPLE engine (LOFI KEYS); 2 a tape as
-                                                 * 8-bit PCM at gain / 32 (the piano: clean, its grain 45 dB down) */
+                                                 * 8-bit PCM, packed, at gain / 32; 3 a tape as IMA ADPCM */
     uint8_t gain;                               /* its level, Q5 */
-    uint8_t lidx;                               /* the decoder's step index at the loop start (kind 2: 0) */
+    uint8_t lidx;                               /* the decoder's step index at the loop start (kind 1; else 0) */
     uint16_t dk, d1k, pk;                       /* a sound that dies away (dk 0: it does not): its decay per tape
                                                  * sample (Q24) and per 1024 (Q15), from its peak (sample pk) */
-    int16_t lpred;                              /* the decoder's predictor at the loop start (kind 1, IMA); kinds 0
-                                                 * and 2: its brightness floor, the one-pole (Q15) a note darkens to
+    int16_t lpred;                              /* the decoder's predictor at the loop start (kind 1, IMA); else
+                                                 * its brightness floor, the one-pole (Q15) a note darkens to
                                                  * (0: it does not darken) */
 } mel_zone_t;
 #include "mel_tapes.h"
@@ -79,6 +80,7 @@ typedef struct {                                /* a head on a tape: the decoder
                                                  * and idx are its last two samples) */
     const mel_zone_t *z;
     uint32_t pos, frac;                         /* next sample to decode; where we are between s[1] and s[2], Q16 */
+    uint32_t blk;                               /* (kind 2) the byte of its block, from the zone's start */
     int32_t pred, idx, gain, s[4];              /* the last four samples (4-point Hermite between the middle two) */
     int32_t dg;                                 /* a sound that dies away: how far it has, 0..ONE */
     int32_t lp;                                 /* (kind 1) its CUT's one-pole; (a zone that darkens) its brightness one-pole */
@@ -169,10 +171,23 @@ static int32_t adpcm_next(head_t *h)
     const mel_zone_t *z = h->z;
     uint32_t b, code;
     int32_t step, vd, p;
-    if (z->kind == 2u) {                        /* 8-bit PCM: a byte a sample */
-        p = (int32_t)(int8_t)MEL_DATA[z->off + h->pos] * 256;
-        if (++h->pos >= z->n) h->pos = z->ls;
-        return p;
+    if (z->kind == 2u) {                        /* 8-bit PCM, packed (gen_tapes.py pack8); pred, idx: the last two samples */
+        const uint8_t *blk = &MEL_DATA[z->off + h->blk];
+        uint32_t hd = blk[0], w = hd & 15u, bit = (h->pos & 15u) * w;
+        b = (uint32_t)(blk[1u + (bit >> 3)] | blk[2u + (bit >> 3)] << 8) >> (bit & 7u);
+        p = ((BLK_FILT[hd >> 4][0] * h->pred + BLK_FILT[hd >> 4][1] * h->idx + 32) >> 6)
+            + ((int32_t)(b << (32u - w)) >> (32u - w));
+        h->idx = h->pred;
+        h->pred = p;
+        if (++h->pos >= z->n) {                 /* the loop: its state, the entry after the last checkpoint */
+            uint32_t ck = MEL_CKS[z->ck + z->n / MEL_CK];
+            h->pos = z->ls;
+            h->pred = (int8_t)ck;
+            h->idx = (int8_t)(ck >> 8);
+            h->blk = ck >> 16;
+        } else if (!(h->pos & 15u))
+            h->blk += 1u + 2u * w;
+        return p * 256;
     }
     if (z->kind == 0u) {                        /* block ADPCM; pred, idx: the last two samples */
         const uint8_t *blk = &MEL_DATA[z->off + (h->pos >> 5) * 17u];
@@ -203,9 +218,10 @@ static int32_t adpcm_next(head_t *h)
     h->idx += IMA_IDX[code & 7u];
     h->idx = h->idx < 0 ? 0 : h->idx > 88 ? 88 : h->idx;
     if (++h->pos >= z->n) {                     /* the loop: back to its start, with the decoder's state there */
+        uint32_t ck = MEL_CKS[z->ck + z->ls / MEL_CK];
         h->pos = z->ls;
-        h->pred = z->lpred;
-        h->idx = z->lidx;
+        h->pred = z->kind == 3u ? (int16_t)(ck & 0xFFFFu) : z->lpred;
+        h->idx = z->kind == 3u ? (int32_t)(ck >> 16) : z->lidx;
     }
     return h->pred;
 }
@@ -217,14 +233,14 @@ static void head_start(head_t *h, const mel_zone_t *z, uint32_t t, int32_t gain,
     t >>= z->sh;                                /* (in the zone's own samples from here) */
     p = t < z->n ? t : z->ls + (t - z->ls) % (z->n - z->ls);
     h->z = z;
-    if (z->kind == 2u) {                        /* (PCM: straight there) */
-        h->pos = p;
-        h->pred = 0;
-        h->idx = 0;
+    k = p / MEL_CK;
+    ck = MEL_CKS[z->ck + k];
+    h->pos = k * MEL_CK;
+    if (z->kind == 2u) {
+        h->pred = (int8_t)ck;
+        h->idx = (int8_t)(ck >> 8);
+        h->blk = ck >> 16;
     } else {
-        k = p / MEL_CK;
-        ck = MEL_CKS[z->ck + k];
-        h->pos = k * MEL_CK;
         h->pred = (int16_t)(ck & 0xFFFFu);
         h->idx = z->kind ? (int32_t)(ck >> 16) : (int16_t)(ck >> 16);   /* (IMA: its step index; blocks: s2) */
     }
@@ -257,7 +273,9 @@ static void voice_head(uint32_t vi)             /* the heads on the current soun
 {
     uint32_t st = p_sound % MEL_NSETS, ly = p_layer, note = voice[vi].note;
     int32_t g = G_TAPE;                         /* every key as loud (a level of its own per key, as a Mellotron's
-                                                 * tapes, was heard as jumps) */
+                                                 * tapes, was heard as jumps), but the flute's, as release 1.0 */
+    if (MEL_ZONE[MEL_SET_Z0[st]].kind == 3u)
+        g = (G_TAPE * (32768 + ((int32_t)((note * 2654435761u >> 8) & 0xFFu) - 128) * 30)) >> 15;
 #if BOARD_SMK37
     g = (g * voice[vi].velg) >> 15;             /* (the SMK's velocity: how hard the head meets the tape) */
 #endif
@@ -295,6 +313,9 @@ static int32_t pno_tanh(int32_t x)
                  : (int32_t)MEL_TANH[i] + ((((int32_t)MEL_TANH[i + 1] - (int32_t)MEL_TANH[i]) * (a & 255)) >> 8);
     return x < 0 ? -y : y;
 }
+
+/* the bus a tape plays on: 1, low-passed (tape_lp), but the flute's (kind 3: as release 1.0) */
+#define TAPE_BUS(z) ((z)->sh != 0u && (z)->kind != 3u)
 
 /* the head's samples into acc (n frames), at gm (Q15) of its level (and, a sound that dies away, as far as it has);
  * step and t, the tape samples it read: MEL_RATE's. A tape: 4-point Hermite (smooth: none of linear's fizz). The
@@ -381,7 +402,7 @@ static uint32_t head_run(head_t *h, uint32_t step, int32_t *acc, uint32_t n, int
     return ran << sh;
 }
 
-/* the tapes (11025 Hz) and the 22050 Hz zones go to two buses: the tapes' is low-passed (tape_lp) after the heads'
+/* the tapes (11025 Hz; but the flute) and the 22050 Hz zones go to two buses: the tapes' is low-passed (tape_lp) after the heads'
  * Hermite, whose images of an 11025 Hz tape (-31 dB above 5.6 kHz) were heard as grain from the first moment */
 static void voice_sub(uint32_t vi, int32_t *mix, int32_t *mixt, int32_t g16, int32_t drift, int32_t atk, int32_t relk)
 {
@@ -416,14 +437,14 @@ static void voice_sub(uint32_t vi, int32_t *mix, int32_t *mixt, int32_t g16, int
     if (voice[vi].layer) {                      /* the sound and the layer, MIX between them */
         uint32_t ln = layer_note(note, voice[vi].loct);
         ran = head_run(&voice[vi].h, step_of(((int32_t)note - voice[vi].h.z->root) * 1600 + c16 +
-                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h.z->sh != 0u], SUB,
+                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc[TAPE_BUS(voice[vi].h.z)], SUB,
                        p_ga, tpos[note]);
         head_run(&voice[vi].h2, step_of(((int32_t)ln - voice[vi].h2.z->root) * 1600 + c16 + p_ldet16 +
-                                        (voice[vi].h2.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h2.z->sh != 0u], SUB,
+                                        (voice[vi].h2.z->kind == 1u ? pno16 : 0)), acc[TAPE_BUS(voice[vi].h2.z)], SUB,
                  p_gb, tpos[note]);
     } else
         ran = head_run(&voice[vi].h, step_of(((int32_t)note - voice[vi].h.z->root) * 1600 + c16 +
-                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc[voice[vi].h.z->sh != 0u], SUB,
+                                             (voice[vi].h.z->kind == 1u ? pno16 : 0)), acc[TAPE_BUS(voice[vi].h.z)], SUB,
                        32767, tpos[note]);
     da = (a1 - a0) / (int32_t)SUB;
     for (a = a0, i = 0; i < SUB; i++, a += da) {

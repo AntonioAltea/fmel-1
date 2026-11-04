@@ -26,7 +26,7 @@ A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX: Mellotron M400S tapes. F PIANO: a Ste
 - SETUP > VELOCITY (SMK-37): how far the softest note drops. 0%: 0 dB. 50%: -20 dB. 100%: -40 dB.
 - Mod wheel (SMK-37, or MIDI CC 1): vibrato DEPTH, from the page's value to 100%, and its MIX to fully wet.
 - OCT- and OCT+ held 5 s: restart into USB rescue mode.
-- Tapes in block ADPCM (genkigenki's Erik37 format). Flute and sax in 8-bit PCM.
+- Tapes in block ADPCM (genkigenki's Erik37 format). Flute in IMA ADPCM, as in release 1.0: its 12 tapes, and each key its own level. Sax in 8-bit PCM, packed without loss.
 - Installer and simulator: FM-1 / SMK-37 selector.
 - REC held 1 s clears the pattern (was SEL held, in step recording).
 - SEQ steps play at full level (SMK-37); playing over them does not change it.
@@ -47,7 +47,7 @@ They are his work, not mine, and not under this repository's GPL licence. His te
 ([KVR, 4 May 2021](https://www.kvraudio.com/forum/viewtopic.php?t=561309)): "they are free to use, but cannot be used
 in any commercial, for profit software." FMEL-1 is free and not for profit, so it carries them: packed at 11025 Hz,
 a few seconds of each, as block ADPCM in genkigenki's [Erik37](https://github.com/genkigenki/erik37) format (the flute
-and the sax as 8-bit PCM) in `firmware/gen/mel_tapes.h`, and so inside every build (`mel*.fwsc`, the web version).
+as IMA ADPCM, the sax as packed 8-bit PCM) in `firmware/gen/mel_tapes.h`, and so inside every build (`mel*.fwsc`, the web version).
 
 So: share FMEL-1 freely, but don't sell it, nor anything with these tapes in it. Thank you, Bernie.
 

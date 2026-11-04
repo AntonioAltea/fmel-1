@@ -15,8 +15,11 @@ semitones off), each:
   - from its onset (the head meeting the tape stays in), as long as the budget allows;
   - with a loop over the end, crossfaded in the samples (equal power), so a note can sound for
     ever (MEL's "inf" tape) as well as for the 8 s of a real tape;
-  - IMA ADPCM, 4 bit, with the decoder's state every CK samples (MEL_CK): a note can start
+  - block ADPCM, 4 bit, with the decoder's state every CK samples (MEL_CK): a note can start
     anywhere on its tape (a key pressed again before its tape is back) and the loop jumps exactly.
+The flute (IMA) is release 1.0's, to the byte: IMA ADPCM, its 12 tapes of 1.72 s, its levels evened half way, its loops
+as they were (blind test 2026-11-04: its 8-bit, fewer-tape remake of 1.1 had a whoosh on its low keys, and nothing else
+sounded like it). The sax (PCM8) is 8-bit PCM packed without loss (pack8).
 The levels of a set are evened out (in dB) between its roots; then every set is brought to the same
 loudness (RMS of its sustain), so a change of tape is not a change of level.
 A set that dies away by itself (DECAYS: the vibraphone) has its decay measured per root (dB/s, after its peak) and
@@ -40,21 +43,20 @@ SETS = ["MkII_Flute", "8_Choir", "Cello", "Vibes", "Tenor_Sax", "Piano"]  # A B 
 DECAYS = {"Vibes": 0.6, "Piano": 0}                           # sets that die away by themselves, and their share of the flash:
                                                    # their decay is taken out of the samples (a flat loop) and
                                                    # measured; the firmware puts it back as the tape runs
-STEP = {"Cello": 4, "MkII_Flute": 6, "Vibes": 8, "Tenor_Sax": 4}   # sets with their own semitones between roots (else --step):
+STEP = {"Cello": 4, "Vibes": 8, "Tenor_Sax": 4}   # sets with their own semitones between roots (else --step):
                                                    # the voices keep theirs, the plainer sounds bear more pitching
 SLOOP_PIANO = set()                                # sets made as SLOOP makes its piano (sloop_piano): every file a
                                                    # root, outside the budget, played by mel.c as SLOOP's SAMPLE engine
-FIXED_LEN = {"Piano": 1.0}                         # sets outside the budget, every file a root, this long (s) a root
-PCM8 = {"MkII_Flute", "Tenor_Sax"}                # sets stored as 8-bit PCM (kind 2), near full scale, their level in
-                                                   # the zone's gain: the plainest sounds, where block ADPCM's grain is
-                                                   # heard (blind tests, 2026-10-30: the flute and the sax; the choir, the
-                                                   # cello, the vibraphone and the piano as clean in blocks)
+FIXED_LEN = {"Piano": 1.0, "MkII_Flute": 1.72}     # sets outside the budget, this long (s) a root
+IMA = {"MkII_Flute"}                               # sets as release 1.0 made them (kind 3; the top of this file says why)
+PCM8 = {"Tenor_Sax"}                               # sets stored as 8-bit PCM (kind 2, packed: pack8), near full scale,
+                                                   # their level in the zone's gain: where block ADPCM's grain is heard
+                                                   # (blind tests, 2026-10-30: the sax; the choir, the cello, the
+                                                   # vibraphone and the piano as clean in blocks)
 DARKEN = {"Piano"}                                 # sets that darken as they ring (their zones' brightness floor: lpred)
 SHIFT = {"Piano": 0}                               # sets at RATE >> SHIFT (the firmware steps them so); the rest at
 SHIFT_ELSE = 1                                     # RATE >> 1: the tapes at 11025 Hz, the piano at 22050
-PICK_CLEAN = {"MkII_Flute"}                        # sets whose roots may move a semitone to a recording without dropouts
-                                                   # (the flute's A#4 drops out inside its loop; the others as heard)
-UPCUT = {"MkII_Flute"}                             # sets whose notes well above their tape's root play through its band's
+UPCUT = set()                                      # (none now) sets whose notes well above their tape's root play through its band's
                                                    # low-pass (mel.c: the hiss and breath sped up above it; heard on the
                                                    # flute over F5, blind test 2026-10-30)
 STRUCK = {"Piano"}                                 # sets a key strikes anew: its tape from the start at every press
@@ -123,20 +125,6 @@ def rms(x):
     return float(np.sqrt(np.mean(x * x)) + 1e-12)
 
 
-def dropouts(path):
-    """how much a recording drops out where a tape is looped (0.3 .. 1.8 s from its onset): its loudness every 10 ms
-    under 0.8 of its own median over 0.2 s, summed (the Mellotron tapes have them: the flute's A#4 one at 1.27 s,
-    inside its loop, heard once a turn)"""
-    x = read_wav(path)
-    o = onset(x)
-    s = x[o + int(0.3 * SRC_RATE):o + int(1.8 * SRC_RATE)]
-    w = SRC_RATE // 100
-    env = np.sqrt(np.convolve(s * s, np.ones(w) / w, mode="valid"))[::w] + 1e-9
-    k = 10
-    med = np.array([np.median(env[max(0, i - k):i + k + 1]) for i in range(len(env))])
-    return float(np.sum(np.maximum(0, 0.8 - env / med)))
-
-
 def level_tail(x, rate):
     """a sustained tape's loop part evened out: from where its loop may start, its loudness (50 ms windows, smoothed
     over 0.2 s) brought to its mean there, eased in over 0.1 s; the attack untouched. (A slow attack, the flute's
@@ -157,11 +145,12 @@ def level_tail(x, rate):
     return x * g
 
 
-def loop(x, rate, grid=CK):
+def loop(x, rate, grid=CK, even=True):
     """x with a crossfaded loop over its end -> (samples, loop start); the loop is [ls, len). ADPCM (grid CK, its
     state a checkpoint): a 0.35 s fade from the likest piece on the grid. 8-bit PCM (grid 1): a shorter fade (0.12 s)
     from the sample whose piece is likest, in phase: a long fade of a tape with wow drifts out of phase and dips once
-    a loop. Either fade keeps the level whatever the two pieces' likeness (an equal-power fade of alike pieces swells)"""
+    a loop. Either fade keeps the level whatever the two pieces' likeness (an equal-power fade of alike pieces swells);
+    not even: a plain equal-power fade (release 1.0's)"""
     n = len(x)
     xf = int((0.35 if grid > 1 else 0.12) * rate)
     target = max(int(0.35 * rate) + CK, int(n * 0.3))
@@ -184,7 +173,7 @@ def loop(x, rate, grid=CK):
     t = np.linspace(0, np.pi / 2, xf)
     co, si = np.cos(t), np.sin(t)
     y = x.copy()
-    y[n - xf:] = (a * co + x[ls - xf:ls] * si) / np.sqrt(1 + 2 * c * co * si)   # at the end it has become what precedes ls
+    y[n - xf:] = (a * co + x[ls - xf:ls] * si) / (np.sqrt(1 + 2 * c * co * si) if even else 1)   # at the end it has become what precedes ls
     return y, ls
 
 
@@ -263,6 +252,51 @@ def blk_encode(s):
             out.append(int(codes[i, k]) | int(codes[i + 1, k]) << 4)
         s1, s2 = int(a1[k]), int(a2[k])
     return bytes(out), cks
+
+
+# 8-bit PCM packed without loss: 16 samples a block, a header byte (filter << 4 | width), then each sample's residual
+# from BLK_FILT's prediction, exact, in width bits (2 x width bytes). Every CK-th sample and the loop start (one more
+# entry, last) have their state: the last two samples and the byte of their block.
+PK = 16
+
+
+def pack8(s, ls):
+    """int8 samples, loop start -> (bytes, [(s1 | s2 << 8, byte) at every CK-th sample, then at ls])"""
+    x = np.asarray(s, dtype=np.int64)
+    s1, s2 = np.concatenate([[0], x[:-1]]), np.concatenate([[0, 0], x[:-2]])
+    e = np.array([x - ((c1 * s1 + c2 * s2 + 32) >> 6) for c1, c2 in BLK_FILT]).reshape(len(BLK_FILT), -1, PK)
+    need = np.maximum(e.max(2), -e.min(2) - 1)
+    width = np.ceil(np.log2(need + 1.0)).astype(int) + 1  # (signed)
+    best = width.argmin(0)
+    out, at = bytearray(), []
+    for b in range(len(x) // PK):
+        f, w = int(best[b]), int(width[best[b], b])
+        at.append(len(out))
+        out.append(f << 4 | w)
+        acc = sum((int(r) & ((1 << w) - 1)) << (i * w) for i, r in enumerate(e[f, b]))
+        out += acc.to_bytes(2 * w, "little")
+    out.append(0)                                # (the decoder reads a byte past a residual)
+    def state(p):
+        return int(s1[p]) & 255 | (int(s2[p]) & 255) << 8, at[p // PK]
+    if not np.array_equal(unpack8(out, len(x)), x):
+        raise SystemExit("pack8: not what went in")
+    return bytes(out), [state(p) for p in range(0, len(x), CK)] + [state(ls)]
+
+
+def unpack8(d, n):
+    """pack8's bytes -> the samples, as mel.c's adpcm_next reads them"""
+    y, o, s1, s2 = [], 0, 0, 0
+    for p in range(n):
+        i, w = p % PK, d[o] & 15
+        c1, c2 = BLK_FILT[d[o] >> 4]
+        bit = i * w
+        u = (d[o + 1 + bit // 8] | d[o + 2 + bit // 8] << 8) >> bit % 8 & ((1 << w) - 1)
+        s = ((int(c1) * s1 + int(c2) * s2 + 32) >> 6) + (u - (1 << w) if u >> (w - 1) else u)
+        s2, s1 = s1, s
+        y.append(s)
+        if i == PK - 1:
+            o += 1 + 2 * w
+    return y
 
 
 def sloop_onset(x, rel=0.02):
@@ -363,16 +397,8 @@ def build(src, budget, step, rate, which):
         roots = [r for r in range(lo + st // 2, hi + 1, st)]
         if roots[-1] + st // 2 < hi:
             roots.append(hi)
-        if d in SLOOP_PIANO or d in FIXED_LEN:
+        if d in SLOOP_PIANO or (d in FIXED_LEN and d not in IMA):
             roots = sorted(files)
-        elif d in PICK_CLEAN:                    # each root the cleanest of its key and its two neighbours (dropouts)
-            pick = []
-            for r in roots:                      # (only where the key's own drops out clearly and a neighbour is
-                own = dropouts(files[r]) if r in files else 9.0   # less than half as bad: the rest stays as heard)
-                cand = [c for c in (r - 1, r + 1) if c in files and c not in pick]
-                best = min(cand, key=lambda c: dropouts(files[c]), default=r)
-                pick.append(best if r not in files or (own > 0.15 and dropouts(files[best]) < own / 2) else r)
-            roots = pick
         plan.append((name, files, roots))
     shares = [0.0 if d in SLOOP_PIANO or d in FIXED_LEN else DECAYS.get(d, 1.0) for d, _ in sets]
     bps = [1.0 if d in PCM8 else BLKB / BLK * (1 + 8 / CK) for d, _ in sets]   # bytes a sample (+ the checkpoints)
@@ -414,8 +440,8 @@ def build(src, budget, step, rate, which):
                 decs.append((0, 0.0))
             segs.append((r, seg))
         lv = np.array([20 * np.log10(rms(s[len(s) // 3:])) for _, s in segs])
-        gains = 10 ** ((lv.mean() - lv) / 20)                         # all the way to the set's mean level (half way left
-                                                                       # a 1.7 dB step at a root's edge, heard)
+        gains = 10 ** ((lv.mean() - lv) / (40 if d in IMA else 20))   # all the way to the set's mean level (half way left
+                                                                       # a 1.7 dB step at a root's edge, heard; IMA: half way)
         segs = [(r, s * g) for (r, s), g in zip(segs, gains)]
         level = np.sqrt(np.mean([rms(s[len(s) // 3:]) ** 2 for _, s in segs]))
         segs = [(r, s * TARGET_RMS / level) for r, s in segs]      # every set as loud as the others
@@ -424,13 +450,15 @@ def build(src, budget, step, rate, which):
             raise SystemExit(f"{name}: peaks at {peak:.2f} at the common loudness; lower TARGET_RMS")
         sc8 = 0.99 / peak if d in PCM8 else 1.0      # (8-bit: as loud as it can be stored, its gain brings it back)
         for i, (r, s) in enumerate(segs):
-            if d not in DECAYS:                  # (a sustained tape: its loop part as loud all through)
+            if d not in DECAYS and d not in IMA: # (a sustained tape: its loop part as loud all through)
                 s = level_tail(s, zr)
-            s, ls = loop(s, zr, 1 if d in PCM8 else CK)
+            s, ls = loop(s, zr, 1 if d in PCM8 else CK, d not in IMA)
             pcm = np.clip(np.round(s * 32767), -32767, 32767).astype(np.int16)
             if d in PCM8:
                 p8 = np.clip(np.round(s * sc8 * 127), -127, 127).astype(np.int8)
-                data, cks = bytearray(p8.tobytes()), []
+                data, cks = pack8(p8, ls)
+            elif d in IMA:
+                data, cks = ima_encode(pcm)
             else:
                 data, cks = blk_encode(pcm)
             up = 12 * OCTAVE.get(d, 0)          # (an octave up: its zones' roots and ranges moved down)
@@ -443,7 +471,7 @@ def build(src, budget, step, rate, which):
                 fc = min(5000.0, max(500.0, 3 * 440 * 2 ** ((r - 69) / 12)))   # one-pole the note darkens to, Q15,
                 lp, li = round(32767 * (1 - np.exp(-2 * np.pi * fc / SRC_RATE))), 0   # ~3 x its fundamental)
             out["zones"].append(dict(off=len(out["data"]), n=len(pcm), ls=ls, ck=len(out["ck"]), root=r - up, lo=lo, hi=hi,
-                                     sh=sh, kind=2 if d in PCM8 else 0, gain=round(32 / sc8), lpred=lp, lidx=li, dk=dk,
+                                     sh=sh, kind=2 if d in PCM8 else 3 if d in IMA else 0, gain=round(32 / sc8), lpred=lp, lidx=li, dk=dk,
                                      d1k=round(32767 * 10 ** (-dbs * 1024 / zr / 20)), pk=pk))
             out["data"] += data
             out["ck"] += cks
@@ -585,7 +613,7 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--src", default=str(Path(__file__).resolve().parents[1] / "tapes" / "wav"))
     ap.add_argument("--sets", default=",".join(SETS), help="the tapes, in order (A, B, C, ...): folders of --src")
-    ap.add_argument("--budget", type=int, default=430_000, help="bytes of tape data (block ADPCM + checkpoints, 8-bit PCM) in all")
+    ap.add_argument("--budget", type=int, default=338_000, help="bytes of tape data (block ADPCM + checkpoints; 8-bit PCM as if unpacked) in all, but FIXED_LEN's")
     ap.add_argument("--step", type=int, default=3, help="semitones between roots (but STEP's sets)")
     ap.add_argument("--rate", type=int, default=22050, help="the firmware's rate (MEL_RATE): a set's is it >> SHIFT")
     a = ap.parse_args()

@@ -151,7 +151,8 @@ static rvl_t rvl[R_NL];
 static int32_t rv_lp[8], rv_bw;                 /* the low-passes (HALL: lines 0 3 5 6; PLATE: 0, 1 the tank's) */
 static uint32_t rv_ph;                          /* the drift */
 
-static inline int32_t tz(int32_t m, uint32_t sh) { return (m + ((m >> 31) & ((1 << sh) - 1))) >> sh; }
+static int32_t tz_on = -1;                      /* ISR: 0 on the flute alone, LOFI and FX out: rounding down, as release 1.0, to the bit */
+static inline int32_t tz(int32_t m, uint32_t sh) { return (m + ((m >> 31) & ((1 << sh) - 1) & tz_on)) >> sh; }
 static inline int32_t rv_tap(const rvl_t *l, uint32_t k)   /* written k samples ago, 1 .. n */
 {
     return rv_mem[l->o + (l->i >= k ? l->i - k : l->i + l->n - k)];
@@ -340,6 +341,7 @@ static void fx_run(const int32_t *mix, int32_t *out, uint32_t n, int32_t act)
         vdep = dk * dk * 88 / 10000;
         vmix += (32767 - vmix) * p_mod / 127;
     }
+    tz_on = MEL_ZONE[MEL_SET_Z0[p_sound % MEL_NSETS]].kind == 3u && !p_layer && f_by_lofi && f_by_fx ? 0 : -1;
     for (i = 0; i < n; i++) {
         int32_t x = mix[i], y, y0, l, r, in, wl, wr, dry = 0, wetl = 32767 - bl, wetf = 32767 - bf;
         x = x > 65535 ? 65535 : x < -65535 ? -65535 : x;
