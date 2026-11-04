@@ -23,7 +23,7 @@ const pkgKey = () => (board === "fm1" ? "fm1" : "smk37-" + model);
 const M = {                                     // what the page says, by language ("FM-1" and "V15": the board's)
   en: {
     pkgChecking: () => "Checking the package…",
-    pkgOk: () => "Check passed.",
+    pkgOk: (v) => `FMEL-1 ${v}: check passed.`,
     pkgBad: () => "Corrupt file.",
     pkgNone: () => "Not available for this model yet.",
     shaBad: () => "the file does not match its fingerprint (SHA-256): reload the page",
@@ -61,7 +61,7 @@ const M = {                                     // what the page says, by langua
   },
   es: {
     pkgChecking: () => "Comprobando el paquete…",
-    pkgOk: () => "Comprobación correcta.",
+    pkgOk: (v) => `FMEL-1 ${v}: comprobación correcta.`,
     pkgBad: () => "Fichero corrupto.",
     pkgNone: () => "Aún no hay versión para este modelo.",
     shaBad: () => "el archivo no coincide con su huella (SHA-256): recarga la página",
@@ -108,6 +108,7 @@ class Say extends Error { constructor(key, ...a) { super(tr(key, ...a)); this.ke
 const log = (t) => { $("log").textContent += t + "\n"; $("log").scrollTop = 1e9; };
 
 let meta = null;           // mel.json: {version, packages: {fm1, smk37-pro, smk37-elite, smk37-mke: {file, sha256, product}}}
+let version = "";          // meta.version, as the page shows it
 let mel = null;            // the chosen keyboard's package: {product, image, version}
 let access = null;
 let busy = false;
@@ -132,7 +133,8 @@ async function loadMeta() {
   } catch (e) {
     meta = null;
   }
-  $("ver").textContent = meta && meta.version ? meta.version.replace(/^v/, "") : "";   // what Install installs
+  version = meta && meta.version ? meta.version.replace(/^v/, "") : "";   // what Install installs
+  for (const e of document.querySelectorAll(".ver")) e.textContent = version;
   await loadPackage();
 }
 async function loadPackage() {
@@ -149,7 +151,7 @@ async function loadPackage() {
     const want = board === "fm1" ? /^FM-1_95\d$/ : new RegExp(`^${MODELS[model]}_45\\d$`);
     if (!want.test(pkg.product) || pkg.product !== p.product) throw new Say("idBad", pkg.product);
     mel = { product: pkg.product, image: logicalImage(bytes), version: meta.version };
-    say("pkg", "pkgOk", "ok");
+    say("pkg", "pkgOk", "ok", version);
     log(`package ${p.file} ${pkg.product} ${meta.version} sha256 ${p.sha256}`);
   } catch (e) {
     mel = null;
