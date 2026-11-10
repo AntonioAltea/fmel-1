@@ -18,6 +18,10 @@ It runs on the M-Vave FM-1 and the SMK-37 (Pro, Elite, MKE-P37). SMK-37 controls
 
 A FLUTE, B CHOIR, C CELLO, D VIBES, E SAX: Mellotron M400S tapes. F PIANO: a Steinway B.
 
+## Since 1.2 (next release)
+
+- Newer FM-1s with the UC25HQ80 flash chip (0xB36014) save settings and patterns to flash. Before, they kept them in RAM only, and lost them on power off. From Dinghy 0.5.
+
 ## New in 1.2
 
 - FLUTE: 1.0's again: its 12 tapes in IMA ADPCM, each key its own level, no low-pass. With LOFI and FX out, it plays as 1.0 to the sample. (1.1's had a whoosh at the start of its low notes.)
